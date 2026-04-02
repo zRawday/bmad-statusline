@@ -13,7 +13,8 @@ import { createDefaultConfig } from '../src/tui/widget-registry.js';
 
 const e = React.createElement;
 
-function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
+const CI_FACTOR = process.env.CI ? 3 : 1;
+function delay(ms) { return new Promise(r => setTimeout(r, ms * CI_FACTOR)); }
 
 let tmpDirs = [];
 function makeTmpDir() {
