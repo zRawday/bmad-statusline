@@ -4,7 +4,7 @@
   "description": "BMAD workflow status line integration for ccstatusline",
   "type": "module",
   "bin": {
-    "bmad-statusline": "./bin/cli.js"
+    "bmad-statusline": "bin/cli.js"
   },
   "engines": {
     "node": ">=20"
@@ -22,9 +22,15 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/Vibecloud-AI/bmad-statusline.git"
+    "url": "git+https://github.com/Vibecloud-AI/bmad-statusline.git"
   },
-  "keywords": ["claude-code", "statusline", "bmad", "workflow", "ccstatusline"],
+  "keywords": [
+    "claude-code",
+    "statusline",
+    "bmad",
+    "workflow",
+    "ccstatusline"
+  ],
   "dependencies": {
     "@inkjs/ui": "^2.0.0",
     "ink": "^6.8.0",
