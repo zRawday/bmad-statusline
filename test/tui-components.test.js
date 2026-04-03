@@ -5,7 +5,6 @@ import assert from 'node:assert/strict';
 import React from 'react';
 import { render } from 'ink-testing-library';
 import { Text } from 'ink';
-import { Breadcrumb } from '../src/tui/components/Breadcrumb.js';
 import { ShortcutBar } from '../src/tui/components/ShortcutBar.js';
 import { ScreenLayout } from '../src/tui/components/ScreenLayout.js';
 import { ConfirmDialog } from '../src/tui/components/ConfirmDialog.js';
@@ -75,19 +74,6 @@ describe('ConfirmDialog', () => {
   });
 });
 
-describe('Breadcrumb', () => {
-  test('renders path joined by > separator', () => {
-    const { lastFrame } = render(e(Breadcrumb, { path: ['Home', 'Widgets'] }));
-    assert.ok(lastFrame().includes('Home > Widgets'));
-  });
-
-  test('renders single path element', () => {
-    const { lastFrame } = render(e(Breadcrumb, { path: ['Home'] }));
-    assert.ok(lastFrame().includes('Home'));
-    assert.ok(!lastFrame().includes('>'));
-  });
-});
-
 describe('ShortcutBar', () => {
   test('renders all action keys and labels', () => {
     const actions = [
@@ -120,7 +106,7 @@ describe('ThreeLinePreview', () => {
     assert.ok(frame.includes('Preview'), 'Preview label');
     assert.ok(frame.includes('myproject'), 'project sample');
     assert.ok(frame.includes('dev-story'), 'workflow sample');
-    assert.ok(frame.includes('Tasks 2/5'), 'progressstep sample');
+    assert.ok(frame.includes('Step 2/7 Discover'), 'progressstep sample');
   });
 
   test('renders empty line as blank', () => {
@@ -155,22 +141,24 @@ describe('ThreeLinePreview', () => {
     config.lines[1].colorModes = { 'bmad-timer': { mode: 'fixed', fixedColor: 'brightBlack' } };
     const { lastFrame } = render(e(ThreeLinePreview, { config }));
     const frame = lastFrame();
-    assert.ok(frame.includes('12:34'), 'timer on line 2');
+    assert.ok(frame.includes('12m34s'), 'timer on line 2');
   });
 });
 
 describe('ScreenLayout v2', () => {
-  test('renders breadcrumb, ThreeLinePreview, children, and ShortcutBar', () => {
+  test('renders header, screen name, ThreeLinePreview, children, and ShortcutBar', () => {
     const config = createDefaultConfig();
     const { lastFrame } = render(e(ScreenLayout, {
-      breadcrumb: ['Home', 'Edit Line 1'],
+      screenName: 'Edit Line 1',
+      screenColor: 'green',
       config,
       previewOverride: null,
       shortcuts: [{ key: 'q', label: 'Quit' }],
     }, e(Text, null, 'Content area')));
 
     const frame = lastFrame();
-    assert.ok(frame.includes('Home > Edit Line 1'), 'breadcrumb');
+    assert.ok(frame.includes('BMAD-STATUSLINE'), 'header');
+    assert.ok(frame.includes('Edit Line 1'), 'screen name');
     assert.ok(frame.includes('Preview'), 'ThreeLinePreview');
     assert.ok(frame.includes('myproject'), 'preview sample');
     assert.ok(frame.includes('Content area'), 'children');
@@ -183,13 +171,13 @@ describe('ScreenLayout v2', () => {
     const override = structuredClone(config);
     override.separator = 'large';
     const { lastFrame } = render(e(ScreenLayout, {
-      breadcrumb: ['Home'],
+      screenName: 'Home',
+      screenColor: 'cyan',
       config,
       previewOverride: override,
       shortcuts: [{ key: 'q', label: 'Quit' }],
     }, e(Text, null, 'Content')));
 
-    // Should render without error
     assert.ok(lastFrame().includes('Preview'));
   });
 });

@@ -97,18 +97,11 @@ describe('reader color output', () => {
 
   // --- Plain text extractors ---
 
-  it('project returns plain text', () => {
+  it('project returns dynamically colored text', () => {
     writeStatus('pt1', { project: 'Toulou' });
     const result = execReader('project', 'pt1');
-    assert.equal(result, 'Toulou');
-    assert.ok(!result.includes(ESC));
-  });
-
-  it('step returns plain text', () => {
-    writeStatus('pt2', { step: { current_name: 'implementation' } });
-    const result = execReader('step', 'pt2');
-    assert.equal(result, 'implementation');
-    assert.ok(!result.includes(ESC));
+    assert.ok(result.includes('Toulou'), 'contains project name');
+    assert.ok(result.includes(ESC), 'contains ANSI color');
   });
 
   it('nextstep returns plain text', () => {
@@ -118,31 +111,17 @@ describe('reader color output', () => {
     assert.ok(!result.includes(ESC));
   });
 
-  it('progress returns current step number (AC #7)', () => {
-    writeStatus('pt4', { step: { current: 4, total: 6 } });
-    const result = execReader('progress', 'pt4');
-    assert.equal(result, '4/6');
-    assert.ok(!result.includes(ESC));
-  });
-
-  it('progressbar fills up to current step (AC #7)', () => {
-    writeStatus('pt5', { step: { current: 3, total: 4 } });
-    const result = execReader('progressbar', 'pt5');
-    assert.equal(result, '▰▰▰▱');
-    assert.ok(!result.includes(ESC));
-  });
-
-  it('progressstep shows Steps prefix with step name (AC #8)', () => {
+  it('progressstep shows Step prefix with step name', () => {
     writeStatus('pt6', { step: { current: 3, current_name: 'starter', total: 8 } });
     const result = execReader('progressstep', 'pt6');
-    assert.equal(result, 'Steps 3/8 starter');
+    assert.equal(result, 'Step 3/8 starter');
     assert.ok(!result.includes(ESC));
   });
 
-  it('progressstep shows Tasks prefix without step name (checkbox tracking)', () => {
+  it('progressstep shows Step prefix without step name', () => {
     writeStatus('pt6b', { step: { current: 2, current_name: null, total: 4 } });
     const result = execReader('progressstep', 'pt6b');
-    assert.equal(result, 'Tasks 2/4');
+    assert.equal(result, 'Step 2/4');
   });
 
   it('story returns plain text', () => {
@@ -162,40 +141,16 @@ describe('reader color output', () => {
 
   // --- Progress edge cases (AC #9, #10) ---
 
-  it('progressbar with step.current: 1 shows one filled (AC #9)', () => {
-    writeStatus('prog1', { step: { current: 1, total: 6 } });
-    const result = execReader('progressbar', 'prog1');
-    assert.equal(result, '▰▱▱▱▱▱');
-  });
-
   it('progressstep with step.current: 1 shows 1/total (AC #9)', () => {
     writeStatus('prog2', { step: { current: 1, current_name: 'init', total: 6 } });
     const result = execReader('progressstep', 'prog2');
-    assert.equal(result, 'Steps 1/6 init');
-  });
-
-  it('progressbar with step.current: 0 returns safe fallback (AC #10)', () => {
-    writeStatus('prog3', { step: { current: 0, total: 6 } });
-    const result = execReader('progressbar', 'prog3');
-    assert.equal(result, '▱▱▱▱▱▱');
+    assert.equal(result, 'Step 1/6 init');
   });
 
   it('progressstep with missing step returns empty (AC #10)', () => {
     writeStatus('prog4', {});
     const result = execReader('progressstep', 'prog4');
     assert.equal(result, '');
-  });
-
-  it('progressbar with null step returns empty (AC #10)', () => {
-    writeStatus('prog5', { step: null });
-    const result = execReader('progressbar', 'prog5');
-    assert.equal(result, '');
-  });
-
-  it('progress with step.current: 0 returns safe fallback (AC #10)', () => {
-    writeStatus('prog6', { step: { current: 0, total: 6 } });
-    const result = execReader('progress', 'prog6');
-    assert.equal(result, '0/6');
   });
 
   // --- Removed composite commands return empty (AC #8) ---
@@ -259,14 +214,14 @@ describe('reader color output', () => {
     const result = execReaderWithConfig('line 0', 'line1', configDir);
     // Should contain all 5 widgets joined by ┃ (serre separator)
     assert.ok(result.includes('\u2503'), 'should use serre separator');
-    // project = yellow fixed color
-    assert.ok(result.includes(`${ESC}33mToulou${RESET}`), 'project should be yellow');
+    // project = dynamic color (hash-based: Toulou → magenta)
+    assert.ok(result.includes(`${ESC}35mToulou${RESET}`), 'project should have hash-based dynamic color');
     // workflow = dynamic (workflow's own ANSI preserved)
     assert.ok(result.includes(`${ESC}36mdev-story${RESET}`), 'workflow should have own color');
     // story = magenta fixed
     assert.ok(result.includes(`${ESC}35m5-3 Auth Login${RESET}`), 'story should be magenta with formatted name');
     // progressstep = brightCyan fixed
-    assert.ok(result.includes(`${ESC}96mSteps 3/6 coding${RESET}`), 'progressstep should be brightCyan');
+    assert.ok(result.includes(`${ESC}96mStep 3/6 coding${RESET}`), 'progressstep should be brightCyan');
     fs.rmSync(configDir, { recursive: true, force: true });
   });
 
@@ -417,13 +372,10 @@ describe('reader color output', () => {
       started_at: tenMinAgo
     });
 
-    assert.equal(execReader('project', 'ind1'), 'Toulou');
+    assert.ok(execReader('project', 'ind1').includes('Toulou'), 'project contains name');
     assert.equal(execReader('workflow', 'ind1'), `${ESC}35mcreate-architecture${RESET}`);
-    assert.equal(execReader('step', 'ind1'), 'starter');
     assert.equal(execReader('nextstep', 'ind1'), 'decisions');
-    assert.equal(execReader('progress', 'ind1'), '3/8');
-    assert.equal(execReader('progressbar', 'ind1'), '▰▰▰▱▱▱▱▱');
-    assert.equal(execReader('progressstep', 'ind1'), 'Steps 3/8 starter');
+    assert.equal(execReader('progressstep', 'ind1'), 'Step 3/8 starter');
     assert.equal(execReader('story', 'ind1'), '3-1 Hook Detection');
     const timer = execReader('timer', 'ind1');
     assert.ok(timer.includes('m'), 'timer should show minutes');
@@ -490,7 +442,7 @@ describe('reader color output', () => {
   it('uses BMAD_CACHE_DIR env var', () => {
     writeStatus('envtest', { project: 'EnvTest' });
     const result = execReader('project', 'envtest');
-    assert.equal(result, 'EnvTest');
+    assert.equal(result, `${ESC}96mEnvTest${RESET}`);
     assert.ok(fs.existsSync(path.join(tmpDir, '.alive-envtest')));
   });
 

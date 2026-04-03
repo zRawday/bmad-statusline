@@ -1,6 +1,6 @@
 # bmad-statusline
 
-BMAD workflow status tracking for [Claude Code](https://claude.ai/code) — displays active skill, story, and step progress in your terminal status line via [ccstatusline](https://github.com/nicobailon/ccstatusline).
+BMAD status tracking for [Claude Code](https://claude.ai/code) — displays active skill, story, and step progress in your terminal status line via [ccstatusline](https://github.com/nicobailon/ccstatusline).
 
 ## Prerequisites
 
@@ -44,7 +44,7 @@ Launch the interactive TUI to customize your status line — reorder widgets, ch
 
 bmad-statusline uses Claude Code's hook system to passively track workflow activity:
 
-1. **Hooks** intercept tool events (Read, Write, Edit) and skill activations to detect which BMAD workflow is active, what story is being worked on, and current step progress.
+1. **Hooks** intercept tool events (Read, Write, Edit) and skill activations to detect the active BMAD skill, what story is being worked on, and current step progress.
 2. **Cache files** store the current status as JSON in `~/.cache/bmad-status/`.
 3. **Reader** reads the cache and renders a formatted, color-coded status line for ccstatusline to display.
 

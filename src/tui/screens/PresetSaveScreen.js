@@ -1,4 +1,4 @@
-// PresetSaveScreen.js — Save current line config to one of 3 preset slots
+// PresetSaveScreen.js — Save full layout (all 3 lines + separator) to one of 3 preset slots
 
 import React, { useState } from 'react';
 import { Box, Text, useInput } from 'ink';
@@ -6,7 +6,6 @@ import { TextInput } from '@inkjs/ui';
 import { ScreenLayout } from '../components/ScreenLayout.js';
 import { ConfirmDialog } from '../components/ConfirmDialog.js';
 import { getIndividualWidgets } from '../widget-registry.js';
-import { resolvePreviewColor, toInkColor } from '../preview-utils.js';
 
 const e = React.createElement;
 
@@ -16,30 +15,37 @@ const SHORTCUTS = [
   { key: 'Esc', label: 'Back' },
 ];
 
-function getPresetSlotData(preset, slotIndex) {
-  if (!preset) return { isEmpty: true, name: null, widgets: [] };
+function getPresetSlotData(preset) {
+  if (!preset || !preset.lines) return { isEmpty: true, name: null, lineSummaries: [] };
   const allWidgets = getIndividualWidgets();
-  const widgetEntries = (preset.widgets || []).map(id => {
-    const w = allWidgets.find(wd => wd.id === id);
-    return { id, name: w ? w.name : id, color: resolvePreviewColor(id, preset.colorModes || {}) };
+  const lineSummaries = preset.lines.map(line => {
+    const names = (line.widgets || []).map(id => {
+      const w = allWidgets.find(wd => wd.id === id);
+      return w ? w.name : id;
+    });
+    return names;
   });
-  return { isEmpty: false, name: preset.name, widgets: widgetEntries };
+  return { isEmpty: false, name: preset.name, lineSummaries };
 }
 
 function renderSlot(slotIndex, slotData, isCursor) {
   const prefix = isCursor ? '> ' : '  ';
   if (slotData.isEmpty) {
-    return e(Text, { key: `slot-${slotIndex}`, dimColor: true }, `${prefix}${slotIndex + 1}. (empty)`);
+    return e(Box, { key: `slot-${slotIndex}`, flexDirection: 'column' },
+      e(Text, { dimColor: true }, `${prefix}${slotIndex + 1}. (empty)`),
+    );
   }
-  const children = [`${prefix}${slotIndex + 1}. ${slotData.name}    `];
-  slotData.widgets.forEach((w, j) => {
-    if (j > 0) children.push(' \u00b7 ');
-    children.push(e(Text, { key: `w-${slotIndex}-${j}`, color: toInkColor(w.color) }, w.name));
+  const children = [
+    e(Text, { key: 'header' }, `${prefix}${slotIndex + 1}. ${slotData.name}`),
+  ];
+  slotData.lineSummaries.forEach((names, li) => {
+    const summary = names.length > 0 ? names.join(' \u00b7 ') : '\u2500';
+    children.push(e(Text, { key: `line-${li}`, dimColor: true }, `     L${li + 1}: ${summary}`));
   });
-  return e(Text, { key: `slot-${slotIndex}` }, ...children);
+  return e(Box, { key: `slot-${slotIndex}`, flexDirection: 'column' }, ...children);
 }
 
-export function PresetSaveScreen({ config, updateConfig, previewOverride, goBack, editingLine, isActive }) {
+export function PresetSaveScreen({ config, updateConfig, previewOverride, goBack, isActive }) {
   const [cursorIndex, setCursorIndex] = useState(0);
   const [phase, setPhase] = useState('list'); // 'list' | 'naming' | 'confirm' | 'renaming'
 
@@ -71,8 +77,12 @@ export function PresetSaveScreen({ config, updateConfig, previewOverride, goBack
     updateConfig(cfg => {
       cfg.presets[cursorIndex] = {
         name: trimmed,
-        widgets: [...cfg.lines[editingLine].widgets],
-        colorModes: { ...cfg.lines[editingLine].colorModes },
+        lines: cfg.lines.map(line => ({
+          widgets: [...line.widgets],
+          widgetOrder: [...line.widgetOrder],
+        })),
+        separator: cfg.separator,
+        customSeparator: cfg.customSeparator,
       };
     });
     goBack();
@@ -89,8 +99,12 @@ export function PresetSaveScreen({ config, updateConfig, previewOverride, goBack
     updateConfig(cfg => {
       cfg.presets[cursorIndex] = {
         name: trimmed,
-        widgets: [...cfg.lines[editingLine].widgets],
-        colorModes: { ...cfg.lines[editingLine].colorModes },
+        lines: cfg.lines.map(line => ({
+          widgets: [...line.widgets],
+          widgetOrder: [...line.widgetOrder],
+        })),
+        separator: cfg.separator,
+        customSeparator: cfg.customSeparator,
       };
     });
     goBack();
@@ -100,7 +114,7 @@ export function PresetSaveScreen({ config, updateConfig, previewOverride, goBack
     setPhase('list');
   }
 
-  const slots = [0, 1, 2].map(i => getPresetSlotData(presets[i], i));
+  const slots = [0, 1, 2].map(i => getPresetSlotData(presets[i]));
 
   const children = [];
 
@@ -146,7 +160,8 @@ export function PresetSaveScreen({ config, updateConfig, previewOverride, goBack
   }
 
   return e(ScreenLayout, {
-    breadcrumb: ['Home', `Edit Line ${editingLine + 1}`, 'Save Preset'],
+    screenName: 'Save Preset',
+    screenColor: 'blue',
     config,
     previewOverride,
     shortcuts: SHORTCUTS,

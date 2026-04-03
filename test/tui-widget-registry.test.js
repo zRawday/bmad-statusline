@@ -8,9 +8,9 @@ import {
 } from '../src/tui/widget-registry.js';
 
 describe('widget-registry', () => {
-  it('getIndividualWidgets returns all 9 individual widgets', () => {
+  it('getIndividualWidgets returns all 10 individual widgets', () => {
     const widgets = getIndividualWidgets();
-    assert.equal(widgets.length, 9);
+    assert.equal(widgets.length, 10);
     for (const w of widgets) {
       assert.ok(w.id.startsWith('bmad-'), `widget id ${w.id} should start with bmad-`);
       assert.ok(w.command, `widget ${w.id} should have a command`);
@@ -50,15 +50,16 @@ describe('widget-registry', () => {
   it('widget defaultColor values match specification', () => {
     const widgets = getIndividualWidgets();
     const expected = {
-      'bmad-project': 'yellow',
+      'bmad-project': null,
       'bmad-workflow': null,
-      'bmad-step': 'yellow',
-      'bmad-nextstep': 'yellow',
-      'bmad-progress': 'green',
-      'bmad-progressbar': 'green',
-      'bmad-progressstep': 'brightCyan',
+      'bmad-activeskill': null,
       'bmad-story': 'magenta',
+      'bmad-docname': 'brightYellow',
+      'bmad-progressstep': 'brightCyan',
+      'bmad-nextstep': 'yellow',
       'bmad-timer': 'brightBlack',
+      'bmad-fileread': 'cyan',
+      'bmad-filewrite': 'brightRed',
     };
     for (const w of widgets) {
       assert.equal(w.defaultColor, expected[w.id], `${w.id} defaultColor`);
@@ -68,19 +69,20 @@ describe('widget-registry', () => {
   it('widget defaultMode values match specification', () => {
     const widgets = getIndividualWidgets();
     for (const w of widgets) {
-      if (w.id === 'bmad-workflow') {
-        assert.equal(w.defaultMode, 'dynamic', 'workflow is dynamic');
+      if (w.id === 'bmad-workflow' || w.id === 'bmad-project' || w.id === 'bmad-activeskill') {
+        assert.equal(w.defaultMode, 'dynamic', `${w.id} is dynamic`);
       } else {
         assert.equal(w.defaultMode, 'fixed', `${w.id} is fixed`);
       }
     }
   });
 
-  it('only bmad-workflow has dynamic defaultMode', () => {
+  it('bmad-workflow and bmad-project have dynamic defaultMode', () => {
     const widgets = getIndividualWidgets();
     const dynamicWidgets = widgets.filter(w => w.defaultMode === 'dynamic');
-    assert.equal(dynamicWidgets.length, 1);
-    assert.equal(dynamicWidgets[0].id, 'bmad-workflow');
+    assert.equal(dynamicWidgets.length, 3);
+    const ids = dynamicWidgets.map(w => w.id).sort();
+    assert.deepStrictEqual(ids, ['bmad-activeskill', 'bmad-project', 'bmad-workflow']);
   });
 });
 
@@ -98,26 +100,26 @@ describe('createDefaultConfig', () => {
 
   it('line 0 contains default-enabled widgets in correct order', () => {
     const config = createDefaultConfig();
-    const expectedWidgets = ['bmad-project', 'bmad-workflow', 'bmad-progressstep', 'bmad-story', 'bmad-timer'];
+    const expectedWidgets = ['bmad-project', 'bmad-workflow', 'bmad-story', 'bmad-progressstep', 'bmad-timer'];
     assert.deepStrictEqual(config.lines[0].widgets, expectedWidgets);
   });
 
   it('line 0 colorModes match widget defaults', () => {
     const config = createDefaultConfig();
     const cm = config.lines[0].colorModes;
-    assert.deepStrictEqual(cm['bmad-project'], { mode: 'fixed', fixedColor: 'yellow' });
+    assert.deepStrictEqual(cm['bmad-project'], { mode: 'dynamic' });
     assert.deepStrictEqual(cm['bmad-workflow'], { mode: 'dynamic' });
     assert.deepStrictEqual(cm['bmad-progressstep'], { mode: 'fixed', fixedColor: 'brightCyan' });
     assert.deepStrictEqual(cm['bmad-story'], { mode: 'fixed', fixedColor: 'magenta' });
     assert.deepStrictEqual(cm['bmad-timer'], { mode: 'fixed', fixedColor: 'brightBlack' });
   });
 
-  it('lines 1 and 2 have no visible widgets but have widgetOrder', () => {
+  it('line 1 has fileread and line 2 has filewrite by default', () => {
     const config = createDefaultConfig();
-    assert.deepStrictEqual(config.lines[1].widgets, []);
-    assert.deepStrictEqual(config.lines[2].widgets, []);
-    assert.equal(config.lines[1].widgetOrder.length, 9);
-    assert.equal(config.lines[2].widgetOrder.length, 9);
+    assert.deepStrictEqual(config.lines[1].widgets, ['bmad-fileread']);
+    assert.deepStrictEqual(config.lines[2].widgets, ['bmad-filewrite']);
+    assert.equal(config.lines[1].widgetOrder.length, 10);
+    assert.equal(config.lines[2].widgetOrder.length, 10);
   });
 
   it('returns a new object on each call (not shared reference)', () => {

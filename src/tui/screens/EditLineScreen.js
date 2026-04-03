@@ -1,4 +1,4 @@
-// EditLineScreen.js — Per-line widget list with h/g/←→/s/l shortcuts (widgetOrder, inline grab, color cycle)
+// EditLineScreen.js — Per-line widget list with h/g/←→ shortcuts (widgetOrder, inline grab, color cycle)
 
 import React, { useState } from 'react';
 import { Box, Text, useInput } from 'ink';
@@ -14,13 +14,14 @@ const ANSI_COLORS = [
   'brightMagenta', 'brightCyan', 'brightWhite', 'brightBlack',
 ];
 
+const RAINBOW_COLORS = ['red', 'yellow', 'green', 'cyan', 'blue', 'magenta', 'white'];
+
 const NAVIGATE_SHORTCUTS = [
   { key: '\u2191\u2193', label: 'Navigate' },
   { key: 'h', label: 'Hide/Show' },
   { key: 'g', label: 'Grab' },
   { key: '\u2190\u2192', label: 'Color' },
-  { key: 's', label: 'Save preset' },
-  { key: 'l', label: 'Load preset' },
+  { key: 'Enter', label: 'Edit skills' },
   { key: 'Esc', label: 'Back' },
 ];
 
@@ -30,10 +31,8 @@ const GRAB_SHORTCUTS = [
   { key: 'Esc', label: 'Cancel' },
 ];
 
-const STEP_WIDGETS = new Set(['bmad-step', 'bmad-nextstep', 'bmad-progress', 'bmad-progressbar', 'bmad-progressstep']);
-
 function getColorOptions(widgetId) {
-  if (widgetId === 'bmad-workflow') return ['dynamic', ...ANSI_COLORS];
+  if (widgetId === 'bmad-workflow' || widgetId === 'bmad-project' || widgetId === 'bmad-activeskill') return ['dynamic', ...ANSI_COLORS];
   return ANSI_COLORS;
 }
 
@@ -41,6 +40,13 @@ function getCurrentColorValue(colorModes, widget) {
   const mode = colorModes[widget.id];
   if (mode?.mode === 'dynamic') return 'dynamic';
   return mode?.fixedColor || widget.defaultColor || 'white';
+}
+
+function renderRainbowVisible() {
+  const letters = 'visible'.split('');
+  return letters.map((ch, i) =>
+    e(Text, { key: `r-${i}`, color: RAINBOW_COLORS[i] }, ch)
+  );
 }
 
 export function EditLineScreen({ config, updateConfig, previewOverride, setPreviewOverride, navigate, goBack, editingLine, isActive }) {
@@ -109,6 +115,13 @@ export function EditLineScreen({ config, updateConfig, previewOverride, setPrevi
       setCursorIndex(prev => Math.max(0, prev - 1));
     } else if (key.downArrow) {
       setCursorIndex(prev => Math.min(widgetList.length - 1, prev + 1));
+    } else if (key.return) {
+      const widget = widgetList[cursorIndex];
+      if (widget && (widget.id === 'bmad-workflow' || widget.id === 'bmad-activeskill')) {
+        navigate('skillColors');
+      } else if (widget && widget.id === 'bmad-project') {
+        navigate('projectColors');
+      }
     } else if (key.escape) {
       goBack();
     } else if (input === 'h') {
@@ -154,15 +167,12 @@ export function EditLineScreen({ config, updateConfig, previewOverride, setPrevi
           ? { mode: 'dynamic' }
           : { mode: 'fixed', fixedColor: nextColor };
       });
-    } else if (input === 's') {
-      navigate('presetSave');
-    } else if (input === 'l') {
-      navigate('presetLoad');
     }
   }, { isActive });
 
   return e(ScreenLayout, {
-    breadcrumb: ['Home', `Edit Line ${editingLine + 1}`],
+    screenName: `Edit Line ${editingLine + 1}`,
+    screenColor: 'green',
     config,
     previewOverride,
     shortcuts: grabMode ? GRAB_SHORTCUTS : NAVIGATE_SHORTCUTS,
@@ -171,22 +181,36 @@ export function EditLineScreen({ config, updateConfig, previewOverride, setPrevi
       ...widgetList.map((widget, i) => {
         const isVisible = line.widgets.includes(widget.id);
         const colorName = getColorName(widget);
+        const isDynamic = colorName === 'dynamic';
         const prefix = i === cursorIndex ? '> ' : '  ';
         const statusIcon = isVisible ? '\u25A0' : '\u25A1';
-        const statusLabel = isVisible ? 'visible' : 'hidden';
         const statusColor = isVisible ? colorName : 'brightBlack';
         const isGrabbed = grabMode && i === cursorIndex;
+
+        const statusParts = [];
+        if (isVisible && isDynamic) {
+          statusParts.push(e(Text, { key: 'icon' }, statusIcon + ' '));
+          statusParts.push(...renderRainbowVisible());
+        } else {
+          statusParts.push(e(Text, { key: 'status', color: toInkColor(statusColor) },
+            `${statusIcon} ${isVisible ? 'visible' : 'hidden'}`));
+        }
+
+        // Compute padding so hints align vertically
+        const statusLen = isVisible ? 9 : 8; // "■ visible" or "□ hidden"
+        const colorLen = isVisible ? 2 + colorName.length : 0; // "  {color}"
+        const grabLen = isGrabbed ? 3 : 0; // "  ↕"
+        const hintPad = ' '.repeat(Math.max(2, 26 - statusLen - colorLen - grabLen));
 
         return e(Text, { key: widget.id, bold: isGrabbed },
           prefix,
           e(Text, null, widget.name.padEnd(16)),
-          e(Text, { color: toInkColor(statusColor) }, `${statusIcon} ${statusLabel}`),
+          ...statusParts,
           isVisible ? e(Text, { dimColor: true }, `  ${colorName}`) : null,
           isGrabbed ? e(Text, { dimColor: true }, '  \u2195') : null,
+          widget.hint ? e(Text, { dimColor: true }, `${hintPad}${widget.hint}`) : null,
         );
       }),
-      e(Text, null, ' '),
-      e(Text, { dimColor: true }, '\u26A0 Step, Next Step, Progress, Progress Bar, Progress+Step only work with multi-step workflows'),
     ),
   );
 }

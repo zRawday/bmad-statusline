@@ -485,8 +485,8 @@ describe('idempotency', () => {
 
       // Second run: all skipped
       const output = captureOutput(() => uninstall(paths));
-      const lines = output.split('\n').filter(l => l.trim());
-      for (const line of lines) {
+      const targetLines = output.split('\n').filter(l => l.includes('\u2014'));
+      for (const line of targetLines) {
         assert.ok(line.includes('\u25CB'), `expected skipped marker in: "${line}"`);
       }
     } finally { teardown(baseDir); }

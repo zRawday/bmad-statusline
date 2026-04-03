@@ -18,36 +18,95 @@ const WORKFLOW_COLORS = {
   // Dev (cyan)
   'dev-story': '\x1b[36m',
   'quick-dev': '\x1b[36m',
+  'quick-dev-new-preview': '\x1b[36m',
+  'quick-spec': '\x1b[36m',
   // Review (brightRed)
   'code-review': '\x1b[91m',
+  'review-adversarial-general': '\x1b[91m',
+  'review-edge-case-hunter': '\x1b[91m',
   // Planning (green)
   'sprint-planning': '\x1b[32m',
   'sprint-status': '\x1b[32m',
   'create-story': '\x1b[32m',
   'create-epics': '\x1b[32m',
+  'create-epics-and-stories': '\x1b[32m',
+  'check-implementation-readiness': '\x1b[32m',
+  'correct-course': '\x1b[32m',
   // Product (yellow)
   'create-prd': '\x1b[33m',
   'edit-prd': '\x1b[33m',
   'validate-prd': '\x1b[33m',
+  'product-brief': '\x1b[33m',
+  'create-game-brief': '\x1b[33m',
+  'create-gdd': '\x1b[33m',
   // Architecture (magenta)
   'create-architecture': '\x1b[35m',
   'create-ux-design': '\x1b[35m',
+  'game-architecture': '\x1b[35m',
   // Research (blue)
   'domain-research': '\x1b[34m',
   'technical-research': '\x1b[34m',
   'market-research': '\x1b[34m',
+  // Agents — BMM (role-colored)
+  'agent-analyst': '\x1b[34m',
+  'agent-architect': '\x1b[35m',
+  'agent-dev': '\x1b[36m',
+  'agent-pm': '\x1b[33m',
+  'agent-qa': '\x1b[31m',
+  'agent-quick-flow-solo-dev': '\x1b[96m',
+  'agent-sm': '\x1b[32m',
+  'agent-ux-designer': '\x1b[95m',
+  // Agents — GDS
+  'agent-game-architect': '\x1b[35m',
+  'agent-game-designer': '\x1b[33m',
+  'agent-game-dev': '\x1b[36m',
+  'agent-game-qa': '\x1b[31m',
+  'agent-game-scrum-master': '\x1b[32m',
+  'agent-game-solo-dev': '\x1b[96m',
   // Creative (brightYellow)
   'brainstorming': '\x1b[93m',
   'party-mode': '\x1b[93m',
   'retrospective': '\x1b[93m',
+  'brainstorm-game': '\x1b[93m',
+  'create-narrative': '\x1b[93m',
+  'playtest-plan': '\x1b[93m',
   // Documentation (brightGreen)
   'document-project': '\x1b[92m',
   'generate-project-context': '\x1b[92m',
+  'index-docs': '\x1b[92m',
+  // Quality / Test (red)
+  'tea': '\x1b[31m',
+  'teach-me-testing': '\x1b[31m',
+  'e2e-scaffold': '\x1b[31m',
+  'performance-test': '\x1b[31m',
+  'test-automate': '\x1b[31m',
+  'test-design': '\x1b[31m',
+  'test-framework': '\x1b[31m',
+  'test-review': '\x1b[31m',
+  // WDS (brightBlue) — explicit entries because hook strips wds- prefix
+  '0-alignment-signoff': '\x1b[94m',
+  '0-project-setup': '\x1b[94m',
+  '1-project-brief': '\x1b[94m',
+  '2-trigger-mapping': '\x1b[94m',
+  '3-scenarios': '\x1b[94m',
+  '4-ux-design': '\x1b[94m',
+  '5-agentic-development': '\x1b[94m',
+  '6-asset-generation': '\x1b[94m',
+  '7-design-system': '\x1b[94m',
+  '8-product-evolution': '\x1b[94m',
+  'agent-freya-ux': '\x1b[94m',
+  'agent-saga-analyst': '\x1b[94m',
+  // Builder (brightCyan)
+  'agent-builder': '\x1b[96m',
+  'builder-setup': '\x1b[96m',
+  'module-builder': '\x1b[96m',
+  'workflow-builder': '\x1b[96m',
 };
 
 const WORKFLOW_PREFIX_COLORS = [
   { prefix: 'testarch-', color: '\x1b[31m' },       // Quality (red)
   { prefix: 'qa-generate-', color: '\x1b[31m' },     // Quality (red)
+  { prefix: 'cis-', color: '\x1b[95m' },             // CIS (brightMagenta)
   { prefix: 'wds-', color: '\x1b[94m' },             // WDS (brightBlue)
 ];
 
@@ -60,10 +119,39 @@ function colorize(text, ansiCode) {
   return `${ansiCode}${text}${RESET}`;
 }
 
-function getWorkflowColor(workflow) {
+const PROJECT_COLOR_PALETTE = [
+  'red', 'green', 'yellow', 'blue', 'magenta', 'cyan',
+  'brightRed', 'brightGreen', 'brightYellow', 'brightBlue', 'brightMagenta', 'brightCyan',
+];
+
+function hashProjectColor(name) {
+  if (!name) return null;
+  let h = 0;
+  for (let i = 0; i < name.length; i++) {
+    h = ((h << 5) - h + name.charCodeAt(i)) | 0;
+  }
+  return PROJECT_COLOR_PALETTE[Math.abs(h) % PROJECT_COLOR_PALETTE.length];
+}
+
+function getProjectColor(project, projectColors) {
+  if (!project) return null;
+  if (projectColors) {
+    const custom = projectColors[project];
+    if (custom && COLOR_CODES[custom]) return COLOR_CODES[custom];
+  }
+  const defaultColor = hashProjectColor(project);
+  return defaultColor ? COLOR_CODES[defaultColor] : null;
+}
+
+function getWorkflowColor(workflow, skillColors) {
   if (!workflow) return null;
   // Strip bmad- prefix for lookup (agents write "bmad-dev-story", map has "dev-story")
   const normalized = workflow.startsWith('bmad-') ? workflow.slice(5) : workflow;
+  // Custom skill colors override hardcoded defaults
+  if (skillColors) {
+    const custom = skillColors[normalized] || skillColors[workflow];
+    if (custom && COLOR_CODES[custom]) return COLOR_CODES[custom];
+  }
   if (WORKFLOW_COLORS[normalized]) return WORKFLOW_COLORS[normalized];
   if (WORKFLOW_COLORS[workflow]) return WORKFLOW_COLORS[workflow];
   for (const { prefix, color } of WORKFLOW_PREFIX_COLORS) {
@@ -160,7 +248,9 @@ function readLineConfig(lineIndex) {
       widgets: config.lines[lineIndex].widgets || [],
       colorModes: config.lines[lineIndex].colorModes || {},
       separator: config.separator || 'serre',
-      customSeparator: config.customSeparator || null
+      customSeparator: config.customSeparator || null,
+      skillColors: config.skillColors || {},
+      projectColors: config.projectColors || {},
     };
   } catch {
     return null;
@@ -196,12 +286,19 @@ function handleLineCommand(lineIndex) {
     const extractor = COMMANDS[cmd];
     if (!extractor) continue;
     try {
-      let value = extractor(status);
+      let value = extractor(status, lineConfig);
       if (!value) continue;
       const colorMode = lineConfig.colorModes[widgetId];
-      if (colorMode) {
-        if (colorMode.mode === 'fixed' && colorMode.fixedColor) {
-          value = colorize(stripAnsi(value), COLOR_CODES[colorMode.fixedColor]);
+      if (colorMode && colorMode.mode === 'fixed' && colorMode.fixedColor) {
+        const code = COLOR_CODES[colorMode.fixedColor];
+        if (widgetId === 'bmad-fileread' || widgetId === 'bmad-filewrite') {
+          const plain = stripAnsi(value);
+          const sp = plain.indexOf(' ');
+          value = sp > 0
+            ? colorize(plain.substring(0, sp), COLOR_CODES.white) + ' ' + colorize(plain.substring(sp + 1), code)
+            : colorize(plain, code);
+        } else {
+          value = colorize(stripAnsi(value), code);
         }
       }
       if (value) segments.push(value);
@@ -239,35 +336,37 @@ function formatTimer(startedAt) {
   return `${h}h${m.toString().padStart(2, '0')}m`;
 }
 
-function formatProgressBar(step) {
-  if (!step || !step.total || step.total <= 0) return '';
-  const current = Math.max(0, step.current || 0);
-  const filled = Math.min(current, step.total);
-  return '▰'.repeat(filled) + '▱'.repeat(step.total - filled);
-}
-
 function formatProgressStep(step) {
-  if (!step || !step.total) return '';
+  if (!step || (!step.total && !step.current)) return '';
   const current = step.current || 0;
+  if (!step.total) {
+    // Frontmatter fallback: no total known
+    const name = step.current_name;
+    return name ? `Step ${current} ${name}` : `Step ${current}`;
+  }
   const progress = `${current}/${step.total}`;
   const name = step.current_name;
-  if (name) return `Steps ${progress} ${name}`;
-  return `Tasks ${progress}`;
+  if (name) return `Step ${progress} ${name}`;
+  return `Step ${progress}`;
 }
 
 const COMMANDS = {
-  project:      (s) => s.project || '',
-  workflow:     (s) => colorize(s.workflow || '', getWorkflowColor(s.workflow)),
-  step:         (s) => (s.step && s.step.current_name) || '',
-  nextstep:     (s) => (s.step && s.step.next_name) || '',
-  progress:     (s) => {
-    if (!s.step || !s.step.total) return '';
-    return `${s.step.current || 0}/${s.step.total}`;
+  project:      (s, lc) => colorize(s.project || '', getProjectColor(s.project, lc && lc.projectColors)),
+  workflow:     (s, lc) => colorize(s.workflow || '', getWorkflowColor(s.workflow, lc && lc.skillColors)),
+  activeskill:  (s, lc) => {
+    const current = s.active_skill || s.workflow;
+    if (!current) return '';
+    const initialVisible = lc && lc.widgets && lc.widgets.includes('bmad-workflow');
+    if (initialVisible && current === s.workflow) return '';
+    return colorize(current, getWorkflowColor(current, lc && lc.skillColors));
   },
-  progressbar:  (s) => formatProgressBar(s.step),
+  nextstep:     (s) => (s.step && s.step.next_name) || '',
   progressstep: (s) => formatProgressStep(s.step),
   story:        (s) => formatStoryName(s.story || ''),
+  docname:      (s) => s.document_name || '',
   timer:        (s) => formatTimer(s.started_at),
+  fileread:     (s) => s.last_read ? `read ${s.last_read}` : '',
+  filewrite:    (s) => s.last_write ? `${s.last_write_op || 'write'} ${s.last_write}` : '',
   health:       (s) => {
     const updatedAt = s.updated_at;
     if (!updatedAt) return colorize('\u25CB', '\x1b[90m');

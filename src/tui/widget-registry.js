@@ -3,15 +3,16 @@
 import { WORKFLOW_COLORS } from '../defaults.js';
 
 const INDIVIDUAL_WIDGETS = [
-  { id: 'bmad-project',      command: 'project',      name: 'Project',       defaultEnabled: true,  defaultColor: 'yellow',     defaultMode: 'fixed' },
-  { id: 'bmad-workflow',     command: 'workflow',     name: 'Workflow',      defaultEnabled: true,  defaultColor: null,         defaultMode: 'dynamic' },
-  { id: 'bmad-step',         command: 'step',         name: 'Step',          defaultEnabled: false, defaultColor: 'yellow',     defaultMode: 'fixed' },
-  { id: 'bmad-nextstep',     command: 'nextstep',     name: 'Next Step',     defaultEnabled: false, defaultColor: 'yellow',     defaultMode: 'fixed' },
-  { id: 'bmad-progress',     command: 'progress',     name: 'Progress',      defaultEnabled: false, defaultColor: 'green',      defaultMode: 'fixed' },
-  { id: 'bmad-progressbar',  command: 'progressbar',  name: 'Progress Bar',  defaultEnabled: false, defaultColor: 'green',      defaultMode: 'fixed' },
-  { id: 'bmad-progressstep', command: 'progressstep', name: 'Progress+Step', defaultEnabled: true,  defaultColor: 'brightCyan', defaultMode: 'fixed' },
-  { id: 'bmad-story',        command: 'story',        name: 'Story',         defaultEnabled: true,  defaultColor: 'magenta',    defaultMode: 'fixed' },
-  { id: 'bmad-timer',        command: 'timer',        name: 'Timer',         defaultEnabled: true,  defaultColor: 'brightBlack', defaultMode: 'fixed' },
+  { id: 'bmad-project',      command: 'project',      name: 'Project',       hint: 'Name from BMAD config.yaml',           defaultEnabled: true,  defaultColor: null,         defaultMode: 'dynamic' },
+  { id: 'bmad-workflow',     command: 'workflow',     name: 'Initial Skill', hint: 'Skill invoked by user prompt',         defaultEnabled: true,  defaultColor: null,         defaultMode: 'dynamic' },
+  { id: 'bmad-activeskill', command: 'activeskill', name: 'Active Skill',  hint: 'Skill actually running',               defaultEnabled: false, defaultColor: null,         defaultMode: 'dynamic' },
+  { id: 'bmad-story',        command: 'story',        name: 'Story',         hint: 'create-story, dev-story, code-review', defaultEnabled: true,  defaultColor: 'magenta',    defaultMode: 'fixed' },
+  { id: 'bmad-docname',      command: 'docname',      name: 'Document',      hint: 'File being worked on in output folders', defaultEnabled: false, defaultColor: 'brightYellow', defaultMode: 'fixed' },
+  { id: 'bmad-progressstep', command: 'progressstep', name: 'Step',          hint: 'Skills with BMAD /step format only',   defaultEnabled: true,  defaultColor: 'brightCyan', defaultMode: 'fixed' },
+  { id: 'bmad-nextstep',     command: 'nextstep',     name: 'Next Step',     hint: 'Skills with BMAD /step format only',   defaultEnabled: false, defaultColor: 'yellow',     defaultMode: 'fixed' },
+  { id: 'bmad-fileread',     command: 'fileread',     name: 'File Read',     hint: 'Last file read by LLM',                  defaultEnabled: false, defaultColor: 'cyan',        defaultMode: 'fixed' },
+  { id: 'bmad-filewrite',    command: 'filewrite',    name: 'File Edit/Write', hint: 'Last file written or edited',          defaultEnabled: false, defaultColor: 'brightRed',   defaultMode: 'fixed' },
+  { id: 'bmad-timer',        command: 'timer',        name: 'Timer',         hint: 'Refreshes only while LLM is active',     defaultEnabled: true,  defaultColor: 'brightBlack', defaultMode: 'fixed' },
 ];
 
 export const CCSTATUSLINE_COLORS = [
@@ -42,9 +43,11 @@ export function createDefaultConfig() {
     customSeparator: null,
     lines: [
       { widgets: widgets.map(w => w.id), widgetOrder: [...allIds], colorModes },
-      { widgets: [], widgetOrder: [...allIds], colorModes: {} },
-      { widgets: [], widgetOrder: [...allIds], colorModes: {} },
+      { widgets: ['bmad-fileread'], widgetOrder: [...allIds], colorModes: { 'bmad-fileread': { mode: 'fixed', fixedColor: 'cyan' } } },
+      { widgets: ['bmad-filewrite'], widgetOrder: [...allIds], colorModes: { 'bmad-filewrite': { mode: 'fixed', fixedColor: 'brightRed' } } },
     ],
+    skillColors: {},
+    projectColors: {},
     presets: [null, null, null],
   };
 }

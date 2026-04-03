@@ -7,13 +7,13 @@ export const WORKFLOW_SAMPLE_COLOR = 'green';
 export const SAMPLE_VALUES = {
   'bmad-project': 'myproject',
   'bmad-workflow': 'dev-story',
-  'bmad-step': 'Step 2 Discover',
-  'bmad-nextstep': 'Next: Step 3',
-  'bmad-progress': '40%',
-  'bmad-progressbar': '\u2588\u2588\u2588\u2588\u2591\u2591\u2591\u2591\u2591\u2591',
-  'bmad-progressstep': 'Tasks 2/5',
+  'bmad-activeskill': 'code-review',
+  'bmad-progressstep': 'Step 2/7 Discover',
+  'bmad-nextstep': 'Design',
   'bmad-story': '4-2 Auth Login',
-  'bmad-timer': '12:34',
+  'bmad-timer': '12m34s',
+  'bmad-fileread': 'read src/hook/bmad-hook.js',
+  'bmad-filewrite': 'edit _bmad-output/prd.md',
 };
 
 export const SEPARATOR_MAP = {

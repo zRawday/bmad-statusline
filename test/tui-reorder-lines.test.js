@@ -45,11 +45,10 @@ describe('ReorderLinesScreen', () => {
     assert.ok(frame.includes('(empty)'), 'empty line shown');
   });
 
-  test('shows breadcrumb Home > Reorder Lines', () => {
+  test('shows screen name label Reorder Lines', () => {
     const { lastFrame } = render(e(ReorderLinesScreen, makeScreenProps()));
     const frame = lastFrame();
-    assert.ok(frame.includes('Home'));
-    assert.ok(frame.includes('Reorder Lines'));
+    assert.ok(frame.includes('Reorder Lines'), 'screen name label');
   });
 
   test('shows navigate shortcuts initially', () => {

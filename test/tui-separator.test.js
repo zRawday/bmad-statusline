@@ -36,11 +36,10 @@ describe('SeparatorStyleScreen', () => {
     assert.ok(frame.includes('custom'));
   });
 
-  test('renders breadcrumb Home > Separator Style', () => {
+  test('shows screen name label Separator Style', () => {
     const { lastFrame } = render(e(SeparatorStyleScreen, makeSepProps()));
     const frame = lastFrame();
-    assert.ok(frame.includes('Home'));
-    assert.ok(frame.includes('Separator Style'));
+    assert.ok(frame.includes('Separator Style'), 'screen name label');
   });
 
   test('Escape calls goBack in select mode', async () => {

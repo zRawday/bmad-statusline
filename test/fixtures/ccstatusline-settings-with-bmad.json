@@ -9,7 +9,21 @@
         "preserveColors": true
       }
     ],
-    [],
-    []
+    [
+      {
+        "id": "bmad-line-1",
+        "type": "custom-command",
+        "commandPath": "node \"/path/to/reader.js\" line 1",
+        "preserveColors": true
+      }
+    ],
+    [
+      {
+        "id": "bmad-line-2",
+        "type": "custom-command",
+        "commandPath": "node \"/path/to/reader.js\" line 2",
+        "preserveColors": true
+      }
+    ]
   ]
 }

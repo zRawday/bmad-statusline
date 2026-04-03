@@ -12,9 +12,9 @@ describe('preview-utils', () => {
   describe('SAMPLE_VALUES', () => {
     test('has all 9 widget keys', () => {
       const expectedKeys = [
-        'bmad-project', 'bmad-workflow', 'bmad-step', 'bmad-nextstep',
-        'bmad-progress', 'bmad-progressbar', 'bmad-progressstep',
-        'bmad-story', 'bmad-timer',
+        'bmad-project', 'bmad-workflow', 'bmad-activeskill', 'bmad-nextstep',
+        'bmad-progressstep', 'bmad-story', 'bmad-timer',
+        'bmad-fileread', 'bmad-filewrite',
       ];
       for (const key of expectedKeys) {
         assert.ok(key in SAMPLE_VALUES, `missing key: ${key}`);
@@ -63,9 +63,9 @@ describe('preview-utils', () => {
       assert.equal(resolvePreviewColor('bmad-project', colorModes), 'red');
     });
 
-    test('returns widget defaultColor when no colorModes entry', () => {
+    test('returns WORKFLOW_SAMPLE_COLOR for project default (dynamic widget with no entry)', () => {
       const colorModes = {};
-      assert.equal(resolvePreviewColor('bmad-project', colorModes), 'yellow');
+      assert.equal(resolvePreviewColor('bmad-project', colorModes), WORKFLOW_SAMPLE_COLOR);
     });
 
     test('returns WORKFLOW_SAMPLE_COLOR for workflow default (dynamic widget with no entry)', () => {

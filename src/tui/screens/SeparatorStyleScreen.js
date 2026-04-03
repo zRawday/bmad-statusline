@@ -82,7 +82,8 @@ export function SeparatorStyleScreen({ config, updateConfig, previewOverride, se
 
   if (mode === 'textInput') {
     return e(ScreenLayout, {
-      breadcrumb: ['Home', 'Separator Style'],
+      screenName: 'Separator Style',
+    screenColor: 'yellow',
       config,
       previewOverride,
       shortcuts: TEXTINPUT_SHORTCUTS,
@@ -97,7 +98,8 @@ export function SeparatorStyleScreen({ config, updateConfig, previewOverride, se
   }
 
   return e(ScreenLayout, {
-    breadcrumb: ['Home', 'Separator Style'],
+    screenName: 'Separator Style',
+    screenColor: 'yellow',
     config,
     previewOverride,
     shortcuts: SEPARATOR_SHORTCUTS,

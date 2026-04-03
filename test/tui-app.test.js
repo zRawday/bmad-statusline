@@ -62,7 +62,7 @@ describe('HomeScreen v2', () => {
     assert.ok(frame.includes('Reset to original'), 'Reset');
   });
 
-  test('home screen has no breadcrumb', () => {
+  test('home screen shows screen name label', () => {
     const { lastFrame } = render(e(HomeScreen, {
       config: mockConfig,
       previewOverride: null,
@@ -71,7 +71,9 @@ describe('HomeScreen v2', () => {
       onQuit: () => {},
       isActive: true,
     }));
-    assert.ok(!lastFrame().includes('Home >'), 'no breadcrumb on home');
+    const frame = lastFrame();
+    assert.ok(!frame.includes('Home >'), 'no breadcrumb');
+    assert.ok(frame.includes('Home'), 'screen name label shown');
   });
 
   test('renders ThreeLinePreview', () => {
@@ -238,7 +240,7 @@ describe('App v2 — state model', () => {
     stdin.write('\r');
     await delay(100);
 
-    // Should show Separator Style breadcrumb
+    // Should show Separator Style screen name label
     const sepFrame = lastFrame();
     assert.ok(sepFrame.includes('Separator Style'), 'navigated to separator');
 

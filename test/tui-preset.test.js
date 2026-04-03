@@ -12,6 +12,21 @@ const e = React.createElement;
 
 const delay = (ms) => new Promise(r => setTimeout(r, ms));
 
+const ALL_IDS = ['bmad-project', 'bmad-workflow', 'bmad-activeskill', 'bmad-story', 'bmad-progressstep', 'bmad-nextstep', 'bmad-timer'];
+
+function makePreset(name, line0Widgets = [], line1Widgets = [], line2Widgets = []) {
+  return {
+    name,
+    lines: [
+      { widgets: line0Widgets, widgetOrder: [...ALL_IDS] },
+      { widgets: line1Widgets, widgetOrder: [...ALL_IDS] },
+      { widgets: line2Widgets, widgetOrder: [...ALL_IDS] },
+    ],
+    separator: 'modere',
+    customSeparator: null,
+  };
+}
+
 function makeScreenProps(overrides = {}) {
   return {
     config: createDefaultConfig(),
@@ -20,7 +35,6 @@ function makeScreenProps(overrides = {}) {
     setPreviewOverride: () => {},
     navigate: () => {},
     goBack: () => {},
-    editingLine: 0,
     isActive: true,
     ...overrides,
   };
@@ -36,12 +50,10 @@ describe('PresetSaveScreen', () => {
     assert.ok(frame.includes('(empty)'), 'empty label');
   });
 
-  test('shows breadcrumb Home > Edit Line N > Save Preset', () => {
-    const { lastFrame } = render(e(PresetSaveScreen, makeScreenProps({ editingLine: 1 })));
+  test('shows screen name label Save Preset', () => {
+    const { lastFrame } = render(e(PresetSaveScreen, makeScreenProps()));
     const frame = lastFrame();
-    assert.ok(frame.includes('Home'));
-    assert.ok(frame.includes('Edit Line 2'));
-    assert.ok(frame.includes('Save Preset'));
+    assert.ok(frame.includes('Save Preset'), 'screen name label');
   });
 
   test('shows Save here shortcut', () => {
@@ -71,7 +83,7 @@ describe('PresetSaveScreen', () => {
 
   test('Enter on non-empty slot shows ConfirmDialog', async () => {
     const config = createDefaultConfig();
-    config.presets[0] = { name: 'dev-focus', widgets: ['bmad-project'], colorModes: { 'bmad-project': { mode: 'fixed', fixedColor: 'cyan' } } };
+    config.presets[0] = makePreset('dev-focus', ['bmad-project']);
     const { stdin, lastFrame } = render(e(PresetSaveScreen, makeScreenProps({ config })));
     await delay(50);
     stdin.write('\r');
@@ -85,7 +97,7 @@ describe('PresetSaveScreen', () => {
     let updatedCfg = null;
     let backCalled = false;
     const config = createDefaultConfig();
-    config.presets[0] = { name: 'dev-focus', widgets: ['bmad-project'], colorModes: { 'bmad-project': { mode: 'fixed', fixedColor: 'cyan' } } };
+    config.presets[0] = makePreset('dev-focus', ['bmad-project']);
     const { stdin, lastFrame } = render(e(PresetSaveScreen, makeScreenProps({
       config,
       updateConfig: (mutator) => { const cfg = structuredClone(config); mutator(cfg); updatedCfg = cfg; },
@@ -109,7 +121,7 @@ describe('PresetSaveScreen', () => {
   test('overwrite cancel returns to list', async () => {
     let backCalled = false;
     const config = createDefaultConfig();
-    config.presets[0] = { name: 'dev-focus', widgets: ['bmad-project'], colorModes: {} };
+    config.presets[0] = makePreset('dev-focus', ['bmad-project']);
     const { stdin, lastFrame } = render(e(PresetSaveScreen, makeScreenProps({
       config,
       goBack: () => { backCalled = true; },
@@ -125,12 +137,12 @@ describe('PresetSaveScreen', () => {
 
   test('renders non-empty slot with name and widget summary', () => {
     const config = createDefaultConfig();
-    config.presets[1] = { name: 'my-preset', widgets: ['bmad-project', 'bmad-workflow'], colorModes: {} };
+    config.presets[1] = makePreset('my-preset', ['bmad-project', 'bmad-workflow']);
     const { lastFrame } = render(e(PresetSaveScreen, makeScreenProps({ config })));
     const frame = lastFrame();
     assert.ok(frame.includes('my-preset'), 'preset name');
     assert.ok(frame.includes('Project'), 'widget name');
-    assert.ok(frame.includes('Workflow'), 'widget name');
+    assert.ok(frame.includes('Initial Skill'), 'widget name');
   });
 });
 
@@ -142,12 +154,10 @@ describe('PresetLoadScreen', () => {
     assert.ok(frame.includes('(empty)'), 'empty label');
   });
 
-  test('shows breadcrumb Home > Edit Line N > Load Preset', () => {
-    const { lastFrame } = render(e(PresetLoadScreen, makeScreenProps({ editingLine: 2 })));
+  test('shows screen name label Load Preset', () => {
+    const { lastFrame } = render(e(PresetLoadScreen, makeScreenProps()));
     const frame = lastFrame();
-    assert.ok(frame.includes('Home'));
-    assert.ok(frame.includes('Edit Line 3'));
-    assert.ok(frame.includes('Load Preset'));
+    assert.ok(frame.includes('Load Preset'), 'screen name label');
   });
 
   test('shows Load shortcut', () => {
@@ -185,7 +195,8 @@ describe('PresetLoadScreen', () => {
     let backCalled = false;
     let previewCleared = false;
     const config = createDefaultConfig();
-    config.presets[0] = { name: 'dev-focus', widgets: ['bmad-timer'], colorModes: { 'bmad-timer': { mode: 'fixed', fixedColor: 'magenta' } } };
+    const originalColorModes0 = structuredClone(config.lines[0].colorModes);
+    config.presets[0] = makePreset('dev-focus', ['bmad-timer']);
     const { stdin } = render(e(PresetLoadScreen, makeScreenProps({
       config,
       updateConfig: (mutator) => { const cfg = structuredClone(config); mutator(cfg); updatedCfg = cfg; },
@@ -197,36 +208,39 @@ describe('PresetLoadScreen', () => {
     await delay(50);
     assert.ok(updatedCfg, 'updateConfig called');
     assert.deepStrictEqual(updatedCfg.lines[0].widgets, ['bmad-timer'], 'widgets replaced from preset');
-    assert.deepStrictEqual(updatedCfg.lines[0].colorModes, { 'bmad-timer': { mode: 'fixed', fixedColor: 'magenta' } }, 'colorModes replaced from preset');
+    assert.deepStrictEqual(updatedCfg.lines[0].colorModes, originalColorModes0, 'colorModes preserved');
     assert.ok(previewCleared, 'previewOverride cleared');
     assert.ok(backCalled, 'goBack called');
   });
 
-  test('load replaces current line only, not other lines', async () => {
+  test('load replaces all lines and separator, preserves colors', async () => {
     let updatedCfg = null;
     const config = createDefaultConfig();
     config.lines[1].widgets = ['bmad-story'];
     config.lines[1].colorModes = { 'bmad-story': { mode: 'fixed', fixedColor: 'magenta' } };
-    config.presets[0] = { name: 'test', widgets: ['bmad-timer'], colorModes: { 'bmad-timer': { mode: 'fixed', fixedColor: 'cyan' } } };
+    const originalColorModes1 = structuredClone(config.lines[1].colorModes);
+    config.presets[0] = makePreset('test', ['bmad-timer'], ['bmad-project'], []);
     const { stdin } = render(e(PresetLoadScreen, makeScreenProps({
       config,
-      editingLine: 0,
       updateConfig: (mutator) => { const cfg = structuredClone(config); mutator(cfg); updatedCfg = cfg; },
     })));
     await delay(50);
     stdin.write('\r');
     await delay(50);
     assert.ok(updatedCfg, 'updateConfig called');
-    // Line 0 replaced
-    assert.deepStrictEqual(updatedCfg.lines[0].widgets, ['bmad-timer']);
-    // Line 1 untouched
-    assert.deepStrictEqual(updatedCfg.lines[1].widgets, ['bmad-story'], 'line 1 unchanged');
+    // All 3 lines replaced from preset
+    assert.deepStrictEqual(updatedCfg.lines[0].widgets, ['bmad-timer'], 'line 0 widgets from preset');
+    assert.deepStrictEqual(updatedCfg.lines[1].widgets, ['bmad-project'], 'line 1 widgets from preset');
+    assert.deepStrictEqual(updatedCfg.lines[2].widgets, [], 'line 2 widgets from preset');
+    assert.equal(updatedCfg.separator, 'modere', 'separator from preset');
+    // Colors preserved
+    assert.deepStrictEqual(updatedCfg.lines[1].colorModes, originalColorModes1, 'colorModes preserved');
   });
 
   test('highlight on non-empty slot sets previewOverride', async () => {
     let lastPreview = null;
     const config = createDefaultConfig();
-    config.presets[1] = { name: 'test', widgets: ['bmad-timer'], colorModes: { 'bmad-timer': { mode: 'fixed', fixedColor: 'cyan' } } };
+    config.presets[1] = makePreset('test', ['bmad-timer']);
     const { stdin } = render(e(PresetLoadScreen, makeScreenProps({
       config,
       setPreviewOverride: (v) => { lastPreview = v; },

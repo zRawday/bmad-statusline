@@ -62,7 +62,20 @@ function ensureWidgetOrder(config) {
   for (const line of config.lines) {
     if (!Array.isArray(line.widgetOrder)) {
       line.widgetOrder = [...line.widgets, ...allIds.filter(id => !line.widgets.includes(id))];
+    } else {
+      // Add any new widgets missing from existing widgetOrder
+      for (const id of allIds) {
+        if (!line.widgetOrder.includes(id)) {
+          line.widgetOrder.push(id);
+        }
+      }
     }
+  }
+  if (!config.skillColors || typeof config.skillColors !== 'object' || Array.isArray(config.skillColors)) {
+    config.skillColors = {};
+  }
+  if (!config.projectColors || typeof config.projectColors !== 'object' || Array.isArray(config.projectColors)) {
+    config.projectColors = {};
   }
   return config;
 }

@@ -18,17 +18,18 @@ describe('src/defaults.js config templates', () => {
     assert.equal(typeof result.padding, 'number');
   });
 
-  it('getWidgetDefinitions returns single bmad-line-0 v2 composite', () => {
+  it('getWidgetDefinitions returns 3 bmad-line-N composites', () => {
     const result = getWidgetDefinitions('/test/path/reader.js');
     assert.ok(Array.isArray(result));
-    assert.equal(result.length, 1, 'should return exactly 1 widget');
-    const w = result[0];
-    assert.equal(w.id, 'bmad-line-0', 'widget id should be bmad-line-0');
-    assert.equal(w.type, 'custom-command');
-    assert.ok(w.commandPath.includes('/test/path/reader.js'), 'commandPath should use provided readerPath');
-    assert.ok(w.commandPath.includes('line 0'), 'commandPath should use line 0 command');
-    assert.equal(w.preserveColors, true, 'should have preserveColors: true');
-    assert.equal(w.color, undefined, 'should not have color property');
+    assert.equal(result.length, 3, 'should return 3 widgets');
+    for (let i = 0; i < 3; i++) {
+      const w = result[i];
+      assert.equal(w.id, `bmad-line-${i}`);
+      assert.equal(w.type, 'custom-command');
+      assert.ok(w.commandPath.includes('/test/path/reader.js'));
+      assert.ok(w.commandPath.includes(`line ${i}`));
+      assert.equal(w.preserveColors, true);
+    }
   });
 
   it('getHookConfig returns 3 event type keys with correct matcher counts (1+3+1)', () => {
@@ -45,7 +46,7 @@ describe('src/defaults.js config templates', () => {
   it('getHookConfig matchers have correct values and commands', () => {
     const result = getHookConfig('/test/path/bmad-hook.js');
     // UserPromptSubmit
-    assert.equal(result.hooks.UserPromptSubmit[0].matcher, '(?:bmad|gds|wds)-');
+    assert.equal(result.hooks.UserPromptSubmit[0].matcher, '(?:bmad|gds|wds)[:-]');
     assert.equal(result.hooks.UserPromptSubmit[0].hooks[0].type, 'command');
     assert.ok(result.hooks.UserPromptSubmit[0].hooks[0].command.includes('/test/path/bmad-hook.js'));
     // PostToolUse

@@ -4,7 +4,7 @@
   "lines": [
     {
       "widgets": ["bmad-project", "bmad-workflow", "bmad-progressstep"],
-      "widgetOrder": ["bmad-project", "bmad-workflow", "bmad-step", "bmad-nextstep", "bmad-progress", "bmad-progressbar", "bmad-progressstep", "bmad-story", "bmad-timer"],
+      "widgetOrder": ["bmad-project", "bmad-workflow", "bmad-step", "bmad-nextstep", "bmad-progress", "bmad-progressbar", "bmad-progressstep", "bmad-story", "bmad-timer", "bmad-activeskill", "bmad-fileread", "bmad-filewrite", "bmad-docname"],
       "colorModes": {
         "bmad-project": { "mode": "fixed", "fixedColor": "cyan" },
         "bmad-workflow": { "mode": "dynamic" },
@@ -13,14 +13,16 @@
     },
     {
       "widgets": ["bmad-story", "bmad-timer"],
-      "widgetOrder": ["bmad-project", "bmad-workflow", "bmad-step", "bmad-nextstep", "bmad-progress", "bmad-progressbar", "bmad-progressstep", "bmad-story", "bmad-timer"],
+      "widgetOrder": ["bmad-project", "bmad-workflow", "bmad-step", "bmad-nextstep", "bmad-progress", "bmad-progressbar", "bmad-progressstep", "bmad-story", "bmad-timer", "bmad-activeskill", "bmad-fileread", "bmad-filewrite", "bmad-docname"],
       "colorModes": {
         "bmad-story": { "mode": "fixed", "fixedColor": "magenta" },
         "bmad-timer": { "mode": "fixed", "fixedColor": "brightBlack" }
       }
     },
-    { "widgets": [], "widgetOrder": ["bmad-project", "bmad-workflow", "bmad-step", "bmad-nextstep", "bmad-progress", "bmad-progressbar", "bmad-progressstep", "bmad-story", "bmad-timer"], "colorModes": {} }
+    { "widgets": [], "widgetOrder": ["bmad-project", "bmad-workflow", "bmad-step", "bmad-nextstep", "bmad-progress", "bmad-progressbar", "bmad-progressstep", "bmad-story", "bmad-timer", "bmad-activeskill", "bmad-fileread", "bmad-filewrite", "bmad-docname"], "colorModes": {} }
   ],
+  "skillColors": {},
+  "projectColors": {},
   "presets": [
     {
       "name": "dev-focus",

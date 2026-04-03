@@ -17,7 +17,15 @@ function renderLine(line, separator, lineIndex) {
     if (!value) continue;
     const color = resolvePreviewColor(widgetId, line.colorModes);
     if (segments.length > 1) segments.push(e(Text, { key: `sep-${widgetId}` }, separator));
-    segments.push(e(Text, { key: widgetId, color: toInkColor(color) }, value));
+    if ((widgetId === 'bmad-fileread' || widgetId === 'bmad-filewrite') && value.includes(' ')) {
+      const sp = value.indexOf(' ');
+      segments.push(e(Text, { key: widgetId },
+        e(Text, { color: 'white' }, value.substring(0, sp)),
+        e(Text, { color: toInkColor(color) }, value.substring(sp)),
+      ));
+    } else {
+      segments.push(e(Text, { key: widgetId, color: toInkColor(color) }, value));
+    }
   }
   return e(Text, { key: lineIndex }, ...segments);
 }

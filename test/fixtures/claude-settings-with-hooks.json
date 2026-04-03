@@ -3,7 +3,7 @@
   "hooks": {
     "UserPromptSubmit": [
       {
-        "matcher": "(?:bmad|gds|wds)-",
+        "matcher": "(?:bmad|gds|wds)[:-]",
         "hooks": [
           {
             "type": "command",

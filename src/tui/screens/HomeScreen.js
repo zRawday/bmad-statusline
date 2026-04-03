@@ -1,9 +1,8 @@
-// HomeScreen.js — Home screen with colorful header, menu options, and ccstatusline launcher
+// HomeScreen.js — Home screen with menu options and ccstatusline launcher
 
 import React, { useState } from 'react';
 import { Box, Text, useInput } from 'ink';
 import { ScreenLayout } from '../components/ScreenLayout.js';
-import { ThreeLinePreview } from '../components/ThreeLinePreview.js';
 
 const e = React.createElement;
 
@@ -16,6 +15,9 @@ const HOME_OPTIONS = [
   { label: '\u2726  Separator style', value: 'separator' },
   { label: '\u21A9  Reset to original', value: 'reset' },
   { label: '\u2500\u2500\u2500', value: '_sep2' },
+  { label: '\uD83D\uDCBE Save preset', value: 'presetSave' },
+  { label: '\uD83D\uDCC2 Load preset', value: 'presetLoad' },
+  { label: '\u2500\u2500\u2500', value: '_sep3' },
   { label: '\u2699  Open ccstatusline', value: 'ccstatusline' },
 ];
 
@@ -28,17 +30,6 @@ const HOME_SHORTCUTS = [
   { key: 'Enter', label: 'Select' },
   { key: 'q', label: 'Quit' },
 ];
-
-function Header() {
-  return e(Box, { flexDirection: 'column', marginBottom: 1 },
-    e(Text, null,
-      e(Text, { color: 'cyan', bold: true }, '\u2726 BMAD-STATUSLINE'),
-      e(Text, { dimColor: true }, '  \u2014  Claude Code status bar configurator'),
-    ),
-    e(Text, { color: 'yellow' }, 'Custom BMAD widgets for ccstatusline'),
-    e(Text, { dimColor: true }, 'Works with BMAD 6.2.2+'),
-  );
-}
 
 export function HomeScreen({ config, previewOverride, navigate, resetToOriginal, onQuit, onLaunchCcstatusline, isActive }) {
   const [cursor, setCursor] = useState(0);
@@ -63,22 +54,19 @@ export function HomeScreen({ config, previewOverride, navigate, resetToOriginal,
       else if (value === 'reorderLines') navigate('reorderLines');
       else if (value === 'separator') navigate('separator');
       else if (value === 'reset') resetToOriginal();
+      else if (value === 'presetSave') navigate('presetSave');
+      else if (value === 'presetLoad') navigate('presetLoad');
       else if (value === 'ccstatusline') onLaunchCcstatusline();
     }
   }, { isActive });
 
-  const effectiveConfig = previewOverride || config;
-
   return e(ScreenLayout, {
-    breadcrumb: null,
+    screenName: 'Home',
+    screenColor: 'cyan',
     config,
     previewOverride,
     shortcuts: HOME_SHORTCUTS,
-    hidePreview: true,
   },
-    e(Header),
-    e(ThreeLinePreview, { config: effectiveConfig }),
-    e(Text, null, ' '),
     e(Box, { flexDirection: 'column' },
       ...HOME_OPTIONS.map((opt, i) => {
         const isSep = opt.value.startsWith('_sep');

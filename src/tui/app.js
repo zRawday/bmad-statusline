@@ -11,6 +11,8 @@ import { SeparatorStyleScreen } from './screens/SeparatorStyleScreen.js';
 import { PresetSaveScreen } from './screens/PresetSaveScreen.js';
 import { PresetLoadScreen } from './screens/PresetLoadScreen.js';
 import { ReorderLinesScreen } from './screens/ReorderLinesScreen.js';
+import { SkillColorsScreen } from './screens/SkillColorsScreen.js';
+import { ProjectColorsScreen } from './screens/ProjectColorsScreen.js';
 
 const e = React.createElement;
 
@@ -125,6 +127,14 @@ export function App({ paths }) {
 
   if (screen === 'reorderLines') {
     return e(ReorderLinesScreen, { ...screenProps });
+  }
+
+  if (screen === 'skillColors') {
+    return e(SkillColorsScreen, { ...screenProps });
+  }
+
+  if (screen === 'projectColors') {
+    return e(ProjectColorsScreen, { ...screenProps });
   }
 
   // Fallback for unknown screens

@@ -1458,4 +1458,145 @@ describe('hook — 5-signal passive detection', () => {
       fs.rmSync(freshCache, { recursive: true, force: true });
     }
   });
+
+  // ─── Document name detection ───────────────────────────────────────────────
+
+  it('Write in planning_artifacts sets document_name', () => {
+    const sid = 'docname-plan';
+    execHook(makeUserPromptPayload(sid, '/bmad-create-prd'));
+    const filePath = path.join(tmpDir, '_bmad-output', 'planning-artifacts', 'prd-v2.md');
+    execHook(makeWritePayload(sid, filePath, '# PRD v2'));
+    const status = readStatusFile(sid);
+    assert.equal(status.document_name, 'prd-v2.md');
+  });
+
+  it('Write in output_folder root sets document_name', () => {
+    const sid = 'docname-root';
+    execHook(makeUserPromptPayload(sid, '/bmad-brainstorming'));
+    const filePath = path.join(tmpDir, '_bmad-output', 'brainstorming-session-2026-04-03-001.md');
+    execHook(makeWritePayload(sid, filePath, '# Brainstorm'));
+    const status = readStatusFile(sid);
+    assert.equal(status.document_name, 'brainstorming-session-2026-04-03-001.md');
+  });
+
+  it('Write outside output folders does not set document_name', () => {
+    const sid = 'docname-outside';
+    execHook(makeUserPromptPayload(sid, '/bmad-create-architecture'));
+    const filePath = path.join(tmpDir, 'src', 'hook', 'bmad-hook.js');
+    execHook(makeWritePayload(sid, filePath, '// code'));
+    const status = readStatusFile(sid);
+    assert.ok(!status.document_name, 'document_name should not be set');
+  });
+
+  it('Write in story workflow does not set document_name', () => {
+    const sid = 'docname-story-wf';
+    execHook(makeUserPromptPayload(sid, '/bmad-dev-story'));
+    const filePath = path.join(tmpDir, '_bmad-output', 'implementation-artifacts', 'spec-test.md');
+    execHook(makeWritePayload(sid, filePath, '# Spec'));
+    const status = readStatusFile(sid);
+    assert.ok(!status.document_name, 'document_name should not be set');
+  });
+
+  it('Edit in output folder sets document_name', () => {
+    const sid = 'docname-edit';
+    execHook(makeUserPromptPayload(sid, '/bmad-create-architecture'));
+    const filePath = path.join(tmpDir, '_bmad-output', 'planning-artifacts', 'architecture.md');
+    execHook(makeEditPayload(sid, filePath, 'old', 'new'));
+    const status = readStatusFile(sid);
+    assert.equal(status.document_name, 'architecture.md');
+  });
+
+  it('Write in nested output subfolder sets document_name', () => {
+    const sid = 'docname-nested';
+    execHook(makeUserPromptPayload(sid, '/bmad-create-prd'));
+    const subDir = path.join(tmpDir, '_bmad-output', 'planning-artifacts', 'sub');
+    fs.mkdirSync(subDir, { recursive: true });
+    const filePath = path.join(subDir, 'deep-file.md');
+    execHook(makeWritePayload(sid, filePath, '# Deep'));
+    const status = readStatusFile(sid);
+    assert.equal(status.document_name, 'deep-file.md');
+  });
+
+  // ─── Step enrichment via frontmatter stepsCompleted ────────────────────────
+
+  it('Write with stepsCompleted frontmatter sets step.current when no step files', () => {
+    const sid = 'step-fm-1';
+    execHook(makeUserPromptPayload(sid, '/bmad-brainstorming'));
+    const filePath = path.join(tmpDir, '_bmad-output', 'brainstorming-session.md');
+    const content = '---\nstepsCompleted: [1, 2, 3]\nstatus: draft\n---\n# Content';
+    execHook(makeWritePayload(sid, filePath, content));
+    const status = readStatusFile(sid);
+    assert.equal(status.step.current, 3);
+    assert.equal(status.step.current_name, 'completed');
+    assert.equal(status.step.total, null);
+  });
+
+  it('stepsCompleted ignored when step.total is set (step files win)', () => {
+    const sid = 'step-fm-priority';
+    execHook(makeUserPromptPayload(sid, '/bmad-create-architecture'));
+    // Read a step file to set step.total
+    const stepFile = path.join(tmpDir, '.claude', 'skills', 'bmad-create-architecture', 'steps', 'step-03-starter.md');
+    execHook(makeReadPayload(sid, stepFile));
+    const before = readStatusFile(sid);
+    assert.ok(before.step.total > 0, 'step.total should be set from step files');
+    // Write with stepsCompleted — should be ignored
+    const filePath = path.join(tmpDir, '_bmad-output', 'planning-artifacts', 'arch.md');
+    const content = '---\nstepsCompleted: [1]\n---\n# Arch';
+    execHook(makeWritePayload(sid, filePath, content));
+    const after = readStatusFile(sid);
+    assert.equal(after.step.current, before.step.current, 'step.current unchanged');
+    assert.equal(after.step.total, before.step.total, 'step.total unchanged');
+  });
+
+  it('Write without frontmatter does not affect step', () => {
+    const sid = 'step-fm-none';
+    execHook(makeUserPromptPayload(sid, '/bmad-brainstorming'));
+    const filePath = path.join(tmpDir, '_bmad-output', 'no-frontmatter.md');
+    execHook(makeWritePayload(sid, filePath, '# No frontmatter here'));
+    const status = readStatusFile(sid);
+    assert.equal(status.step.current, null);
+  });
+
+  it('Edit with stepsCompleted in new_string sets step.current', () => {
+    const sid = 'step-fm-edit';
+    execHook(makeUserPromptPayload(sid, '/bmad-brainstorming'));
+    const filePath = path.join(tmpDir, '_bmad-output', 'session.md');
+    const newString = '---\nstepsCompleted: [1, 2]\nstatus: draft\n---\n# Updated';
+    execHook(makeEditPayload(sid, filePath, 'old content', newString));
+    const status = readStatusFile(sid);
+    assert.equal(status.step.current, 2);
+    assert.equal(status.step.current_name, 'completed');
+  });
+
+  // ─── Document detection with default output folders (no custom config) ─────
+
+  it('document_name works with default output folders when config.yaml has no folder keys', () => {
+    const sid = 'docname-defaults';
+    // config.yaml only has project_name, no output folder keys → defaults used
+    execHook(makeUserPromptPayload(sid, '/bmad-create-prd'));
+    const filePath = path.join(tmpDir, '_bmad-output', 'planning-artifacts', 'prd.md');
+    execHook(makeWritePayload(sid, filePath, '# PRD'));
+    const status = readStatusFile(sid);
+    assert.equal(status.document_name, 'prd.md');
+  });
+
+  // ─── bmadRoot walk-up (cwd is a subdirectory) ─────────────────────────────
+
+  it('hook works when cwd is a subdirectory of bmadRoot', () => {
+    const sid = 'walkup-1';
+    const subDir = path.join(tmpDir, 'my-package');
+    fs.mkdirSync(subDir, { recursive: true });
+    // Payload cwd points to subdirectory, but _bmad is in tmpDir
+    const payload = {
+      session_id: sid,
+      cwd: subDir,
+      hook_event_name: 'UserPromptSubmit',
+      prompt: '/bmad-create-prd'
+    };
+    execHook(payload);
+    const status = readStatusFile(sid);
+    assert.ok(status, 'status file should exist');
+    assert.equal(status.skill, 'bmad-create-prd');
+    assert.equal(status.project, 'TestProject');
+  });
 });

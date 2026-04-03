@@ -1,10 +1,9 @@
-// PresetLoadScreen.js — Load a preset into the current line with try-before-you-buy preview
+// PresetLoadScreen.js — Load a full layout preset with try-before-you-buy preview
 
-import React, { useState } from 'react';
-import { Text, useInput } from 'ink';
+import React, { useState, useEffect } from 'react';
+import { Box, Text, useInput } from 'ink';
 import { ScreenLayout } from '../components/ScreenLayout.js';
 import { getIndividualWidgets } from '../widget-registry.js';
-import { resolvePreviewColor, toInkColor } from '../preview-utils.js';
 
 const e = React.createElement;
 
@@ -14,42 +13,56 @@ const SHORTCUTS = [
   { key: 'Esc', label: 'Back' },
 ];
 
-function getPresetSlotData(preset, slotIndex) {
-  if (!preset) return { isEmpty: true, name: null, widgets: [] };
+function getPresetSlotData(preset) {
+  if (!preset || !preset.lines) return { isEmpty: true, name: null, lineSummaries: [] };
   const allWidgets = getIndividualWidgets();
-  const widgetEntries = (preset.widgets || []).map(id => {
-    const w = allWidgets.find(wd => wd.id === id);
-    return { id, name: w ? w.name : id, color: resolvePreviewColor(id, preset.colorModes || {}) };
+  const lineSummaries = preset.lines.map(line => {
+    const names = (line.widgets || []).map(id => {
+      const w = allWidgets.find(wd => wd.id === id);
+      return w ? w.name : id;
+    });
+    return names;
   });
-  return { isEmpty: false, name: preset.name, widgets: widgetEntries };
+  return { isEmpty: false, name: preset.name, lineSummaries };
 }
 
 function renderSlot(slotIndex, slotData, isCursor) {
   const prefix = isCursor ? '> ' : '  ';
   if (slotData.isEmpty) {
-    return e(Text, { key: `slot-${slotIndex}`, dimColor: true }, `${prefix}${slotIndex + 1}. (empty)`);
+    return e(Box, { key: `slot-${slotIndex}`, flexDirection: 'column' },
+      e(Text, { dimColor: true }, `${prefix}${slotIndex + 1}. (empty)`),
+    );
   }
-  const children = [`${prefix}${slotIndex + 1}. ${slotData.name}    `];
-  slotData.widgets.forEach((w, j) => {
-    if (j > 0) children.push(' \u00b7 ');
-    children.push(e(Text, { key: `w-${slotIndex}-${j}`, color: toInkColor(w.color) }, w.name));
+  const children = [
+    e(Text, { key: 'header' }, `${prefix}${slotIndex + 1}. ${slotData.name}`),
+  ];
+  slotData.lineSummaries.forEach((names, li) => {
+    const summary = names.length > 0 ? names.join(' \u00b7 ') : '\u2500';
+    children.push(e(Text, { key: `line-${li}`, dimColor: true }, `     L${li + 1}: ${summary}`));
   });
-  return e(Text, { key: `slot-${slotIndex}` }, ...children);
+  return e(Box, { key: `slot-${slotIndex}`, flexDirection: 'column' }, ...children);
 }
 
-export function PresetLoadScreen({ config, updateConfig, previewOverride, setPreviewOverride, goBack, editingLine, isActive }) {
+export function PresetLoadScreen({ config, updateConfig, previewOverride, setPreviewOverride, goBack, isActive }) {
   const [cursorIndex, setCursorIndex] = useState(0);
   const presets = config.presets || [null, null, null];
 
+  useEffect(() => { applyPreviewForSlot(0); }, []);
+
   function applyPreviewForSlot(index) {
     const preset = presets[index];
-    if (!preset) {
+    if (!preset || !preset.lines) {
       setPreviewOverride(null);
       return;
     }
     const preview = structuredClone(config);
-    preview.lines[editingLine].widgets = [...preset.widgets];
-    preview.lines[editingLine].colorModes = { ...preset.colorModes };
+    for (let i = 0; i < 3; i++) {
+      preview.lines[i].widgets = [...preset.lines[i].widgets];
+      preview.lines[i].widgetOrder = [...preset.lines[i].widgetOrder];
+    }
+    preview.separator = preset.separator;
+    preview.customSeparator = preset.customSeparator;
+    // Colors (colorModes, skillColors, projectColors) are NOT touched
     setPreviewOverride(preview);
   }
 
@@ -70,10 +83,15 @@ export function PresetLoadScreen({ config, updateConfig, previewOverride, setPre
     }
     if (key.return) {
       const preset = presets[cursorIndex];
-      if (!preset) return; // empty slot — no-op
+      if (!preset || !preset.lines) return; // empty or old-format slot — no-op
       updateConfig(cfg => {
-        cfg.lines[editingLine].widgets = [...preset.widgets];
-        cfg.lines[editingLine].colorModes = { ...preset.colorModes };
+        for (let i = 0; i < 3; i++) {
+          cfg.lines[i].widgets = [...preset.lines[i].widgets];
+          cfg.lines[i].widgetOrder = [...preset.lines[i].widgetOrder];
+        }
+        cfg.separator = preset.separator;
+        cfg.customSeparator = preset.customSeparator;
+        // Colors preserved — not touched
       });
       setPreviewOverride(null);
       goBack();
@@ -81,10 +99,11 @@ export function PresetLoadScreen({ config, updateConfig, previewOverride, setPre
     if (key.escape) goBack();
   }, { isActive });
 
-  const slots = [0, 1, 2].map(i => getPresetSlotData(presets[i], i));
+  const slots = [0, 1, 2].map(i => getPresetSlotData(presets[i]));
 
   return e(ScreenLayout, {
-    breadcrumb: ['Home', `Edit Line ${editingLine + 1}`, 'Load Preset'],
+    screenName: 'Load Preset',
+    screenColor: 'brightCyan',
     config,
     previewOverride,
     shortcuts: SHORTCUTS,

@@ -72,7 +72,8 @@ export function ReorderLinesScreen({ config, updateConfig, previewOverride, setP
   useInput(() => {}, { isActive: false });
 
   return e(ScreenLayout, {
-    breadcrumb: ['Home', 'Reorder Lines'],
+    screenName: 'Reorder Lines',
+    screenColor: 'magenta',
     config,
     previewOverride,
     shortcuts,

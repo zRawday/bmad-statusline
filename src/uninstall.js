@@ -12,11 +12,16 @@ const defaultPaths = {
   settingsLocal: path.join(process.cwd(), '.claude', 'settings.local.json'),
 };
 
+// --- ANSI colors ---
+
+const G = '\x1b[32m', R = '\x1b[31m', C = '\x1b[36m', D = '\x1b[90m', B = '\x1b[1m', _ = '\x1b[0m';
+
 // --- Logging helpers ---
 
-function logSuccess(target, message) { console.log(`  \u2713 ${target} \u2014 ${message}`); }
-function logSkipped(target, message) { console.log(`  \u25CB ${target} \u2014 ${message}`); }
-function logError(target, message)   { console.log(`  \u2717 ${target} \u2014 ${message}`); }
+function logSuccess(target, message) { console.log(`     ${G}\u2713${_} ${target} ${D}\u2014${_} ${G}${message}${_}`); }
+function logSkipped(target, message) { console.log(`     ${D}\u25CB ${target} \u2014 ${message}${_}`); }
+function logError(target, message)   { console.log(`     ${R}\u2717 ${target} \u2014 ${message}${_}`); }
+function logSection(emoji, title) { console.log(`\n  ${emoji} ${B}${C}${title}${_}`); }
 
 // --- JSON mutation helpers ---
 
@@ -223,16 +228,26 @@ function uninstallTarget7(paths) {
 // --- Main ---
 
 export default function uninstall(paths = defaultPaths) {
-  const results = [
-    uninstallTarget1(),
-    uninstallTarget2(paths),
-    uninstallTarget3(paths),
-    uninstallTarget4(paths),
-    uninstallTarget5(paths),
-    uninstallTarget6(paths),
-    uninstallTarget7(paths),
-  ];
-  if (results.some(r => r === false)) {
+  console.log(`\n  ${B}\uD83D\uDDD1\uFE0F  Uninstalling bmad-statusline...${_}`);
+
+  logSection('\uD83D\uDCCB', 'Claude Code & ccstatusline');
+  const r1 = uninstallTarget1();
+  const r2 = uninstallTarget2(paths);
+
+  logSection('\uD83D\uDCE6', 'Runtime & cache');
+  const r3 = uninstallTarget3(paths);
+  const r4 = uninstallTarget4(paths);
+
+  logSection('\uD83E\uDDF9', 'Hooks & legacy cleanup');
+  const r5 = uninstallTarget5(paths);
+  const r6 = uninstallTarget6(paths);
+  const r7 = uninstallTarget7(paths);
+
+  console.log(`\n  ${D}${'─'.repeat(38)}${_}`);
+  if ([r1, r2, r3, r4, r5, r6, r7].some(r => r === false)) {
+    console.log(`\n  ${R}${B}\u26A0  Uninstall completed with errors.${_}\n`);
     process.exit(1);
   }
+  console.log(`\n  ${G}${B}\u2728 bmad-statusline uninstalled.${_}`);
+  console.log(`  ${D}statusLine config preserved for ccstatusline.${_}\n`);
 }

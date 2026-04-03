@@ -21,11 +21,16 @@ const defaultPaths = {
   cacheDir: path.join(home, '.cache', 'bmad-status'),
 };
 
+// --- ANSI colors ---
+
+const G = '\x1b[32m', R = '\x1b[31m', C = '\x1b[36m', D = '\x1b[90m', B = '\x1b[1m', _ = '\x1b[0m';
+
 // --- Logging helpers ---
 
-function logSuccess(target, message) { console.log(`  \u2713 ${target} \u2014 ${message}`); }
-function logSkipped(target, message) { console.log(`  \u25CB ${target} \u2014 ${message}`); }
-function logError(target, message)   { console.log(`  \u2717 ${target} \u2014 ${message}`); }
+function logSuccess(target, message) { console.log(`     ${G}\u2713${_} ${target} ${D}\u2014${_} ${G}${message}${_}`); }
+function logSkipped(target, message) { console.log(`     ${D}\u25CB ${target} \u2014 ${message}${_}`); }
+function logError(target, message)   { console.log(`     ${R}\u2717 ${target} \u2014 ${message}${_}`); }
+function logSection(emoji, title) { console.log(`\n  ${emoji} ${B}${C}${title}${_}`); }
 
 // --- JSON mutation helpers ---
 
@@ -94,10 +99,12 @@ function installTarget2(paths) {
     }
 
     const allWidgets = config.lines.flat();
+    const desired = getWidgetDefinitions(paths.readerDest);
+    const existingV2 = new Set(allWidgets.filter(w => w.id?.startsWith('bmad-line-')).map(w => w.id));
+    const missing = desired.filter(w => !existingV2.has(w.id));
 
-    // v2 detection: bmad-line-* composites already present — skip (idempotent)
-    const hasV2 = allWidgets.some(w => w.id?.startsWith('bmad-line-'));
-    if (hasV2) {
+    // All 3 bmad-line-* already present — skip
+    if (missing.length === 0) {
       logSkipped(target, 'bmad-line-* already present');
       return;
     }
@@ -106,31 +113,27 @@ function installTarget2(paths) {
       backupFile(paths.ccstatuslineSettings);
     }
 
-    // v1 detection: individual bmad-* widgets (not bmad-line-*) — upgrade to v2
+    // v1 detection: individual bmad-* widgets (not bmad-line-*) — remove before injecting v2
     const hasV1 = allWidgets.some(w => w.id?.startsWith('bmad-') && w.type === 'custom-command' && !w.id.startsWith('bmad-line-'));
     if (hasV1) {
-      // Remove all old bmad-* and sep-bmad-* widgets from all lines
       config.lines = config.lines.map(line =>
         line.filter(w => !w.id?.startsWith('bmad-') && !w.id?.startsWith('sep-bmad-'))
       );
-      // Inject v2 composite on line 0
-      const widgets = getWidgetDefinitions(paths.readerDest);
-      config.lines[0] = [...config.lines[0], ...widgets];
-      writeJsonSafe(paths.ccstatuslineSettings, config);
-      logSuccess(target, 'upgraded v1 widgets to v2 composite');
-      return;
     }
 
-    // Fresh install: inject v2 composite on line 0
-    const targetLine = 0;
-    while (config.lines.length <= targetLine) {
-      config.lines.push([]);
+    // Inject each bmad-line-N on the corresponding ccstatusline line
+    for (const w of missing) {
+      const lineIdx = parseInt(w.id.replace('bmad-line-', ''), 10);
+      while (config.lines.length <= lineIdx) config.lines.push([]);
+      config.lines[lineIdx] = [...config.lines[lineIdx], w];
     }
-    const widgets = getWidgetDefinitions(paths.readerDest);
-    config.lines[targetLine] = [...config.lines[targetLine], ...widgets];
 
     writeJsonSafe(paths.ccstatuslineSettings, config);
-    logSuccess(target, 'BMAD widgets injected');
+    logSuccess(target, hasV1
+      ? 'upgraded v1 widgets to v2 composites'
+      : existingV2.size > 0
+        ? `added missing ${missing.map(w => w.id).join(', ')}`
+        : 'BMAD widgets injected');
   } catch (err) {
     try {
       const bakPath = paths.ccstatuslineSettings + '.bak';
@@ -265,16 +268,26 @@ function installTarget7(paths) {
 // --- Main ---
 
 export default function install(paths = defaultPaths) {
-  const results = [
-    installTarget1(paths),
-    installTarget2(paths),
-    installTarget3(paths),
-    installTarget4(paths),
-    installTarget5(paths),
-    installTarget6(paths),
-    installTarget7(paths),
-  ];
-  if (results.some(r => r === false)) {
+  console.log(`\n  ${B}\uD83D\uDD27 Installing bmad-statusline...${_}`);
+
+  logSection('\uD83D\uDCCB', 'Claude Code & ccstatusline');
+  const r1 = installTarget1(paths);
+  const r2 = installTarget2(paths);
+
+  logSection('\uD83D\uDCE6', 'Deploying files');
+  const r3 = installTarget3(paths);
+  const r4 = installTarget4(paths);
+
+  logSection('\uD83D\uDD17', 'Hooks & configuration');
+  const r5 = installTarget5(paths);
+  const r6 = installTarget6(paths);
+  const r7 = installTarget7(paths);
+
+  console.log(`\n  ${D}${'─'.repeat(38)}${_}`);
+  if ([r1, r2, r3, r4, r5, r6, r7].some(r => r === false)) {
+    console.log(`\n  ${R}${B}\u26A0  Installation completed with errors.${_}\n`);
     process.exit(1);
   }
+  console.log(`\n  ${G}${B}\uD83C\uDF89 bmad-statusline installed!${_}`);
+  console.log(`  ${D}Run${_} npx bmad-statusline ${D}to open the config menu.${_}\n`);
 }

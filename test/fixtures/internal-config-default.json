@@ -3,18 +3,28 @@
   "customSeparator": null,
   "lines": [
     {
-      "widgets": ["bmad-project", "bmad-workflow", "bmad-progressstep", "bmad-story", "bmad-timer"],
-      "widgetOrder": ["bmad-project", "bmad-workflow", "bmad-step", "bmad-nextstep", "bmad-progress", "bmad-progressbar", "bmad-progressstep", "bmad-story", "bmad-timer"],
+      "widgets": ["bmad-project", "bmad-workflow", "bmad-story", "bmad-progressstep", "bmad-timer"],
+      "widgetOrder": ["bmad-project", "bmad-workflow", "bmad-activeskill", "bmad-story", "bmad-docname", "bmad-progressstep", "bmad-nextstep", "bmad-fileread", "bmad-filewrite", "bmad-timer"],
       "colorModes": {
-        "bmad-project": { "mode": "fixed", "fixedColor": "yellow" },
+        "bmad-project": { "mode": "dynamic" },
         "bmad-workflow": { "mode": "dynamic" },
-        "bmad-progressstep": { "mode": "fixed", "fixedColor": "brightCyan" },
         "bmad-story": { "mode": "fixed", "fixedColor": "magenta" },
+        "bmad-progressstep": { "mode": "fixed", "fixedColor": "brightCyan" },
         "bmad-timer": { "mode": "fixed", "fixedColor": "brightBlack" }
       }
     },
-    { "widgets": [], "widgetOrder": ["bmad-project", "bmad-workflow", "bmad-step", "bmad-nextstep", "bmad-progress", "bmad-progressbar", "bmad-progressstep", "bmad-story", "bmad-timer"], "colorModes": {} },
-    { "widgets": [], "widgetOrder": ["bmad-project", "bmad-workflow", "bmad-step", "bmad-nextstep", "bmad-progress", "bmad-progressbar", "bmad-progressstep", "bmad-story", "bmad-timer"], "colorModes": {} }
+    {
+      "widgets": ["bmad-fileread"],
+      "widgetOrder": ["bmad-project", "bmad-workflow", "bmad-activeskill", "bmad-story", "bmad-docname", "bmad-progressstep", "bmad-nextstep", "bmad-fileread", "bmad-filewrite", "bmad-timer"],
+      "colorModes": { "bmad-fileread": { "mode": "fixed", "fixedColor": "cyan" } }
+    },
+    {
+      "widgets": ["bmad-filewrite"],
+      "widgetOrder": ["bmad-project", "bmad-workflow", "bmad-activeskill", "bmad-story", "bmad-docname", "bmad-progressstep", "bmad-nextstep", "bmad-fileread", "bmad-filewrite", "bmad-timer"],
+      "colorModes": { "bmad-filewrite": { "mode": "fixed", "fixedColor": "brightRed" } }
+    }
   ],
+  "skillColors": {},
+  "projectColors": {},
   "presets": [null, null, null]
 }

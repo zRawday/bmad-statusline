@@ -269,7 +269,7 @@ describe('Target 5: hook config injection', () => {
       // UserPromptSubmit
       assert.ok(Array.isArray(config.hooks.UserPromptSubmit), 'UserPromptSubmit should be array');
       assert.equal(config.hooks.UserPromptSubmit.length, 1);
-      assert.equal(config.hooks.UserPromptSubmit[0].matcher, '(?:bmad|gds|wds)-');
+      assert.equal(config.hooks.UserPromptSubmit[0].matcher, '(?:bmad|gds|wds)[:-]');
       // PostToolUse
       assert.ok(Array.isArray(config.hooks.PostToolUse), 'PostToolUse should be array');
       assert.equal(config.hooks.PostToolUse.length, 3, 'should have 3 PostToolUse matchers');
@@ -358,7 +358,7 @@ describe('Target 5: hook config injection', () => {
       assert.equal(config.hooks.PostToolUse.length, 3, 'should have 3 PostToolUse matchers');
       // UserPromptSubmit and SessionStart added
       assert.equal(config.hooks.UserPromptSubmit.length, 1);
-      assert.equal(config.hooks.UserPromptSubmit[0].matcher, '(?:bmad|gds|wds)-');
+      assert.equal(config.hooks.UserPromptSubmit[0].matcher, '(?:bmad|gds|wds)[:-]');
       assert.equal(config.hooks.SessionStart.length, 1);
       assert.equal(config.hooks.SessionStart[0].matcher, 'resume');
     } finally { teardown(baseDir); }

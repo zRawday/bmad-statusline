@@ -26,7 +26,7 @@ function makeScreenProps(overrides = {}) {
 }
 
 describe('EditLineScreen', () => {
-  test('renders all 9 widgets from registry (BF1)', () => {
+  test('renders all 7 widgets from registry', () => {
     const { lastFrame } = render(e(EditLineScreen, makeScreenProps()));
     const frame = lastFrame();
     const allWidgets = getIndividualWidgets();
@@ -42,10 +42,9 @@ describe('EditLineScreen', () => {
     assert.ok(frame.includes('□'), 'hidden marker');
   });
 
-  test('shows breadcrumb Home > Edit Line N', () => {
+  test('shows screen name label Edit Line N', () => {
     const { lastFrame } = render(e(EditLineScreen, makeScreenProps({ editingLine: 1 })));
-    assert.ok(lastFrame().includes('Home'));
-    assert.ok(lastFrame().includes('Edit Line 2'));
+    assert.ok(lastFrame().includes('Edit Line 2'), 'screen name label');
   });
 
   test('shows navigate shortcuts', () => {
@@ -89,9 +88,8 @@ describe('EditLineScreen', () => {
     });
     const { stdin } = render(e(EditLineScreen, props));
     await delay(50);
-    // Navigate down to first hidden widget (after the 5 visible ones)
-    const visibleCount = config.lines[0].widgets.length;
-    for (let i = 0; i < visibleCount; i++) {
+    // Navigate down to a hidden widget (nextstep at index 6)
+    for (let i = 0; i < 6; i++) {
       stdin.write('\x1B[B');
       await delay(20);
     }
