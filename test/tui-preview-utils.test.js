@@ -22,8 +22,8 @@ describe('preview-utils', () => {
       }
     });
 
-    test('has exactly 9 keys', () => {
-      assert.equal(Object.keys(SAMPLE_VALUES).length, 9);
+    test('has exactly 10 keys', () => {
+      assert.equal(Object.keys(SAMPLE_VALUES).length, 10);
     });
   });
 

@@ -11,6 +11,7 @@ export const SAMPLE_VALUES = {
   'bmad-progressstep': 'Step 2/7 Discover',
   'bmad-nextstep': 'Design',
   'bmad-story': '4-2 Auth Login',
+  'bmad-docname': 'architecture.md',
   'bmad-timer': '12m34s',
   'bmad-fileread': 'read src/hook/bmad-hook.js',
   'bmad-filewrite': 'edit _bmad-output/prd.md',
