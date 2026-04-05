@@ -119,6 +119,34 @@ function colorize(text, ansiCode) {
   return `${ansiCode}${text}${RESET}`;
 }
 
+// --- LLM State widget ---
+
+const INACTIVE_TIMEOUT_MS = 5 * 60 * 1000;
+
+const LLM_STATES = {
+  permission: { bg: '\x1b[103m', fg: '\x1b[30m', label: 'PERMISSION' },
+  waiting:    { bg: '\x1b[104m', fg: '\x1b[97m', label: 'EN ATTENTE' },
+  active:     { color: '\x1b[32m',  label: 'Actif' },
+  inactive:   { color: '\x1b[90m',  label: 'Inactif' },
+};
+
+function computeLlmDisplayState(status) {
+  if (status.updated_at) {
+    const age = Date.now() - new Date(status.updated_at).getTime();
+    if (isNaN(age) || age > INACTIVE_TIMEOUT_MS) return 'inactive';
+  }
+  return status.llm_state || 'inactive';
+}
+
+function formatLlmState(status) {
+  const state = computeLlmDisplayState(status);
+  const cfg = LLM_STATES[state] || LLM_STATES.inactive;
+  if (cfg.bg) {
+    return `${cfg.bg}${cfg.fg} \u2B24  ${cfg.label} ${RESET}`;
+  }
+  return `${cfg.color}\u2B24  ${cfg.label}${RESET}`;
+}
+
 const PROJECT_COLOR_PALETTE = [
   'red', 'green', 'yellow', 'blue', 'magenta', 'cyan',
   'brightRed', 'brightGreen', 'brightYellow', 'brightBlue', 'brightMagenta', 'brightCyan',
@@ -173,8 +201,13 @@ function readStdin() {
   }
 }
 
+function isValidSessionId(sessionId) {
+  return sessionId && !sessionId.includes('/') && !sessionId.includes('\\') && !sessionId.includes('..');
+}
+
 function readStatusFile(sessionId) {
   try {
+    if (!isValidSessionId(sessionId)) return null;
     const filePath = path.join(CACHE_DIR, `status-${sessionId}.json`);
     return JSON.parse(fs.readFileSync(filePath, 'utf8'));
   } catch {
@@ -186,10 +219,13 @@ function readStatusFile(sessionId) {
 
 function touchAlive(sessionId) {
   try {
+    if (!isValidSessionId(sessionId)) return;
     const alivePath = path.join(CACHE_DIR, `.alive-${sessionId}`);
-    const now = new Date();
-    fs.writeFileSync(alivePath, '', { flag: 'w' });
-    fs.utimesSync(alivePath, now, now);
+    // Only touch mtime — don't overwrite content (hook caches claude.exe PID there)
+    if (fs.existsSync(alivePath)) {
+      const now = new Date();
+      fs.utimesSync(alivePath, now, now);
+    }
   } catch {}
 }
 
@@ -200,7 +236,8 @@ function purgeStale() {
     for (const entry of entries) {
       if (!entry.startsWith('.alive-')) continue;
       const filePath = path.join(CACHE_DIR, entry);
-      const stat = fs.statSync(filePath);
+      let stat;
+      try { stat = fs.statSync(filePath); } catch { continue; }
       if (now - stat.mtimeMs > ALIVE_MAX_AGE_MS) {
         const staleId = entry.slice('.alive-'.length);
         try { fs.unlinkSync(filePath); } catch {}
@@ -248,7 +285,7 @@ function readLineConfig(lineIndex) {
       widgets: config.lines[lineIndex].widgets || [],
       colorModes: config.lines[lineIndex].colorModes || {},
       separator: config.separator || 'serre',
-      customSeparator: config.customSeparator || null,
+      customSeparator: config.customSeparator ?? null,
       skillColors: config.skillColors || {},
       projectColors: config.projectColors || {},
     };
@@ -258,7 +295,7 @@ function readLineConfig(lineIndex) {
 }
 
 function resolveSeparator(style, custom) {
-  if (style === 'custom' && custom) return custom;
+  if (style === 'custom' && custom != null) return custom;
   return READER_SEPARATORS[style] || READER_SEPARATORS.serre;
 }
 
@@ -289,7 +326,7 @@ function handleLineCommand(lineIndex) {
       let value = extractor(status, lineConfig);
       if (!value) continue;
       const colorMode = lineConfig.colorModes[widgetId];
-      if (colorMode && colorMode.mode === 'fixed' && colorMode.fixedColor) {
+      if (widgetId !== 'bmad-llmstate' && colorMode && colorMode.mode === 'fixed' && colorMode.fixedColor) {
         const code = COLOR_CODES[colorMode.fixedColor];
         if (widgetId === 'bmad-fileread' || widgetId === 'bmad-filewrite') {
           const plain = stripAnsi(value);
@@ -312,11 +349,12 @@ function handleLineCommand(lineIndex) {
 
 // --- Story formatting ---
 
-function formatStoryName(slug) {
+function formatStoryName(slug, displayMode) {
   if (!slug) return '';
   const match = slug.match(/^(\d+-\d+)-(.+)$/);
   if (!match) return slug;
-  const title = match[2].split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+  if (displayMode === 'compact') return match[1];
+  const title = match[2].split('-').filter(Boolean).map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
   return `${match[1]} ${title}`;
 }
 
@@ -344,13 +382,16 @@ function formatProgressStep(step) {
     const name = step.current_name;
     return name ? `Step ${current} ${name}` : `Step ${current}`;
   }
-  const progress = `${current}/${step.total}`;
+  const cappedTotal = Math.min(Math.max(step.total, 0), 999);
+  const cappedCurrent = Math.min(current, 999);
+  const progress = `${cappedCurrent}/${cappedTotal}`;
   const name = step.current_name;
   if (name) return `Step ${progress} ${name}`;
   return `Step ${progress}`;
 }
 
 const COMMANDS = {
+  llmstate:     (s) => formatLlmState(s),
   project:      (s, lc) => colorize(s.project || '', getProjectColor(s.project, lc && lc.projectColors)),
   workflow:     (s, lc) => colorize(s.workflow || '', getWorkflowColor(s.workflow, lc && lc.skillColors)),
   activeskill:  (s, lc) => {
@@ -362,19 +403,19 @@ const COMMANDS = {
   },
   nextstep:     (s) => (s.step && s.step.next_name) || '',
   progressstep: (s) => formatProgressStep(s.step),
-  story:        (s) => formatStoryName(s.story || ''),
+  story:        (s, lc) => formatStoryName(s.story || '', lc && lc.colorModes && lc.colorModes['bmad-story'] && lc.colorModes['bmad-story'].displayMode),
   docname:      (s) => s.document_name || '',
   timer:        (s) => formatTimer(s.started_at),
   fileread:     (s) => s.last_read ? `read ${s.last_read}` : '',
   filewrite:    (s) => s.last_write ? `${s.last_write_op || 'write'} ${s.last_write}` : '',
   health:       (s) => {
     const updatedAt = s.updated_at;
-    if (!updatedAt) return colorize('\u25CB', '\x1b[90m');
+    if (!updatedAt) return colorize('\u25CB', COLOR_CODES.brightBlack);
     const ageMs = Date.now() - new Date(updatedAt).getTime();
-    if (isNaN(ageMs) || ageMs < 0) return colorize('\u25CB', '\x1b[90m');
-    if (ageMs < FRESH_THRESHOLD_MS) return colorize('\u25CF', '\x1b[32m');
-    if (ageMs < STALE_THRESHOLD_MS) return colorize('\u25CF', '\x1b[33m');
-    return colorize('\u25CB', '\x1b[90m');
+    if (isNaN(ageMs) || ageMs < 0) return colorize('\u25CB', COLOR_CODES.brightBlack);
+    if (ageMs < FRESH_THRESHOLD_MS) return colorize('\u25CF', COLOR_CODES.green);
+    if (ageMs < STALE_THRESHOLD_MS) return colorize('\u25CF', COLOR_CODES.yellow);
+    return colorize('\u25CB', COLOR_CODES.brightBlack);
   },
 };
 
@@ -418,8 +459,18 @@ function main() {
     return;
   }
 
+  // Standalone: read config for custom colors so extractors can use them
+  let lineConfig = null;
   try {
-    const result = COMMANDS[command](status);
+    const config = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'));
+    lineConfig = {
+      skillColors: config.skillColors || {},
+      projectColors: config.projectColors || {},
+    };
+  } catch { /* silent — no config or unreadable */ }
+
+  try {
+    const result = COMMANDS[command](status, lineConfig);
     process.stdout.write(result || '');
   } catch {
     process.stdout.write('');

@@ -1,10 +1,11 @@
 // preview-utils.js — Shared preview logic for TUI components
 
-import { getIndividualWidgets } from './widget-registry.js';
+import { getIndividualWidgets, SEPARATOR_VALUES } from './widget-registry.js';
 
 export const WORKFLOW_SAMPLE_COLOR = 'green';
 
 export const SAMPLE_VALUES = {
+  'bmad-llmstate': '\u2B24  Actif',
   'bmad-project': 'myproject',
   'bmad-workflow': 'dev-story',
   'bmad-activeskill': 'code-review',
@@ -17,11 +18,7 @@ export const SAMPLE_VALUES = {
   'bmad-filewrite': 'edit _bmad-output/prd.md',
 };
 
-export const SEPARATOR_MAP = {
-  serre: '\u2503',
-  modere: ' \u2503 ',
-  large: '  \u2503  ',
-};
+export const SEPARATOR_MAP = SEPARATOR_VALUES;
 
 export function toInkColor(name) {
   if (!name || !name.startsWith('bright')) return name;
@@ -31,7 +28,15 @@ export function toInkColor(name) {
   return base.charAt(0).toLowerCase() + base.slice(1) + 'Bright';
 }
 
+export function getSampleValue(widgetId, colorModes) {
+  if (widgetId === 'bmad-story' && colorModes && colorModes[widgetId]?.displayMode === 'compact') {
+    return '4-2';
+  }
+  return SAMPLE_VALUES[widgetId];
+}
+
 export function resolvePreviewColor(widgetId, colorModes) {
+  if (widgetId === 'bmad-llmstate') return 'green';
   const mode = colorModes[widgetId];
   if (!mode) {
     const widgets = getIndividualWidgets();
@@ -43,4 +48,17 @@ export function resolvePreviewColor(widgetId, colorModes) {
   }
   if (mode.mode === 'dynamic') return WORKFLOW_SAMPLE_COLOR;
   return mode.fixedColor || 'white';
+}
+
+export function getPresetSlotData(preset) {
+  if (!preset || !preset.lines) return { isEmpty: true, name: null, lineSummaries: [] };
+  const allWidgets = getIndividualWidgets();
+  const lineSummaries = preset.lines.map(line => {
+    const names = (line.widgets || []).map(id => {
+      const w = allWidgets.find(wd => wd.id === id);
+      return w ? w.name : id;
+    });
+    return names;
+  });
+  return { isEmpty: false, name: preset.name, lineSummaries };
 }
