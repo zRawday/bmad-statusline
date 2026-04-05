@@ -13,6 +13,9 @@ import { PresetLoadScreen } from './screens/PresetLoadScreen.js';
 import { ReorderLinesScreen } from './screens/ReorderLinesScreen.js';
 import { SkillColorsScreen } from './screens/SkillColorsScreen.js';
 import { ProjectColorsScreen } from './screens/ProjectColorsScreen.js';
+import { MonitorScreen } from './monitor/MonitorScreen.js';
+import path from 'node:path';
+import os from 'node:os';
 
 const e = React.createElement;
 
@@ -26,6 +29,7 @@ function FallbackScreen({ screen, goBack, isActive }) {
 
 export function App({ paths }) {
   const { exit } = useApp();
+  const cachePath = process.env.BMAD_CACHE_DIR || path.join(os.homedir(), '.cache', 'bmad-status');
 
   // v2 state model — BF2-safe: no useEffect for config loading
   const [config, setConfig] = useState(() => loadConfig(paths));
@@ -37,19 +41,22 @@ export function App({ paths }) {
   const [selectedWidget, setSelectedWidget] = useState(null);
   const [statusMessage, setStatusMessage] = useState(null);
 
-  // Pattern 15 — updateConfig(mutator): structuredClone -> mutate -> write -> sync -> return
+  // Pattern 15 — updateConfig(mutator): structuredClone -> mutate -> debounced write -> sync -> return
+  const writeTimerRef = React.useRef(null);
   function updateConfig(mutator) {
     setConfig(prev => {
       const next = structuredClone(prev);
       mutator(next);
-      writeInternalConfig(next, paths);
       syncCcstatuslineIfNeeded(prev, next, paths);
+      if (writeTimerRef.current) clearTimeout(writeTimerRef.current);
+      writeTimerRef.current = setTimeout(() => writeInternalConfig(next, paths), 300);
       return next;
     });
   }
 
   // BF2-safe reset — no useEffect involved
   function resetToOriginal() {
+    if (writeTimerRef.current) clearTimeout(writeTimerRef.current);
     const restored = structuredClone(snapshot);
     setConfig(restored);
     writeInternalConfig(restored, paths);
@@ -103,7 +110,7 @@ export function App({ paths }) {
   if (screen === 'home') {
     return e(HomeScreen, {
       ...screenProps,
-      onQuit: () => exit(),
+      onQuit: () => { if (writeTimerRef.current) { clearTimeout(writeTimerRef.current); writeInternalConfig(config, paths); } exit(); },
       resetToOriginal,
       onLaunchCcstatusline: () => { exit(); launchCcstatuslineAfterExit = true; },
     });
@@ -135,6 +142,16 @@ export function App({ paths }) {
 
   if (screen === 'projectColors') {
     return e(ProjectColorsScreen, { ...screenProps });
+  }
+
+  if (screen === 'monitor') {
+    return e(MonitorScreen, {
+      config,
+      navigate,
+      goBack,
+      isActive: !statusMessage,
+      paths: { cachePath, outputFolder: path.join(process.cwd(), '_bmad-output') },
+    });
   }
 
   // Fallback for unknown screens

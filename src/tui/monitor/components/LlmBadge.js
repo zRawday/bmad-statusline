@@ -22,7 +22,7 @@ function LlmBadge({ state, workflow, startedAt, contextLabel }) {
     return e(Box, { flexDirection: 'row' },
       e(Text, { dimColor: true },
         ' ', e(Text, { color: cfg.color }, cfg.icon), `  ${cfg.label}`,
-        suffix ? ` ${suffix}` : '', ' ',
+        suffix ? ` ${suffix}` : null, ' ',
       ),
       contextLabel ? e(Text, { dimColor: true }, `  ${contextLabel}`) : null,
     );
@@ -31,7 +31,7 @@ function LlmBadge({ state, workflow, startedAt, contextLabel }) {
   return e(Box, { flexDirection: 'row' },
     e(Text, { bold: true, backgroundColor: cfg.bgColor, color: cfg.fgColor },
       ' ', e(Text, { color: cfg.fgColor }, cfg.icon), `  ${cfg.label}`,
-      suffix ? e(Text, { bold: false, backgroundColor: cfg.bgColor, color: cfg.fgColor }, ` ${suffix}`) : '',
+      suffix ? e(Text, { bold: false, backgroundColor: cfg.bgColor, color: cfg.fgColor }, ` ${suffix}`) : null,
       ' ',
     ),
     contextLabel ? e(Text, null, `  ${contextLabel}`) : null,

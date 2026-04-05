@@ -7,6 +7,7 @@ import { createDefaultConfig } from './tui/widget-registry.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const readerSource = path.join(__dirname, 'reader', 'bmad-sl-reader.js');
+const workflowColorsSource = path.join(__dirname, 'reader', 'workflow-colors.cjs');
 const hookSource = path.join(__dirname, 'hook', 'bmad-hook.js');
 
 const home = os.homedir();
@@ -119,6 +120,14 @@ function installTarget2(paths) {
       config.lines = config.lines.map(line =>
         line.filter(w => !w.id?.startsWith('bmad-') && !w.id?.startsWith('sep-bmad-'))
       );
+    } else {
+      // Clean orphan sep-bmad-* separators even on fresh install (no v1 widgets)
+      const hasOrphanSeps = allWidgets.some(w => w.id?.startsWith('sep-bmad-'));
+      if (hasOrphanSeps) {
+        config.lines = config.lines.map(line =>
+          line.filter(w => !w.id?.startsWith('sep-bmad-'))
+        );
+      }
     }
 
     // Inject each bmad-line-N on the corresponding ccstatusline line
@@ -150,6 +159,7 @@ function installTarget3(paths) {
     fs.mkdirSync(paths.readerDir, { recursive: true });
     const existed = fs.existsSync(paths.readerDest);
     fs.copyFileSync(readerSource, paths.readerDest);
+    fs.copyFileSync(workflowColorsSource, path.join(paths.readerDir, 'workflow-colors.cjs'));
     logSuccess(target, existed ? 'updated' : 'installed');
   } catch (err) {
     logError(target, err.message);

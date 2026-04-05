@@ -115,7 +115,9 @@ describe('HomeScreen v2', () => {
       isActive: true,
     }));
     await delay(50);
-    // First option is Edit widget line 1
+    // First option is Monitor, arrow down to Edit widget line 1
+    stdin.write('\x1B[B');
+    await delay(20);
     stdin.write('\r');
     await delay(50);
     assert.equal(navigatedTo, 'editLine');
@@ -133,8 +135,8 @@ describe('HomeScreen v2', () => {
       isActive: true,
     }));
     await delay(50);
-    // Navigate down to Reset (5 arrow-downs, separators skipped by custom menu)
-    for (let i = 0; i < 5; i++) {
+    // Navigate down to Reset (6 arrow-downs: Monitor→edit1→2→3→reorder→separator→reset, seps skipped)
+    for (let i = 0; i < 6; i++) {
       stdin.write('\x1B[B');
       await delay(20);
     }
@@ -193,8 +195,8 @@ describe('App v2 — state model', () => {
     const { stdin, lastFrame, unmount } = render(e(App, { paths }));
     await delay(100);
 
-    // Navigate to separator (4 downs: editLine1→2→3→reorder→separator, seps skipped)
-    for (let i = 0; i < 4; i++) {
+    // Navigate to separator (5 downs: Monitor→editLine1→2→3→reorder→separator, seps skipped)
+    for (let i = 0; i < 5; i++) {
       stdin.write('\x1B[B');
       await delay(20);
     }
@@ -205,15 +207,15 @@ describe('App v2 — state model', () => {
     stdin.write('\x1B[B');
     await delay(20);
     stdin.write('\r');
-    await delay(100);
+    await delay(500); // debounced write needs 300ms+
 
     // Separator auto-returns to home after selection
     // Verify change was written
     const afterChange = JSON.parse(fs.readFileSync(paths.internalConfig, 'utf8'));
     assert.equal(afterChange.separator, 'large', 'separator changed');
 
-    // Select Reset (5 downs: editLine1→2→3→reorder→separator→reset, seps skipped)
-    for (let i = 0; i < 5; i++) {
+    // Select Reset (6 downs: Monitor→editLine1→2→3→reorder→separator→reset, seps skipped)
+    for (let i = 0; i < 6; i++) {
       stdin.write('\x1B[B');
       await delay(20);
     }
@@ -232,8 +234,8 @@ describe('App v2 — state model', () => {
     const { stdin, lastFrame, unmount } = render(e(App, { paths }));
     await delay(100);
 
-    // Navigate to separator (4 downs, separators skipped)
-    for (let i = 0; i < 4; i++) {
+    // Navigate to separator (5 downs: Monitor → Edit1 → Edit2 → Edit3 → Reorder → Separator)
+    for (let i = 0; i < 5; i++) {
       stdin.write('\x1B[B');
       await delay(20);
     }

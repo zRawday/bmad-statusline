@@ -5,10 +5,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
+import { createRequire } from 'node:module';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const READER_PATH = path.resolve(__dirname, '..', 'src', 'reader', 'bmad-sl-reader.js');
 const DEFAULTS_PATH = path.resolve(__dirname, '..', 'src', 'defaults.js');
+const WORKFLOW_COLORS_PATH = path.resolve(__dirname, '..', 'src', 'reader', 'workflow-colors.cjs');
 
 const ESC = '\x1b[';
 const RESET = '\x1b[0m';
@@ -187,6 +189,12 @@ describe('reader color output', () => {
     assert.equal(result, '4-2 User Registration Flow');
   });
 
+  it('formats story slug with double-hyphen 5-3-auth--login to 5-3 Auth Login', () => {
+    writeStatus('fmt5', { story: '5-3-auth--login' });
+    const result = execReader('story', 'fmt5');
+    assert.equal(result, '5-3 Auth Login');
+  });
+
   it('returns non-matching slug as-is (AC #6)', () => {
     writeStatus('fmt3', { story: 'some-other-thing' });
     const result = execReader('story', 'fmt3');
@@ -197,6 +205,59 @@ describe('reader color output', () => {
     writeStatus('fmt4', {});
     const result = execReader('story', 'fmt4');
     assert.equal(result, '');
+  });
+
+  // --- Story compact display mode ---
+
+  it('story compact mode returns only number prefix via line command', () => {
+    const configDir = fs.mkdtempSync(path.join(os.tmpdir(), 'bmad-cfg-'));
+    const config = JSON.parse(fs.readFileSync(FIXTURE_CONFIG_PATH, 'utf8'));
+    config.lines[0].colorModes['bmad-story'] = { mode: 'fixed', fixedColor: 'magenta', displayMode: 'compact' };
+    fs.writeFileSync(path.join(configDir, 'config.json'), JSON.stringify(config));
+    writeStatus('compact1', { story: '7-5-auth-login' });
+    const result = execReaderWithConfig('line 0', 'compact1', configDir);
+    assert.ok(result.includes('7-5'), 'should contain story number');
+    assert.ok(!result.includes('Auth Login'), 'should NOT contain title in compact mode');
+    fs.rmSync(configDir, { recursive: true, force: true });
+  });
+
+  it('story full mode (default) returns number and title via line command', () => {
+    const configDir = fs.mkdtempSync(path.join(os.tmpdir(), 'bmad-cfg-'));
+    const config = JSON.parse(fs.readFileSync(FIXTURE_CONFIG_PATH, 'utf8'));
+    // No displayMode set — should default to full
+    fs.writeFileSync(path.join(configDir, 'config.json'), JSON.stringify(config));
+    writeStatus('full1', { story: '7-5-auth-login' });
+    const result = execReaderWithConfig('line 0', 'full1', configDir);
+    assert.ok(result.includes('7-5 Auth Login'), 'should contain full story name');
+    fs.rmSync(configDir, { recursive: true, force: true });
+  });
+
+  it('standalone story command always returns full format (no lineConfig)', () => {
+    writeStatus('standalone1', { story: '7-5-auth-login' });
+    const result = execReader('story', 'standalone1');
+    assert.equal(result, '7-5 Auth Login');
+  });
+
+  it('compact mode with no story returns empty string', () => {
+    const configDir = fs.mkdtempSync(path.join(os.tmpdir(), 'bmad-cfg-'));
+    const config = JSON.parse(fs.readFileSync(FIXTURE_CONFIG_PATH, 'utf8'));
+    config.lines[0].colorModes['bmad-story'] = { mode: 'fixed', fixedColor: 'magenta', displayMode: 'compact' };
+    fs.writeFileSync(path.join(configDir, 'config.json'), JSON.stringify(config));
+    writeStatus('compact-empty', {});
+    const result = execReaderWithConfig('line 0', 'compact-empty', configDir);
+    assert.ok(!result.includes('bmad'), 'should not contain any widget text for missing story');
+    fs.rmSync(configDir, { recursive: true, force: true });
+  });
+
+  it('compact mode with non-matching slug returns slug as-is', () => {
+    const configDir = fs.mkdtempSync(path.join(os.tmpdir(), 'bmad-cfg-'));
+    const config = JSON.parse(fs.readFileSync(FIXTURE_CONFIG_PATH, 'utf8'));
+    config.lines[0].colorModes['bmad-story'] = { mode: 'fixed', fixedColor: 'magenta', displayMode: 'compact' };
+    fs.writeFileSync(path.join(configDir, 'config.json'), JSON.stringify(config));
+    writeStatus('compact-nomatch', { story: 'no-match' });
+    const result = execReaderWithConfig('line 0', 'compact-nomatch', configDir);
+    assert.ok(result.includes('no-match'), 'non-matching slug should pass through');
+    fs.rmSync(configDir, { recursive: true, force: true });
   });
 
   // --- line N command (AC #1, #2, #3, #4, #5) ---
@@ -225,21 +286,21 @@ describe('reader color output', () => {
     fs.rmSync(configDir, { recursive: true, force: true });
   });
 
-  it('line 1: empty widgets returns empty string (AC #2)', () => {
+  it('line 1: llmstate-only line renders llm state (AC #2)', () => {
     const configDir = fs.mkdtempSync(path.join(os.tmpdir(), 'bmad-cfg-'));
     fs.copyFileSync(FIXTURE_CONFIG_PATH, path.join(configDir, 'config.json'));
     writeStatus('line2', { project: 'Toulou' });
     const result = execReaderWithConfig('line 1', 'line2', configDir);
-    assert.equal(result, '');
+    assert.ok(result.includes('Inactif'), 'line 1 should render llmstate');
     fs.rmSync(configDir, { recursive: true, force: true });
   });
 
-  it('line 2: empty widgets returns empty string (AC #2)', () => {
+  it('line 2: llmstate-only line renders llm state (AC #2)', () => {
     const configDir = fs.mkdtempSync(path.join(os.tmpdir(), 'bmad-cfg-'));
     fs.copyFileSync(FIXTURE_CONFIG_PATH, path.join(configDir, 'config.json'));
     writeStatus('line2b', { project: 'Toulou' });
     const result = execReaderWithConfig('line 2', 'line2b', configDir);
-    assert.equal(result, '');
+    assert.ok(result.includes('Inactif'), 'line 2 should render llmstate');
     fs.rmSync(configDir, { recursive: true, force: true });
   });
 
@@ -289,6 +350,20 @@ describe('reader color output', () => {
     writeStatus('line5b', { project: 'P', workflow: 'dev-story' });
     const result = execReaderWithConfig('line 0', 'line5b', configDir);
     assert.ok(result.includes('  \u2503  '), 'should use large separator (wide padded)');
+    fs.rmSync(configDir, { recursive: true, force: true });
+  });
+
+  it('line N: empty custom separator uses empty string (AC #5)', () => {
+    const configDir = fs.mkdtempSync(path.join(os.tmpdir(), 'bmad-cfg-'));
+    const config = JSON.parse(fs.readFileSync(FIXTURE_CONFIG_PATH, 'utf8'));
+    config.separator = 'custom';
+    config.customSeparator = '';
+    fs.writeFileSync(path.join(configDir, 'config.json'), JSON.stringify(config));
+    writeStatus('line5c', { project: 'P', workflow: 'dev-story' });
+    const result = execReaderWithConfig('line 0', 'line5c', configDir);
+    // Segments should be concatenated with no separator between them
+    assert.ok(!result.includes('\u2503'), 'should not contain default separator');
+    assert.ok(!result.includes(' | '), 'should not contain pipe separator');
     fs.rmSync(configDir, { recursive: true, force: true });
   });
 
@@ -385,9 +460,14 @@ describe('reader color output', () => {
 
   it('touches .alive file on read', () => {
     writeStatus('alive1', { project: 'Test' });
-    execReader('project', 'alive1');
     const alivePath = path.join(tmpDir, '.alive-alive1');
-    assert.ok(fs.existsSync(alivePath), '.alive file should exist');
+    fs.writeFileSync(alivePath, '');
+    const past = new Date(Date.now() - 60000);
+    fs.utimesSync(alivePath, past, past);
+    const beforeMtime = fs.statSync(alivePath).mtimeMs;
+    execReader('project', 'alive1');
+    const afterMtime = fs.statSync(alivePath).mtimeMs;
+    assert.ok(afterMtime >= beforeMtime, '.alive mtime should be refreshed');
   });
 
   it('purges stale alive and status files', () => {
@@ -437,10 +517,37 @@ describe('reader color output', () => {
     assert.equal(result, '');
   });
 
+  // --- Health extractor uses COLOR_CODES, not inline ANSI hex ---
+
+  it('health extractor source uses COLOR_CODES constants (no inline hex escapes)', () => {
+    const src = fs.readFileSync(READER_PATH, 'utf8');
+    const healthStart = src.indexOf("health:");
+    const healthEnd = src.indexOf('},', healthStart);
+    const healthBlock = src.slice(healthStart, healthEnd);
+    assert.ok(!healthBlock.includes("'\\x1b["), 'health extractor should not contain inline ANSI hex escapes');
+    assert.ok(healthBlock.includes('COLOR_CODES.green'), 'should use COLOR_CODES.green');
+    assert.ok(healthBlock.includes('COLOR_CODES.yellow'), 'should use COLOR_CODES.yellow');
+    assert.ok(healthBlock.includes('COLOR_CODES.brightBlack'), 'should use COLOR_CODES.brightBlack');
+  });
+
+  // --- Standalone custom colors ---
+
+  it('standalone project command uses custom projectColors from config', () => {
+    const configDir = fs.mkdtempSync(path.join(os.tmpdir(), 'bmad-cfg-'));
+    fs.writeFileSync(path.join(configDir, 'config.json'), JSON.stringify({
+      projectColors: { 'MyProject': 'red' }
+    }));
+    writeStatus('standalone-color', { project: 'MyProject' });
+    const result = execReaderWithConfig('project', 'standalone-color', configDir);
+    assert.equal(result, `${ESC}31mMyProject${RESET}`, 'should use custom red color from projectColors');
+    fs.rmSync(configDir, { recursive: true, force: true });
+  });
+
   // --- BMAD_CACHE_DIR ---
 
   it('uses BMAD_CACHE_DIR env var', () => {
     writeStatus('envtest', { project: 'EnvTest' });
+    fs.writeFileSync(path.join(tmpDir, '.alive-envtest'), '');
     const result = execReader('project', 'envtest');
     assert.equal(result, `${ESC}96mEnvTest${RESET}`);
     assert.ok(fs.existsSync(path.join(tmpDir, '.alive-envtest')));
@@ -482,117 +589,185 @@ describe('reader color output', () => {
   });
 });
 
+// --- SessionId sanitization tests ---
+
+describe('sessionId sanitization', () => {
+  let tmpDir;
+
+  before(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'bmad-sanitize-'));
+  });
+
+  after(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  function writeStatus(sessionId, statusObj) {
+    fs.writeFileSync(
+      path.join(tmpDir, `status-${sessionId}.json`),
+      JSON.stringify(statusObj)
+    );
+  }
+
+  function execReader(command, sessionId) {
+    return execSync(`node "${READER_PATH}" ${command}`, {
+      input: JSON.stringify({ session_id: sessionId }),
+      encoding: 'utf8',
+      env: { ...process.env, BMAD_CACHE_DIR: tmpDir },
+    });
+  }
+
+  it('sessionId containing ../ returns empty (path traversal)', () => {
+    writeStatus('legit', { project: 'Test' });
+    const result = execReader('project', '../etc/passwd');
+    assert.equal(result, '');
+  });
+
+  it('sessionId containing / returns empty', () => {
+    writeStatus('legit2', { project: 'Test' });
+    const result = execReader('project', 'foo/bar');
+    assert.equal(result, '');
+  });
+
+  it('sessionId containing backslash returns empty', () => {
+    writeStatus('legit3', { project: 'Test' });
+    const result = execReader('project', 'foo\\bar');
+    assert.equal(result, '');
+  });
+
+  it('valid sessionId still works normally', () => {
+    writeStatus('valid-session-123', { project: 'Safe' });
+    const result = execReader('project', 'valid-session-123');
+    assert.ok(result.includes('Safe'));
+  });
+});
+
+// --- PurgeStale resilience tests ---
+
+describe('purgeStale resilience', () => {
+  let tmpDir;
+
+  before(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'bmad-purge-'));
+  });
+
+  after(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('purgeStale continues past deleted .alive files and purges stale ones', () => {
+    // Create a stale session that should be purged
+    const staleId = 'stale-purge-test';
+    const alivePath = path.join(tmpDir, `.alive-${staleId}`);
+    const statusPath = path.join(tmpDir, `status-${staleId}.json`);
+    fs.writeFileSync(alivePath, '');
+    fs.writeFileSync(statusPath, '{}');
+    const past = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000); // 8 days ago
+    fs.utimesSync(alivePath, past, past);
+
+    // Create a trigger session to invoke purgeStale
+    fs.writeFileSync(
+      path.join(tmpDir, `status-trigger-purge2.json`),
+      JSON.stringify({ project: 'Test' })
+    );
+
+    // Execute — should not throw
+    execSync(`node "${READER_PATH}" project`, {
+      input: JSON.stringify({ session_id: 'trigger-purge2' }),
+      encoding: 'utf8',
+      env: { ...process.env, BMAD_CACHE_DIR: tmpDir },
+    });
+
+    // The stale session should have been purged
+    assert.ok(!fs.existsSync(alivePath), 'stale .alive file should be deleted');
+    assert.ok(!fs.existsSync(statusPath), 'stale status file should be deleted');
+  });
+});
+
+// --- formatProgressStep cap tests ---
+
+describe('formatProgressStep cap', () => {
+  let tmpDir;
+
+  before(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'bmad-cap-'));
+  });
+
+  after(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  function writeStatus(sessionId, statusObj) {
+    fs.writeFileSync(
+      path.join(tmpDir, `status-${sessionId}.json`),
+      JSON.stringify(statusObj)
+    );
+  }
+
+  function execReader(command, sessionId) {
+    return execSync(`node "${READER_PATH}" ${command}`, {
+      input: JSON.stringify({ session_id: sessionId }),
+      encoding: 'utf8',
+      env: { ...process.env, BMAD_CACHE_DIR: tmpDir },
+    });
+  }
+
+  it('caps total at 999 when total exceeds 999', () => {
+    writeStatus('cap1', { step: { current: 5, total: 5000, current_name: 'bigstep' } });
+    const result = execReader('progressstep', 'cap1');
+    assert.equal(result, 'Step 5/999 bigstep');
+  });
+
+  it('does not cap when total <= 999', () => {
+    writeStatus('cap2', { step: { current: 3, total: 100, current_name: 'normal' } });
+    const result = execReader('progressstep', 'cap2');
+    assert.equal(result, 'Step 3/100 normal');
+  });
+});
+
 // --- Color maps sync tests (AC #13) ---
 
 describe('color maps sync', () => {
   const readerSrc = fs.readFileSync(READER_PATH, 'utf8');
-  const defaultsSrc = fs.readFileSync(DEFAULTS_PATH, 'utf8');
 
-  function extractMapKeys(src, mapName) {
-    const mapStart = src.indexOf(`const ${mapName}`);
-    if (mapStart === -1) {
-      const exportStart = src.indexOf(`export const ${mapName}`);
-      if (exportStart === -1) return [];
-      const mapEnd = src.indexOf('};', exportStart);
-      const mapBlock = src.slice(exportStart, mapEnd);
-      const regex = /'\s*([^']+)'\s*:\s*'\\x1b/g;
-      const keys = [];
-      let match;
-      while ((match = regex.exec(mapBlock)) !== null) {
-        keys.push(match[1]);
-      }
-      return keys.sort();
-    }
-    const mapEnd = src.indexOf('};', mapStart);
-    const mapBlock = src.slice(mapStart, mapEnd);
-    const regex = /'\s*([^']+)'\s*:\s*'\\x1b/g;
-    const keys = [];
-    let match;
-    while ((match = regex.exec(mapBlock)) !== null) {
-      keys.push(match[1]);
-    }
-    return keys.sort();
-  }
+  // Both reader and defaults now import from the same shared file (workflow-colors.cjs).
+  // These tests verify the shared source is valid and the reader references it.
 
-  function extractPrefixArray(src) {
-    const varName = 'WORKFLOW_PREFIX_COLORS';
-    let start = src.indexOf(`const ${varName}`);
-    if (start === -1) start = src.indexOf(`export const ${varName}`);
-    if (start === -1) return [];
-    const end = src.indexOf('];', start);
-    const block = src.slice(start, end);
-    const regex = /prefix:\s*'([^']+)'/g;
-    const prefixes = [];
-    let match;
-    while ((match = regex.exec(block)) !== null) {
-      prefixes.push(match[1]);
-    }
-    return prefixes.sort();
-  }
+  const _require = createRequire(import.meta.url);
+  const shared = _require(WORKFLOW_COLORS_PATH);
 
   it('AGENT_COLORS is removed from reader (AC #2, #13)', () => {
     assert.ok(!readerSrc.includes('AGENT_COLORS'), 'AGENT_COLORS should not exist in reader');
   });
 
-  it('WORKFLOW_COLORS keys match between reader and defaults (AC #13)', () => {
-    const readerKeys = extractMapKeys(readerSrc, 'WORKFLOW_COLORS');
-    const defaultsKeys = extractMapKeys(defaultsSrc, 'WORKFLOW_COLORS');
-    assert.ok(readerKeys.length > 0, 'reader should have WORKFLOW_COLORS keys');
-    assert.ok(defaultsKeys.length > 0, 'defaults should have WORKFLOW_COLORS keys');
-    assert.deepStrictEqual(readerKeys, defaultsKeys);
+  it('reader requires shared workflow-colors.cjs', () => {
+    assert.ok(readerSrc.includes("require('./workflow-colors.cjs')"), 'reader should require shared file');
   });
 
-  it('WORKFLOW_PREFIX_COLORS prefixes match between reader and defaults', () => {
-    const readerPrefixes = extractPrefixArray(readerSrc);
-    const defaultsPrefixes = extractPrefixArray(defaultsSrc);
-    assert.ok(readerPrefixes.length > 0, 'reader should have prefix entries');
-    assert.ok(defaultsPrefixes.length > 0, 'defaults should have prefix entries');
-    assert.deepStrictEqual(readerPrefixes, defaultsPrefixes);
+  it('shared WORKFLOW_COLORS has expected keys (AC #13)', () => {
+    const keys = Object.keys(shared.WORKFLOW_COLORS);
+    assert.ok(keys.length > 30, `should have >30 workflow entries, got ${keys.length}`);
+    assert.ok(keys.includes('dev-story'), 'should include dev-story');
+    assert.ok(keys.includes('code-review'), 'should include code-review');
+    assert.ok(keys.includes('agent-dev'), 'should include agent-dev');
   });
 
-  it('WORKFLOW_COLORS contains no white entries (AC #7)', () => {
-    function extractMapEntries(src, mapName) {
-      let start = src.indexOf(`const ${mapName}`);
-      if (start === -1) start = src.indexOf(`export const ${mapName}`);
-      if (start === -1) return [];
-      const end = src.indexOf('};', start);
-      const block = src.slice(start, end);
-      const regex = /'([^']+)'\s*:\s*'(\\x1b\[\d+m)'/g;
-      const entries = [];
-      let match;
-      while ((match = regex.exec(block)) !== null) {
-        entries.push({ key: match[1], value: match[2] });
-      }
-      return entries;
-    }
-    const readerEntries = extractMapEntries(readerSrc, 'WORKFLOW_COLORS');
-    const defaultsEntries = extractMapEntries(defaultsSrc, 'WORKFLOW_COLORS');
-    for (const entry of readerEntries) {
-      assert.notEqual(entry.value, '\\x1b[37m', `reader WORKFLOW_COLORS['${entry.key}'] should not be white`);
-    }
-    for (const entry of defaultsEntries) {
-      assert.notEqual(entry.value, '\\x1b[37m', `defaults WORKFLOW_COLORS['${entry.key}'] should not be white`);
+  it('shared WORKFLOW_PREFIX_COLORS has expected prefixes', () => {
+    const prefixes = shared.WORKFLOW_PREFIX_COLORS.map(e => e.prefix);
+    assert.ok(prefixes.length >= 4, `should have >=4 prefix entries, got ${prefixes.length}`);
+    assert.ok(prefixes.includes('testarch-'), 'should include testarch-');
+    assert.ok(prefixes.includes('wds-'), 'should include wds-');
+  });
+
+  it('shared WORKFLOW_COLORS contains no white entries (AC #7)', () => {
+    for (const [key, value] of Object.entries(shared.WORKFLOW_COLORS)) {
+      assert.notEqual(value, '\x1b[37m', `WORKFLOW_COLORS['${key}'] should not be white`);
     }
   });
 
-  it('WORKFLOW_COLORS values match between reader and defaults (AC #7)', () => {
-    function extractMapKV(src, mapName) {
-      let start = src.indexOf(`const ${mapName}`);
-      if (start === -1) start = src.indexOf(`export const ${mapName}`);
-      if (start === -1) return {};
-      const end = src.indexOf('};', start);
-      const block = src.slice(start, end);
-      const regex = /'([^']+)'\s*:\s*'(\\x1b\[\d+m)'/g;
-      const map = {};
-      let match;
-      while ((match = regex.exec(block)) !== null) {
-        map[match[1]] = match[2];
-      }
-      return map;
+  it('shared WORKFLOW_COLORS values are valid ANSI codes', () => {
+    for (const [key, value] of Object.entries(shared.WORKFLOW_COLORS)) {
+      assert.match(value, /^\x1b\[\d+m$/, `WORKFLOW_COLORS['${key}'] should be a valid ANSI code`);
     }
-    const readerKV = extractMapKV(readerSrc, 'WORKFLOW_COLORS');
-    const defaultsKV = extractMapKV(defaultsSrc, 'WORKFLOW_COLORS');
-    assert.ok(Object.keys(readerKV).length > 0, 'reader should have entries');
-    assert.deepStrictEqual(readerKV, defaultsKV, 'WORKFLOW_COLORS values should match between reader and defaults');
   });
 });

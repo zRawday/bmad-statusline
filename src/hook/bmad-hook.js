@@ -18,8 +18,14 @@ const LEGACY_COMMAND_REGEX = /^\s*\/?(bmad(?::[\w-]+)+)/;
 const ALIVE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 const STEP_REGEX = /\/steps(-[a-z])?\/step-(?:[a-z]-)?(\d+)[a-z]?-(.+)\.md$/;
 
-function normalize(p) { return p.replace(/\\/g, '/').replace(/\/+$/, ''); }
+function normalize(p) {
+  let n = p.replace(/\\/g, '/').replace(/\/+$/, '');
+  if (/^[A-Z]:\//.test(n)) n = n[0].toLowerCase() + n.slice(1);
+  return n;
+}
 function isSafeId(id) { return typeof id === 'string' && /^[a-zA-Z0-9_-]+$/.test(id); }
+const MAX_HISTORY = 500;
+function trimHistory(arr) { if (arr.length > MAX_HISTORY) arr.splice(0, arr.length - MAX_HISTORY); }
 
 function shouldUpdateStory(incomingPriority, currentPriority) {
   if (incomingPriority === STORY_PRIORITY.SPRINT_STATUS) return true;
@@ -39,6 +45,7 @@ function extractStep(filePath) {
 }
 
 // ─── 3. Stdin parsing ─────────────────────────────────────────────────────────
+if (process.stdin.isTTY) process.exit(0); // Not piped — exit immediately
 let payload;
 try {
   const raw = fs.readFileSync(0, 'utf8');
@@ -51,9 +58,12 @@ try {
 let cwd = payload.cwd;
 if (!cwd) process.exit(0);
 let bmadRoot = cwd;
+let walkDepth = 0;
+const MAX_WALK_DEPTH = 20;
 while (!fs.existsSync(path.join(bmadRoot, '_bmad'))) {
   const parent = path.dirname(bmadRoot);
   if (parent === bmadRoot) process.exit(0); // reached filesystem root
+  if (++walkDepth > MAX_WALK_DEPTH) process.exit(0); // depth limit
   bmadRoot = parent;
 }
 cwd = bmadRoot;
@@ -62,19 +72,42 @@ cwd = bmadRoot;
 const sessionId = payload.session_id;
 touchAlive(sessionId);
 
-// ─── 5b. Project + output folders detection (first event only) ──────────────
+// ─── 5a. Stale session cleanup (same claude.exe PID, different session) ─────
+try {
+  const myPid = fs.readFileSync(path.join(CACHE_DIR, '.alive-' + sessionId), 'utf8').trim();
+  if (/^\d+$/.test(myPid)) {
+    for (const f of fs.readdirSync(CACHE_DIR)) {
+      if (!f.startsWith('.alive-')) continue;
+      const otherSid = f.slice('.alive-'.length);
+      if (otherSid === sessionId) continue;
+      try {
+        if (fs.readFileSync(path.join(CACHE_DIR, f), 'utf8').trim() === myPid) {
+          fs.unlinkSync(path.join(CACHE_DIR, f));
+          try { fs.unlinkSync(path.join(CACHE_DIR, 'status-' + otherSid + '.json')); } catch {}
+        }
+      } catch {}
+    }
+  }
+} catch {}
+
+// ─── 5b. Project + output folders detection ─────────────────────────────────
 const earlyStatus = readStatus(sessionId);
-if (!earlyStatus.project) {
-  let configRaw = '';
+let earlyDirty = false;
+let configRaw = '';
+if (!earlyStatus.project || !earlyStatus._outputFolders) {
   try {
     configRaw = fs.readFileSync(path.join(cwd, '_bmad', 'bmm', 'config.yaml'), 'utf8');
-    const pm = configRaw.match(/project_name:[ \t]*['"]?([^'"\n]+)/);
-    if (pm) earlyStatus.project = pm[1].trim();
   } catch (e) { /* silent */ }
+}
+if (!earlyStatus.project) {
+  const pm = configRaw.match(/project_name:[ \t]*['"]?([^'"\n]+)/);
+  if (pm) earlyStatus.project = pm[1].trim();
   if (!earlyStatus.project) {
     earlyStatus.project = normalize(cwd).split('/').pop();
   }
-  // Resolve output folder paths from config.yaml
+  earlyDirty = true;
+}
+if (!earlyStatus._outputFolders) {
   const folders = [];
   const folderKeys = {
     output_folder: '_bmad-output',
@@ -89,6 +122,9 @@ if (!earlyStatus.project) {
     folders.push(normalize(resolved));
   }
   earlyStatus._outputFolders = folders;
+  earlyDirty = true;
+}
+if (earlyDirty) {
   earlyStatus.session_id = sessionId;
   writeStatus(sessionId, earlyStatus);
 }
@@ -106,7 +142,13 @@ if (hookEvent === 'UserPromptSubmit') {
     handleWrite();
   } else if (toolName === 'Edit') {
     handleEdit();
+  } else if (toolName === 'Bash') {
+    handleBash();
   }
+} else if (hookEvent === 'Stop') {
+  handleStop();
+} else if (hookEvent === 'Notification') {
+  handleNotification();
 } else if (hookEvent === 'SessionStart') {
   // no-op — alive already touched
 }
@@ -145,8 +187,14 @@ function handleUserPrompt() {
     status.last_write = null;
     status.last_write_op = null;
     status.document_name = null;
+    status.reads = [];
+    status.writes = [];
+    status.commands = [];
   }
 
+  const now = new Date().toISOString();
+  status.llm_state = 'active';
+  status.llm_state_since = now;
   status.session_id = sessionId;
   status.skill = skillName;
   status.workflow = workflowName;
@@ -177,8 +225,19 @@ function handleRead() {
     status.session_id = sessionId;
   }
 
+  // History: append to reads[] + set llm_state active
+  const now = new Date().toISOString();
+  if (!Array.isArray(status.reads)) status.reads = [];
+  if (canAppendHistory(sessionId)) {
+    status.reads.push({ path: displayPath, in_project: inProject, at: now, agent_id: payload.agent_id || null });
+    trimHistory(status.reads);
+  }
+  status.llm_state = 'active';
+  status.llm_state_since = now;
+  status.session_id = sessionId;
+
   if (!inProject) {
-    if (readChanged) writeStatus(sessionId, status);
+    writeStatus(sessionId, status);
     return;
   }
 
@@ -189,7 +248,7 @@ function handleRead() {
   // Active skill detection: Read from .claude/skills/{skill}/ (v6.2.2+) or _bmad/.../{skill}/ (legacy)
   const skillPathMatch = normPath.match(/\.claude\/skills\/((?:bmad|gds|wds)-[\w-]+)\//)
     || normPath.match(/\/_bmad\/(?:[^/]+\/)*?((?:bmad|gds|wds)-[\w-]+)\//);
-  if (skillPathMatch && activeWorkflow) {
+  if (skillPathMatch && activeWorkflow && !activeWorkflow.includes('builder')) {
     const detectedSkill = skillPathMatch[1];
     const detectedWorkflow = detectedSkill.slice(detectedSkill.indexOf('-') + 1);
     if (detectedWorkflow !== activeWorkflow) {
@@ -206,7 +265,7 @@ function handleRead() {
   }
 
   if (!activeWorkflow) {
-    if (readChanged) writeStatus(sessionId, status);
+    writeStatus(sessionId, status);
     return;
   }
 
@@ -217,7 +276,10 @@ function handleRead() {
     const skillForPath = activeSkill || ('bmad-' + activeWorkflow);
     const stepsDir = path.join(cwd, '.claude', 'skills', skillForPath, 'steps' + stepInfo.track);
     const expectedPrefix = normalize(stepsDir) + '/';
-    if (!normPath.startsWith(expectedPrefix)) return;
+    if (!normPath.startsWith(expectedPrefix)) {
+      writeStatus(sessionId, status);
+      return;
+    }
 
     status.session_id = sessionId;
     status.step = status.step || {};
@@ -289,30 +351,28 @@ function handleRead() {
           status.session_id = sessionId;
           status.story = activeStories[0];
           status.story_priority = STORY_PRIORITY.CANDIDATE;
-          writeStatus(sessionId, status);
         }
       }
     }
+    writeStatus(sessionId, status);
     return;
   }
 
   // Story file Read → priority 2 (lock)
   const storyMatch = normPath.match(STORY_FILE_REGEX);
   if (storyMatch) {
-    let changed = false;
     if (STORY_READ_WORKFLOWS.includes(activeWorkflow)
         && shouldUpdateStory(STORY_PRIORITY.STORY_FILE, status.story_priority)) {
       status.session_id = sessionId;
       status.story = storyMatch[1];
       status.story_priority = STORY_PRIORITY.STORY_FILE;
-      changed = true;
     }
-    if (changed || readChanged) writeStatus(sessionId, status);
+    writeStatus(sessionId, status);
     return;
   }
 
   // No specific detection triggered — persist file tracking if needed
-  if (readChanged) writeStatus(sessionId, status);
+  writeStatus(sessionId, status);
 }
 
 // ─── 9. handleWrite (story confirmation signal) ─────────────────────────────
@@ -337,8 +397,22 @@ function handleWrite() {
     status.session_id = sessionId;
   }
 
+  // History: append to writes[] + set llm_state active
+  const now = new Date().toISOString();
+  if (!Array.isArray(status.writes)) status.writes = [];
+  if (!Array.isArray(status.reads)) status.reads = [];
+  if (canAppendHistory(sessionId)) {
+    // is_new is best-effort: after history cap, reads[] may have been truncated
+    const isNew = !status.reads.some(function(r) { return r.path === displayPath; });
+    status.writes.push({ path: displayPath, in_project: inProject, op: 'write', is_new: isNew, at: now, agent_id: payload.agent_id || null, old_string: null, new_string: null });
+    trimHistory(status.writes);
+  }
+  status.llm_state = 'active';
+  status.llm_state_since = now;
+  status.session_id = sessionId;
+
   if (!inProject) {
-    if (writeChanged) writeStatus(sessionId, status);
+    writeStatus(sessionId, status);
     return;
   }
 
@@ -350,7 +424,7 @@ function handleWrite() {
   if (docStepChanged) status.session_id = sessionId;
 
   if (!activeWorkflow) {
-    if (writeChanged || docStepChanged) writeStatus(sessionId, status);
+    writeStatus(sessionId, status);
     return;
   }
 
@@ -367,13 +441,13 @@ function handleWrite() {
               status.session_id = sessionId;
               status.story = m[1];
               status.story_priority = STORY_PRIORITY.SPRINT_STATUS;
-              writeStatus(sessionId, status);
             }
             break;
           }
         }
       }
     }
+    writeStatus(sessionId, status);
     return;
   }
 
@@ -385,13 +459,13 @@ function handleWrite() {
       status.session_id = sessionId;
       status.story = storyMatch[1];
       status.story_priority = STORY_PRIORITY.STORY_FILE;
-      writeStatus(sessionId, status);
     }
+    writeStatus(sessionId, status);
     return;
   }
 
   // No specific detection triggered — persist file tracking if needed
-  if (writeChanged || docStepChanged) writeStatus(sessionId, status);
+  writeStatus(sessionId, status);
 }
 
 // ─── 10. handleEdit (story confirmation signal) ─────────────────────────────
@@ -416,20 +490,30 @@ function handleEdit() {
     status.session_id = sessionId;
   }
 
+  // History: append to writes[] + set llm_state active
+  const now = new Date().toISOString();
+  if (!Array.isArray(status.writes)) status.writes = [];
+  if (canAppendHistory(sessionId)) {
+    status.writes.push({ path: displayPath, in_project: inProject, op: 'edit', is_new: false, at: now, agent_id: payload.agent_id || null, old_string: payload.tool_input.old_string ?? null, new_string: payload.tool_input.new_string ?? null });
+    trimHistory(status.writes);
+  }
+  status.llm_state = 'active';
+  status.llm_state_since = now;
+  status.session_id = sessionId;
+
   if (!inProject) {
-    if (editChanged) writeStatus(sessionId, status);
+    writeStatus(sessionId, status);
     return;
   }
 
   const activeWorkflow = status.workflow;
 
-  // Document name + step enrichment (Edit: use new_string as content)
-  const editContent = payload.tool_input.new_string;
-  const docStepChanged = detectDocumentAndStep(status, normPath, editContent);
+  // Document name detection only — skip step enrichment for Edit (partial content unreliable)
+  const docStepChanged = detectDocumentAndStep(status, normPath, null);
   if (docStepChanged) status.session_id = sessionId;
 
   if (!activeWorkflow) {
-    if (editChanged || docStepChanged) writeStatus(sessionId, status);
+    writeStatus(sessionId, status);
     return;
   }
 
@@ -446,16 +530,61 @@ function handleEdit() {
         status.session_id = sessionId;
         status.story = storyKey;
         status.story_priority = STORY_PRIORITY.SPRINT_STATUS;
-        writeStatus(sessionId, status);
       }
     }
+    writeStatus(sessionId, status);
     return;
   }
 
   // No specific detection triggered — persist file tracking if needed
-  if (editChanged || docStepChanged) writeStatus(sessionId, status);
+  writeStatus(sessionId, status);
 }
 
+
+// ─── 11. handleBash (command tracking) ──────────────────────────────────────
+function handleBash() {
+  const command = payload.tool_input && payload.tool_input.command;
+  if (!command || typeof command !== 'string') return;
+
+  const status = readStatus(sessionId);
+  const now = new Date().toISOString();
+
+  if (!Array.isArray(status.commands)) status.commands = [];
+  if (canAppendHistory(sessionId)) {
+    const truncated = command.length > 1000 ? command.slice(0, 1000) : command;
+    status.commands.push({ cmd: truncated, at: now, agent_id: payload.agent_id || null });
+    trimHistory(status.commands);
+  }
+
+  status.llm_state = 'active';
+  status.llm_state_since = now;
+  status.session_id = sessionId;
+  writeStatus(sessionId, status);
+}
+
+// ─── 12. handleStop (waiting state) ─────────────────────────────────────────
+function handleStop() {
+  const status = readStatus(sessionId);
+  const now = new Date().toISOString();
+
+  status.llm_state = 'waiting';
+  status.llm_state_since = now;
+  status.session_id = sessionId;
+  writeStatus(sessionId, status);
+}
+
+// ─── 13. handleNotification (permission state) ──────────────────────────────
+function handleNotification() {
+  if (!payload.notification || payload.notification.type !== 'permission') return;
+
+  const status = readStatus(sessionId);
+  const now = new Date().toISOString();
+
+  status.llm_state = 'permission';
+  status.llm_state_since = now;
+  status.session_id = sessionId;
+  writeStatus(sessionId, status);
+}
 
 // ─── Document name + step enrichment helper ─────────────────────────────────
 function detectDocumentAndStep(status, normPath, content) {
@@ -476,9 +605,14 @@ function detectDocumentAndStep(status, normPath, content) {
   }
   // Step enrichment: frontmatter stepsCompleted fallback (only when no step files)
   if (status.step && status.step.total === null && typeof content === 'string') {
-    const fmMatch = content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
-    if (fmMatch) {
-      const scMatch = fmMatch[1].match(/stepsCompleted:\s*\[([^\]]+)\]/);
+    const fmLines = content.split(/\r?\n/);
+    let fmBody = null;
+    if (fmLines[0] === '---') {
+      const endIdx = fmLines.indexOf('---', 1);
+      if (endIdx > 0) fmBody = fmLines.slice(1, endIdx).join('\n');
+    }
+    if (fmBody) {
+      const scMatch = fmBody.match(/stepsCompleted:\s*\[([^\]]+)\]/);
       if (scMatch) {
         const nums = scMatch[1].split(',').map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n));
         if (nums.length > 0) {
@@ -496,14 +630,61 @@ function detectDocumentAndStep(status, normPath, content) {
 }
 
 // ─── Alive helper ─────────────────────────────────────────────────────────────
+function findClaudeAncestorPid() {
+  try {
+    const { execSync } = require('child_process');
+    const out = execSync('wmic process get ProcessId,ParentProcessId,Name /FORMAT:CSV', { encoding: 'utf8', timeout: 5000 });
+    const procs = new Map();
+    for (const line of out.split('\n')) {
+      const parts = line.trim().split(',');
+      if (parts.length < 4 || parts[0] === 'Node') continue;
+      procs.set(parseInt(parts[3]), { name: parts[1], ppid: parseInt(parts[2]) });
+    }
+    let pid = process.ppid;
+    for (let i = 0; i < 15; i++) {
+      const p = procs.get(pid);
+      if (!p) break;
+      if (p.name.toLowerCase().includes('claude')) return pid;
+      pid = p.ppid;
+    }
+  } catch {}
+  return null;
+}
+
 function touchAlive(sid) {
   if (!isSafeId(sid)) return;
   try {
     fs.mkdirSync(CACHE_DIR, { recursive: true });
-    fs.writeFileSync(path.join(CACHE_DIR, '.alive-' + sid), '');
+    const alivePath = path.join(CACHE_DIR, '.alive-' + sid);
+    // Fast path: PID already cached — just touch mtime
+    let cached = '';
+    try { cached = fs.readFileSync(alivePath, 'utf8').trim(); } catch {}
+    if (/^\d+$/.test(cached)) {
+      // Verify cached PID is still alive — stale PIDs cause monitor to skip the session
+      const cachedPid = parseInt(cached, 10);
+      let alive = false;
+      try { process.kill(cachedPid, 0); alive = true; } catch (e) { alive = e.code !== 'ESRCH'; }
+      if (alive) {
+        const now = new Date();
+        fs.utimesSync(alivePath, now, now);
+        return;
+      }
+      // Cached PID is dead — fall through to re-detect
+    }
+    // First call: find claude.exe ancestor PID (one-time ~700ms wmic query)
+    const claudePid = findClaudeAncestorPid();
+    fs.writeFileSync(alivePath, claudePid ? String(claudePid) : '');
   } catch (e) {
     // Silent
   }
+}
+
+// ─── History guard ────────────────────────────────────────────────────────
+function canAppendHistory(sid) {
+  try {
+    const fp = path.join(CACHE_DIR, 'status-' + sid + '.json');
+    return fs.statSync(fp).size < 10 * 1024 * 1024;
+  } catch (e) { return true; }
 }
 
 // ─── Status helpers ───────────────────────────────────────────────────────────
@@ -513,7 +694,9 @@ function readStatus(sid) {
     active_skill: null, story: null, story_priority: null,
     step: { current: null, current_name: null, next: null, next_name: null, total: null, track: null },
     last_read: null, last_write: null, last_write_op: null, document_name: null,
-    started_at: null, updated_at: null
+    started_at: null, updated_at: null,
+    llm_state: null, llm_state_since: null,
+    reads: [], writes: [], commands: []
   };
   try {
     const fp = path.join(CACHE_DIR, 'status-' + sid + '.json');
@@ -541,7 +724,12 @@ function readStatus(sid) {
       last_write_op: null,
       document_name: null,
       started_at: null,
-      updated_at: null
+      updated_at: null,
+      llm_state: null,
+      llm_state_since: null,
+      reads: [],
+      writes: [],
+      commands: []
     };
   }
 }
@@ -552,7 +740,9 @@ function writeStatus(sid, status) {
     fs.mkdirSync(CACHE_DIR, { recursive: true });
     status.updated_at = new Date().toISOString();
     const fp = path.join(CACHE_DIR, 'status-' + sid + '.json');
-    fs.writeFileSync(fp, JSON.stringify(status, null, 2), 'utf8');
+    const tmpPath = fp + '.tmp';
+    fs.writeFileSync(tmpPath, JSON.stringify(status, null, 2) + '\n');
+    fs.renameSync(tmpPath, fp);
   } catch (e) {
     // Silent — never interfere with Claude Code
   }
