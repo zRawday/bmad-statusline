@@ -7,6 +7,7 @@ import { render } from 'ink-testing-library';
 import { Text } from 'ink';
 import ScrollableViewport from '../src/tui/monitor/components/ScrollableViewport.js';
 import LlmBadge from '../src/tui/monitor/components/LlmBadge.js';
+import SessionTabs from '../src/tui/monitor/components/SessionTabs.js';
 import { renderFileSection } from '../src/tui/monitor/components/FileTreeSection.js';
 import { renderBashSection } from '../src/tui/monitor/components/BashSection.js';
 import { ShortcutBar } from '../src/tui/components/ShortcutBar.js';
@@ -145,6 +146,55 @@ describe('LlmBadge', () => {
     const { lastFrame } = render(e(LlmBadge, { state: 'active', workflow: 'dev-story', startedAt: null }));
     const frame = lastFrame();
     assert.ok(frame.includes('ACTIVE'));
+    assert.ok(frame.includes('dev-story'));
+  });
+
+  test('ERROR state renders ⬤ and ERROR with red background', () => {
+    const { lastFrame } = render(e(LlmBadge, { state: 'error', workflow: 'dev-story', startedAt: new Date().toISOString() }));
+    const frame = lastFrame();
+    assert.ok(frame.includes('\u2B24'));
+    assert.ok(frame.includes('ERROR'));
+  });
+
+  test('SUBAGENT state renders ⬤ and SUBAGENT in cyan', () => {
+    const { lastFrame } = render(e(LlmBadge, { state: 'active:subagent', workflow: 'dev-story', startedAt: new Date().toISOString() }));
+    const frame = lastFrame();
+    assert.ok(frame.includes('\u2B24'));
+    assert.ok(frame.includes('SUBAGENT'));
+  });
+});
+
+// --- SessionTabs state icon tests ---
+
+describe('SessionTabs state icons', () => {
+  function makeSession(llmState) {
+    return {
+      sessionId: `sess-${llmState}`,
+      workflow: 'dev-story',
+      llm_state: llmState,
+      updated_at: new Date().toISOString(),
+    };
+  }
+
+  test('error session shows red ⬤ icon in tabs', () => {
+    const groups = new Map([['proj', [makeSession('error')]]]);
+    const { lastFrame } = render(e(SessionTabs, {
+      groups, activeProject: 'proj', activeSessionIndex: 0,
+      config: {}, mode: 'single-project',
+    }));
+    const frame = lastFrame();
+    assert.ok(frame.includes('\u2B24'));
+    assert.ok(frame.includes('dev-story'));
+  });
+
+  test('active:subagent session shows cyan ⬤ icon in tabs', () => {
+    const groups = new Map([['proj', [makeSession('active:subagent')]]]);
+    const { lastFrame } = render(e(SessionTabs, {
+      groups, activeProject: 'proj', activeSessionIndex: 0,
+      config: {}, mode: 'single-project',
+    }));
+    const frame = lastFrame();
+    assert.ok(frame.includes('\u2B24'));
     assert.ok(frame.includes('dev-story'));
   });
 });

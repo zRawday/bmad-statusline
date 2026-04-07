@@ -1,6 +1,6 @@
 # Story 8.5: Monitor Badge — Error & Subagent Display
 
-Status: ready-for-dev
+Status: review
 
 ## Story
 
@@ -20,21 +20,21 @@ so that I can immediately see when a session has an error condition or is runnin
 
 ## Tasks / Subtasks
 
-- [ ] Task 1: Update LlmBadge.js — add error + active:subagent to LLM_BADGE_CONFIG (AC: 1, 2)
-  - [ ] 1.1 Add `error` entry: `{ icon: '\u2B24', label: 'ERROR', bgColor: 'redBright', color: 'white' }`
-  - [ ] 1.2 Add `'active:subagent'` entry: `{ icon: '\u2B24', label: 'SUBAGENT', color: 'cyan' }` (no bgColor)
-  - [ ] 1.3 Verify rendering: error uses bgColor path (lines 38-45), subagent uses text-only path (lines 29-35)
-- [ ] Task 2: Update SessionTabs.js — add error + active:subagent to STATE_ICONS (AC: 3, 4)
-  - [ ] 2.1 Add `error` to STATE_ICONS: `error: { icon: '\u2B24', color: 'red' }`
-  - [ ] 2.2 Add `'active:subagent'` to STATE_ICONS: `'active:subagent': { icon: '\u2B24', color: 'cyan' }`
-- [ ] Task 3: Add component tests in tui-monitor-components.test.js (AC: 7)
-  - [ ] 3.1 Test LlmBadge ERROR: render with state='error', assert red background and "ERROR" label
-  - [ ] 3.2 Test LlmBadge SUBAGENT: render with state='active:subagent', assert cyan text and "SUBAGENT" label
-  - [ ] 3.3 Test SessionTabs error icon: verify error state session shows red icon in tabs
-  - [ ] 3.4 Test SessionTabs subagent icon: verify subagent state session shows cyan icon
-- [ ] Task 4: Verify no regressions (AC: 5, 6)
-  - [ ] 4.1 Run full test suite: `node --test test/tui-monitor-components.test.js test/tui-monitor.test.js`
-  - [ ] 4.2 Verify worstState tests (lines 426-482 of tui-monitor.test.js) still pass — they already cover error, permission, active:subagent priority resolution
+- [x] Task 1: Update LlmBadge.js — add error + active:subagent to LLM_BADGE_CONFIG (AC: 1, 2)
+  - [x] 1.1 Add `error` entry: `{ icon: '\u2B24', label: 'ERROR', bgColor: 'redBright', fgColor: 'white' }`
+  - [x] 1.2 Add `'active:subagent'` entry: `{ icon: '\u2B24', label: 'SUBAGENT', color: 'cyan' }` (no bgColor)
+  - [x] 1.3 Verify rendering: error uses bgColor path (lines 38-45), subagent uses text-only path (lines 29-35)
+- [x] Task 2: Update SessionTabs.js — add error + active:subagent to STATE_ICONS (AC: 3, 4)
+  - [x] 2.1 Add `error` to STATE_ICONS: `error: { icon: '\u2B24', color: 'red' }`
+  - [x] 2.2 Add `'active:subagent'` to STATE_ICONS: `'active:subagent': { icon: '\u2B24', color: 'cyan' }`
+- [x] Task 3: Add component tests in tui-monitor-components.test.js (AC: 7)
+  - [x] 3.1 Test LlmBadge ERROR: render with state='error', assert red background and "ERROR" label
+  - [x] 3.2 Test LlmBadge SUBAGENT: render with state='active:subagent', assert cyan text and "SUBAGENT" label
+  - [x] 3.3 Test SessionTabs error icon: verify error state session shows red icon in tabs
+  - [x] 3.4 Test SessionTabs subagent icon: verify subagent state session shows cyan icon
+- [x] Task 4: Verify no regressions (AC: 5, 6)
+  - [x] 4.1 Run full test suite: `node --test test/tui-monitor-components.test.js test/tui-monitor.test.js`
+  - [x] 4.2 Verify worstState tests still pass — error, permission, active:subagent priority resolution confirmed
 
 ## Dev Notes
 
@@ -171,11 +171,28 @@ Recent commits show story 8.4 delivered cleanly with one code review fix commit.
 
 ### Agent Model Used
 
-
+Claude Opus 4.6
 
 ### Debug Log References
 
+None — clean implementation, no debugging needed.
+
 ### Completion Notes List
 
+- Added `error` and `'active:subagent'` entries to `LLM_BADGE_CONFIG` in LlmBadge.js. Used `fgColor` (not `color`) for the error entry to match existing codebase convention for bgColor entries.
+- Added `error` and `'active:subagent'` entries to `STATE_ICONS` in SessionTabs.js.
+- Added 2 new LlmBadge tests (ERROR + SUBAGENT render) and 2 new SessionTabs tests (error + subagent icon) in tui-monitor-components.test.js.
+- All 22 component tests pass. All worstState tests pass (error, permission, active:subagent priority resolution verified).
+- 3 pre-existing test failures in "MonitorScreen — toggles" confirmed identical on main branch — not regressions.
+- Updated LlmBadge.js header comment from "4-state" to "6-state".
+
+### Change Log
+
+- 2026-04-07: Implemented story 8.5 — added error and active:subagent display to LlmBadge and SessionTabs components with 4 new tests.
+
 ### File List
+
+- `src/tui/monitor/components/LlmBadge.js` — added error + active:subagent to LLM_BADGE_CONFIG
+- `src/tui/monitor/components/SessionTabs.js` — added error + active:subagent to STATE_ICONS
+- `test/tui-monitor-components.test.js` — added 4 new tests (2 LlmBadge + 2 SessionTabs)
 

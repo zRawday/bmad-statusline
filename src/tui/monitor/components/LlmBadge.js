@@ -1,4 +1,4 @@
-// LlmBadge.js — 4-state LLM badge: active, permission, waiting, inactive
+// LlmBadge.js — 6-state LLM badge: active, permission, waiting, error, inactive, active:subagent
 
 import React, { useState, useEffect } from 'react';
 import { Box, Text } from 'ink';
@@ -7,10 +7,12 @@ import { formatElapsed } from '../monitor-utils.js';
 const e = React.createElement;
 
 const LLM_BADGE_CONFIG = {
-  active:     { bgColor: 'green',       fgColor: 'white', icon: '\u2B24', label: 'ACTIVE' },
-  permission: { bgColor: 'yellowBright', fgColor: 'black', icon: '\u2B24', label: 'PERMISSION' },
-  waiting:    { bgColor: 'blueBright',   fgColor: 'white', icon: '\u2B24', label: 'WAITING' },
-  inactive:   { color: 'grey',                             icon: '\u2B24', label: 'INACTIVE' },
+  active:            { bgColor: 'green',       fgColor: 'white', icon: '\u2B24', label: 'ACTIVE' },
+  permission:        { bgColor: 'yellowBright', fgColor: 'black', icon: '\u2B24', label: 'PERMISSION' },
+  waiting:           { bgColor: 'blueBright',   fgColor: 'white', icon: '\u2B24', label: 'WAITING' },
+  error:             { bgColor: 'redBright',    fgColor: 'white', icon: '\u2B24', label: 'ERROR' },
+  inactive:          { color: 'grey',                             icon: '\u2B24', label: 'INACTIVE' },
+  'active:subagent': { color: 'cyan',                             icon: '\u2B24', label: 'SUBAGENT' },
 };
 
 function LlmBadge({ state, workflow, startedAt, contextLabel }) {
