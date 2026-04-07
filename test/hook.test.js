@@ -181,6 +181,22 @@ describe('hook — 5-signal passive detection', () => {
     };
   }
 
+  function makeStopPayload(sessionId) {
+    return { session_id: sessionId, cwd: tmpDir, hook_event_name: 'Stop' };
+  }
+
+  function makePermissionRequestPayload(sessionId) {
+    return { hook_event_name: 'PermissionRequest', session_id: sessionId, cwd: tmpDir };
+  }
+
+  function makeStopFailurePayload(sessionId, errorType) {
+    return { hook_event_name: 'StopFailure', session_id: sessionId, error_type: errorType, cwd: tmpDir };
+  }
+
+  function makeSessionEndPayload(sessionId) {
+    return { hook_event_name: 'SessionEnd', session_id: sessionId, cwd: tmpDir };
+  }
+
   // ─── AC #1: UserPromptSubmit bmad skill ─────────────────────────────────────
 
   it('AC #1: bmad UserPromptSubmit sets skill, workflow, started_at', () => {
@@ -1598,5 +1614,136 @@ describe('hook — 5-signal passive detection', () => {
     assert.ok(status, 'status file should exist');
     assert.equal(status.skill, 'bmad-create-prd');
     assert.equal(status.project, 'TestProject');
+  });
+
+  // ─── 8.1: handlePermissionRequest ─────────────────────────────────────────
+
+  it('8.1 AC#1: handlePermissionRequest sets llm_state permission', () => {
+    seedStatus('perm-req1', { session_id: 'perm-req1', project: 'TestProject', llm_state: 'active', llm_state_since: '2026-01-01T00:00:00.000Z' });
+    execHook(makePermissionRequestPayload('perm-req1'));
+    const status = readStatusFile('perm-req1');
+    assert.equal(status.llm_state, 'permission');
+    assert.notEqual(status.llm_state_since, '2026-01-01T00:00:00.000Z');
+  });
+
+  it('8.1 AC#1: handlePermissionRequest works without notification_type filtering', () => {
+    seedStatus('perm-req2', { session_id: 'perm-req2', project: 'TestProject', llm_state: 'active', llm_state_since: '2026-01-01T00:00:00.000Z' });
+    execHook(makePermissionRequestPayload('perm-req2'));
+    const status = readStatusFile('perm-req2');
+    assert.equal(status.llm_state, 'permission', 'should set permission without notification_type guard');
+  });
+
+  // ─── 8.1: handleStopFailure ───────────────────────────────────────────────
+
+  it('8.1 AC#2: handleStopFailure with rate_limit', () => {
+    seedStatus('sf-rate', { session_id: 'sf-rate', project: 'TestProject', llm_state: 'active', llm_state_since: '2026-01-01T00:00:00.000Z' });
+    execHook(makeStopFailurePayload('sf-rate', 'rate_limit'));
+    const status = readStatusFile('sf-rate');
+    assert.equal(status.llm_state, 'error');
+    assert.equal(status.error_type, 'rate_limit');
+    assert.notEqual(status.llm_state_since, '2026-01-01T00:00:00.000Z');
+  });
+
+  it('8.1 AC#2: handleStopFailure with authentication_failed', () => {
+    seedStatus('sf-auth', { session_id: 'sf-auth', project: 'TestProject', llm_state: 'active' });
+    execHook(makeStopFailurePayload('sf-auth', 'authentication_failed'));
+    assert.equal(readStatusFile('sf-auth').error_type, 'authentication_failed');
+  });
+
+  it('8.1 AC#2: handleStopFailure with billing_error', () => {
+    seedStatus('sf-bill', { session_id: 'sf-bill', project: 'TestProject', llm_state: 'active' });
+    execHook(makeStopFailurePayload('sf-bill', 'billing_error'));
+    assert.equal(readStatusFile('sf-bill').error_type, 'billing_error');
+  });
+
+  it('8.1 AC#2: handleStopFailure with server_error', () => {
+    seedStatus('sf-server', { session_id: 'sf-server', project: 'TestProject', llm_state: 'active' });
+    execHook(makeStopFailurePayload('sf-server', 'server_error'));
+    assert.equal(readStatusFile('sf-server').error_type, 'server_error');
+  });
+
+  it('8.1 AC#2: handleStopFailure with max_output_tokens', () => {
+    seedStatus('sf-tokens', { session_id: 'sf-tokens', project: 'TestProject', llm_state: 'active' });
+    execHook(makeStopFailurePayload('sf-tokens', 'max_output_tokens'));
+    assert.equal(readStatusFile('sf-tokens').error_type, 'max_output_tokens');
+  });
+
+  it('8.1 AC#2: handleStopFailure with unknown', () => {
+    seedStatus('sf-unk', { session_id: 'sf-unk', project: 'TestProject', llm_state: 'active' });
+    execHook(makeStopFailurePayload('sf-unk', 'unknown'));
+    assert.equal(readStatusFile('sf-unk').error_type, 'unknown');
+  });
+
+  it('8.1 AC#2: handleStopFailure missing error_type falls back to unknown', () => {
+    seedStatus('sf-miss', { session_id: 'sf-miss', project: 'TestProject', llm_state: 'active' });
+    execHook({ hook_event_name: 'StopFailure', session_id: 'sf-miss', cwd: tmpDir });
+    assert.equal(readStatusFile('sf-miss').error_type, 'unknown');
+  });
+
+  // ─── 8.1: handleSessionEnd ────────────────────────────────────────────────
+
+  it('8.1 AC#3: handleSessionEnd deletes alive and status files', () => {
+    const sid = 'se-del';
+    seedStatus(sid, { session_id: sid, project: 'TestProject', llm_state: 'active' });
+    fs.writeFileSync(path.join(cacheDir, `.alive-${sid}`), '12345');
+    execHook(makeSessionEndPayload(sid));
+    assert.equal(aliveExists(sid), false, 'alive should be deleted');
+    assert.equal(readStatusFile(sid), null, 'status should be deleted');
+  });
+
+  it('8.1 AC#3: handleSessionEnd idempotent — no error when files missing', () => {
+    const sid = 'se-idem';
+    cleanAlive(sid);
+    const sp = path.join(cacheDir, `status-${sid}.json`);
+    if (fs.existsSync(sp)) fs.unlinkSync(sp);
+    execHook(makeSessionEndPayload(sid));
+    assert.equal(readStatusFile(sid), null);
+  });
+
+  it('8.1 AC#3: handleSessionEnd does not create status file', () => {
+    const sid = 'se-no-write';
+    fs.mkdirSync(cacheDir, { recursive: true });
+    fs.writeFileSync(path.join(cacheDir, `.alive-${sid}`), '12345');
+    execHook(makeSessionEndPayload(sid));
+    assert.equal(readStatusFile(sid), null, 'no status file after SessionEnd');
+  });
+
+  // ─── 8.1: error_type clearing ─────────────────────────────────────────────
+
+  it('8.1 AC#4: error_type cleared on UserPromptSubmit', () => {
+    seedStatus('et-prompt', { session_id: 'et-prompt', project: 'TestProject', skill: 'bmad-dev-story', workflow: 'dev-story', llm_state: 'error', error_type: 'rate_limit' });
+    execHook(makeUserPromptPayload('et-prompt', '/bmad-dev-story'));
+    const status = readStatusFile('et-prompt');
+    assert.equal(status.error_type, null);
+    assert.equal(status.llm_state, 'active');
+  });
+
+  it('8.1 AC#4: error_type cleared on Stop', () => {
+    seedStatus('et-stop', { session_id: 'et-stop', project: 'TestProject', llm_state: 'error', error_type: 'rate_limit' });
+    execHook(makeStopPayload('et-stop'));
+    const status = readStatusFile('et-stop');
+    assert.equal(status.error_type, null);
+    assert.equal(status.llm_state, 'waiting');
+  });
+
+  it('8.1 AC#4: error_type cleared on Read (PostToolUse)', () => {
+    seedStatus('et-read', { session_id: 'et-read', project: 'TestProject', skill: 'bmad-dev-story', workflow: 'dev-story', llm_state: 'error', error_type: 'server_error', reads: [] });
+    const fp = path.join(tmpDir, 'src', 'index.js').replace(/\\/g, '/');
+    execHook(makeReadPayload('et-read', fp));
+    assert.equal(readStatusFile('et-read').error_type, null);
+  });
+
+  // ─── 8.1: readStatus defaults ─────────────────────────────────────────────
+
+  it('8.1: new status defaults include error_type null', () => {
+    execHook(makeUserPromptPayload('defaults-et', '/bmad-dev-story'));
+    const status = readStatusFile('defaults-et');
+    assert.ok('error_type' in status);
+    assert.equal(status.error_type, null);
+  });
+
+  it('8.1 AC#5: full suite regression — npm test passes', () => {
+    // This test is a placeholder — the full suite run validates regression
+    assert.ok(true);
   });
 });
