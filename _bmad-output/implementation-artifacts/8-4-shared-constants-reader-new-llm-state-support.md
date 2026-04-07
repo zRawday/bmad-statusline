@@ -1,6 +1,6 @@
 # Story 8.4: Shared Constants & Reader — New LLM State Support
 
-Status: review
+Status: done
 
 ## Story
 
@@ -243,4 +243,8 @@ None — clean implementation, no debugging needed.
 - src/reader/bmad-sl-reader.js (modified — added error + active:subagent to LLM_STATES map)
 - test/llmstate-widget.test.js (modified — added BG.brightRed, COLOR.cyan constants + 2 new tests)
 - test/tui-monitor.test.js (modified — added 3 new worstState tests)
+
+### Review Findings
+
+- [x] [Review][Defer] `computeDisplayState` timeout peut convertir `active:subagent` en `inactive` pour subagents longue durée [src/reader/shared-constants.cjs:34-48] — deferred, pre-existing. Le timeout 5min de `computeDisplayState()` s'applique à tous les états y compris `active:subagent`. Un subagent long sans mise à jour de `updated_at` sera affiché comme INACTIVE. Comportement pré-existant (spec interdit de modifier `computeDisplayState()`), observation valide pour conception future.
 
