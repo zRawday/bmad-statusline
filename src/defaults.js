@@ -106,3 +106,4 @@ export const hashProjectColor = _sc.hashProjectColor;
 export const computeDisplayState = _sc.computeDisplayState;
 export const formatTimer = _sc.formatTimer;
 export const formatStoryName = _sc.formatStoryName;
+export const LLM_STATE_PRIORITY = _sc.LLM_STATE_PRIORITY;

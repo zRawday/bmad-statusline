@@ -13,9 +13,11 @@ const RESET = '\x1b[0m';
 const BOLD = '\x1b[1m';
 const COLOR = {
   green: '\x1b[32m',
+  cyan: '\x1b[36m',
   brightBlack: '\x1b[90m',
 };
 const BG = {
+  brightRed: '\x1b[101m',
   brightYellow: '\x1b[103m',
   brightBlue: '\x1b[104m',
 };
@@ -185,5 +187,32 @@ describe('LLM State widget — reader output', () => {
     // Strip ANSI to check spacing
     const plain = output.replace(/\x1b\[[0-9;]*m/g, '');
     assert.ok(plain.includes('\u2B24  ACTIVE'), `should have 2 spaces between circle and label, got: ${JSON.stringify(plain)}`);
+  });
+
+  it('renders ERROR with brightRed bg and white text', () => {
+    writeConfig();
+    writeStatus('test1', {
+      session_id: 'test1',
+      llm_state: 'error',
+      updated_at: new Date().toISOString(),
+    });
+    const output = runReader();
+    assert.ok(output.includes('ERROR'), `should contain ERROR, got: ${JSON.stringify(output)}`);
+    assert.ok(output.includes(BG.brightRed), 'should contain brightRed background');
+    assert.ok(output.includes(FG.white), 'should contain white foreground');
+    assert.ok(output.includes('\u2B24'), 'should contain filled circle');
+  });
+
+  it('renders SUBAGENT in cyan without bold', () => {
+    writeConfig();
+    writeStatus('test1', {
+      session_id: 'test1',
+      llm_state: 'active:subagent',
+      updated_at: new Date().toISOString(),
+    });
+    const output = runReader();
+    assert.ok(output.includes('SUBAGENT'), `should contain SUBAGENT, got: ${JSON.stringify(output)}`);
+    assert.ok(output.includes(COLOR.cyan), 'should contain cyan color');
+    assert.ok(!output.includes(BOLD), 'should NOT contain BOLD escape');
   });
 });

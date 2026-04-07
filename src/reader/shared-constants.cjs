@@ -18,6 +18,15 @@ const SEPARATOR_VALUES = {
   large: '  \u2503  ',
 };
 
+const LLM_STATE_PRIORITY = {
+  inactive: 0,
+  active: 1,
+  'active:subagent': 1,
+  waiting: 2,
+  error: 3,
+  permission: 3,
+};
+
 function isValidSessionId(id) {
   return typeof id === 'string' && /^[a-zA-Z0-9_-]+$/.test(id);
 }
@@ -68,6 +77,7 @@ module.exports = {
   STORY_WORKFLOWS,
   PROJECT_COLOR_PALETTE,
   SEPARATOR_VALUES,
+  LLM_STATE_PRIORITY,
   isValidSessionId,
   hashProjectColor,
   computeDisplayState,

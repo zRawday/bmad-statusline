@@ -1,6 +1,6 @@
 # Story 8.4: Shared Constants & Reader — New LLM State Support
 
-Status: ready-for-dev
+Status: review
 
 ## Story
 
@@ -33,8 +33,8 @@ so that **StopFailure errors and subagent activity are visible without checking 
 
 ## Tasks / Subtasks
 
-- [ ] Task 1: Add `LLM_STATE_PRIORITY` to `shared-constants.cjs` (AC: 1)
-  - [ ] 1.1 Add constant after `SEPARATOR_VALUES`:
+- [x] Task 1: Add `LLM_STATE_PRIORITY` to `shared-constants.cjs` (AC: 1)
+  - [x] 1.1 Add constant after `SEPARATOR_VALUES`:
     ```js
     const LLM_STATE_PRIORITY = {
       inactive: 0,
@@ -45,16 +45,16 @@ so that **StopFailure errors and subagent activity are visible without checking 
       permission: 3,
     };
     ```
-  - [ ] 1.2 Add `LLM_STATE_PRIORITY` to `module.exports`
-- [ ] Task 2: Bridge to ESM via `defaults.js` (AC: 1)
-  - [ ] 2.1 Add `export const LLM_STATE_PRIORITY = _sc.LLM_STATE_PRIORITY;` alongside existing re-exports (after line 108)
-- [ ] Task 3: Update `monitor-utils.js` to import from shared source (AC: 2)
-  - [ ] 3.1 Add `LLM_STATE_PRIORITY` to the import from `../../defaults.js` (line 7)
-  - [ ] 3.2 Delete local `const LLM_STATE_PRIORITY = { permission: 3, waiting: 2, active: 1, inactive: 0 };` (line 74)
-  - [ ] 3.3 Delete the comment `// computeDisplayState, INACTIVE_TIMEOUT_MS imported from defaults.js` (line 72) — stale after import change
-  - [ ] 3.4 Verify `worstState()` still works — the `|| 0` fallback handles any missing keys
-- [ ] Task 4: Add new states to reader `LLM_STATES` (AC: 3, 4, 5, 6)
-  - [ ] 4.1 Replace the `LLM_STATES` map in `bmad-sl-reader.js` (lines 33-38) with this final ordering — badge-style states first, then text-style:
+  - [x] 1.2 Add `LLM_STATE_PRIORITY` to `module.exports`
+- [x] Task 2: Bridge to ESM via `defaults.js` (AC: 1)
+  - [x] 2.1 Add `export const LLM_STATE_PRIORITY = _sc.LLM_STATE_PRIORITY;` alongside existing re-exports (after line 108)
+- [x] Task 3: Update `monitor-utils.js` to import from shared source (AC: 2)
+  - [x] 3.1 Add `LLM_STATE_PRIORITY` to the import from `../../defaults.js` (line 7)
+  - [x] 3.2 Delete local `const LLM_STATE_PRIORITY = { permission: 3, waiting: 2, active: 1, inactive: 0 };` (line 74)
+  - [x] 3.3 Delete the comment `// computeDisplayState, INACTIVE_TIMEOUT_MS imported from defaults.js` (line 72) — stale after import change
+  - [x] 3.4 Verify `worstState()` still works — the `|| 0` fallback handles any missing keys
+- [x] Task 4: Add new states to reader `LLM_STATES` (AC: 3, 4, 5, 6)
+  - [x] 4.1 Replace the `LLM_STATES` map in `bmad-sl-reader.js` (lines 33-38) with this final ordering — badge-style states first, then text-style:
     ```js
     const LLM_STATES = {
       permission:        { bg: '\x1b[103m', fg: '\x1b[30m', label: 'PERMISSION' },
@@ -67,16 +67,16 @@ so that **StopFailure errors and subagent activity are visible without checking 
     ```
     `error` uses bright red bg (101m) + white text — same badge pattern as permission/waiting.
     `active:subagent` uses cyan (36m) — text-only pattern matching active/inactive. Cyan = agent convention.
-  - [ ] 4.2 Verify `formatLlmState()` (lines 40-47) needs NO logic changes — it calls `computeLlmDisplayState(status)` which is an **alias** for `computeDisplayState` imported at line 16: `{ computeDisplayState: computeLlmDisplayState }`. Existing code handles bg/fg vs color patterns and unknown-state fallback via `LLM_STATES[state] || LLM_STATES.inactive`
-- [ ] Task 5: Update tests (AC: 7)
-  - [ ] 5.1 In `test/llmstate-widget.test.js`: add 2 new tests **inside the describe block, before its closing `});` on line 189**. Add these ANSI constants at the top alongside existing ones: `BG.brightRed = '\x1b[101m'` and `COLOR.cyan = '\x1b[36m'`
+  - [x] 4.2 Verify `formatLlmState()` (lines 40-47) needs NO logic changes — it calls `computeLlmDisplayState(status)` which is an **alias** for `computeDisplayState` imported at line 16: `{ computeDisplayState: computeLlmDisplayState }`. Existing code handles bg/fg vs color patterns and unknown-state fallback via `LLM_STATES[state] || LLM_STATES.inactive`
+- [x] Task 5: Update tests (AC: 7)
+  - [x] 5.1 In `test/llmstate-widget.test.js`: add 2 new tests **inside the describe block, before its closing `});` on line 189**. Add these ANSI constants at the top alongside existing ones: `BG.brightRed = '\x1b[101m'` and `COLOR.cyan = '\x1b[36m'`
     - `renders ERROR with brightRed bg and white text` — write status with `llm_state: 'error'`, assert output contains `ERROR`, `\x1b[101m` (BG.brightRed), `\x1b[97m` (FG.white), `\u2B24`
     - `renders SUBAGENT in cyan without bg` — write status with `llm_state: 'active:subagent'`, assert output contains `SUBAGENT`, `\x1b[36m` (COLOR.cyan), no BOLD
-  - [ ] 5.2 In `test/tui-monitor.test.js`: add 3 new tests **inside the `describe('worstState')` block, before its closing `});` on line 457**
+  - [x] 5.2 In `test/tui-monitor.test.js`: add 3 new tests **inside the `describe('worstState')` block, before its closing `});` on line 457**
     - `[active, error] → error` — assert.equal(worstState(...), 'error')
     - `[error, permission] → error` — both priority 3, `>` comparison means first-encountered wins. assert.equal(worstState([{error}, {permission}]), 'error')
     - `[active:subagent, waiting] → waiting` — assert.equal(worstState(...), 'waiting')
-  - [ ] 5.3 Run full test suite: `npm test` — all existing + new tests pass
+  - [x] 5.3 Run full test suite: `npm test` — all existing + new tests pass
 
 ## Dev Notes
 
@@ -215,9 +215,32 @@ Only the `LLM_STATES` map needs new entries. Zero logic changes.
 
 ### Agent Model Used
 
+Claude Opus 4.6 (1M context)
+
 ### Debug Log References
+
+None — clean implementation, no debugging needed.
 
 ### Completion Notes List
 
+- Added `LLM_STATE_PRIORITY` constant to `shared-constants.cjs` with 6 states (inactive:0, active:1, active:subagent:1, waiting:2, error:3, permission:3)
+- Bridged to ESM via `defaults.js` using existing `createRequire` pattern
+- Replaced local `LLM_STATE_PRIORITY` in `monitor-utils.js` with shared import from `defaults.js` — deleted stale comment
+- Added `error` (brightRed bg badge) and `active:subagent` (cyan text) to `LLM_STATES` in reader — zero logic changes to `formatLlmState()`
+- Added 2 reader subprocess tests: ERROR rendering, SUBAGENT rendering
+- Added 3 worstState unit tests: error wins over active, error ties with permission (first wins), waiting wins over active:subagent
+- All existing tests pass — no regressions
+
+### Change Log
+
+- 2026-04-07: Story 8.4 implemented — shared LLM_STATE_PRIORITY, reader error/subagent display, monitor-utils import refactor, 5 new tests
+
 ### File List
+
+- src/reader/shared-constants.cjs (modified — added LLM_STATE_PRIORITY constant + export)
+- src/defaults.js (modified — added LLM_STATE_PRIORITY re-export)
+- src/tui/monitor/monitor-utils.js (modified — import from defaults.js, deleted local LLM_STATE_PRIORITY + stale comment)
+- src/reader/bmad-sl-reader.js (modified — added error + active:subagent to LLM_STATES map)
+- test/llmstate-widget.test.js (modified — added BG.brightRed, COLOR.cyan constants + 2 new tests)
+- test/tui-monitor.test.js (modified — added 3 new worstState tests)
 
