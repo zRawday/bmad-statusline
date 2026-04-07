@@ -52,22 +52,6 @@ story_key: '' # set at runtime when discovered from sprint status
    - If the user opts to chunk: agree on the first group, narrow `{diff_output}` accordingly, and list the remaining groups for the user to note for follow-up runs.
    - If the user declines: proceed as-is with the full diff.
 
-### 7. Git Worktree Setup
-
-If `{story_key}` is set:
-
-1. Derive `{story_id}` from `{story_key}`: extract the leading N-N segment (e.g., "7-6" from "7-6-file-bash-sections-...").
-2. Set `{branch_name}` = `story-{story_id}` (e.g., `story-7-6`).
-3. Set `{worktree_path}` = `{repo_root}-worktrees/{branch_name}`.
-4. Run `git worktree prune` to clean up stale entries.
-5. Check `git worktree list --porcelain` for a line `branch refs/heads/{branch_name}`.
-   - **If worktree exists:** Verify branch with `git rev-parse --verify {branch_name}`. If branch deleted, remove worktree and recreate. Then `cd {worktree_path}`. Announce: "Switched to existing worktree for {branch_name}."
-   - **If worktree does not exist AND branch exists locally:** Run `git worktree add {worktree_path} {branch_name}`. `cd {worktree_path}`. Announce: "Created worktree for existing branch {branch_name}."
-   - **If neither worktree nor branch exists:** Warn the user that neither worktree nor branch were found for the story. Proceed in the current directory.
-
-All review fix commits will happen in `{worktree_path}` on `{branch_name}` — never on `{default_branch}`.
-Sprint-status updates use absolute paths and `git -C {repo_root}` to write to `{default_branch}` without leaving the worktree.
-
 ### CHECKPOINT
 
 Present a summary before proceeding: diff stats (files changed, lines added/removed), `{review_mode}`, and loaded spec/context docs (if any). If story was auto-detected from sprint status, proceed automatically. Otherwise, HALT and wait for user confirmation to proceed.

@@ -30,8 +30,6 @@ Load config from `{project-root}/_bmad/bmm/config.yaml` and resolve:
 - `story_file` = `` (explicit story path; auto-discovered if empty)
 - `sprint_status` = `{implementation_artifacts}/sprint-status.yaml`
 - `default_branch` = detected via `git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's@^refs/remotes/origin/@@'` (fallback: "master")
-- `repo_root` = `git rev-parse --show-toplevel`
-- `worktree_path` = "" (set at runtime after story_key is known)
 
 ### Context
 
@@ -162,34 +160,6 @@ Load config from `{project-root}/_bmad/bmm/config.yaml` and resolve:
 
     <action>Parse sections: Story, Acceptance Criteria, Tasks/Subtasks, Dev Notes, Dev Agent Record, File List, Change Log, Status</action>
 
-    <!-- GIT WORKTREE SETUP -->
-    <action>Derive {{story_id}} from {{story_key}}: extract the leading N-N segment (e.g., "7-6" from "7-6-file-bash-sections-...")</action>
-    <action>Set {{branch_name}} = "story-{{story_id}}" (e.g., "story-7-6")</action>
-    <action>Set {{worktree_path}} = "{{repo_root}}-worktrees/{{branch_name}}"</action>
-    <action>Run `git worktree prune` to clean up stale entries</action>
-    <action>Check `git worktree list --porcelain` for a line "branch refs/heads/{{branch_name}}"</action>
-    <check if="worktree for {{branch_name}} exists">
-      <action>Verify branch still exists: `git rev-parse --verify {{branch_name}}`</action>
-      <check if="branch has been deleted">
-        <action>Run `git worktree remove {{worktree_path}}`</action>
-        <action>Recreate: `git worktree add -b {{branch_name}} {{worktree_path}} {{default_branch}}`</action>
-      </check>
-      <action>cd {{worktree_path}}</action>
-      <output>⏯️ Switched to existing worktree for {{branch_name}}</output>
-    </check>
-    <check if="worktree for {{branch_name}} does NOT exist">
-      <check if="branch {{branch_name}} exists locally (git branch --list {{branch_name}})">
-        <action>Run `git worktree add {{worktree_path}} {{branch_name}}`</action>
-      </check>
-      <check if="branch {{branch_name}} does NOT exist">
-        <action>Run `git worktree add -b {{branch_name}} {{worktree_path}} {{default_branch}}`</action>
-      </check>
-      <action>cd {{worktree_path}}</action>
-      <output>🌿 Created worktree and branch {{branch_name}}</output>
-    </check>
-    <critical>ALL work from this point happens in {{worktree_path}}. Never in the main repo, never on {{default_branch}}.
-      Exception: sprint-status updates use absolute paths and git -C to write to {{default_branch}}.</critical>
-
     <action>Load comprehensive context from story file's Dev Notes section</action>
     <action>Extract developer guidance from Dev Notes: architecture requirements, previous learnings, technical specifications</action>
     <action>Use enhanced story context to inform implementation decisions and approaches</action>
@@ -257,8 +227,8 @@ Load config from `{project-root}/_bmad/bmm/config.yaml` and resolve:
   </step>
 
   <step n="4" goal="Mark story in-progress" tag="sprint-status">
-    <check if="sprint status file exists at {{repo_root}}/{{sprint_status}}">
-      <action>Read {{repo_root}}/{{sprint_status}} using absolute path (this is the {{default_branch}} version)</action>
+    <check if="sprint status file exists at {{sprint_status}}">
+      <action>Read {{sprint_status}}</action>
       <action>Read all development_status entries to find {{story_key}}</action>
       <action>Get current status value for development_status[{{story_key}}]</action>
 
@@ -266,8 +236,8 @@ Load config from `{project-root}/_bmad/bmm/config.yaml` and resolve:
         <action>Modify ONLY the line for {{story_key}}: set to "in-progress"</action>
         <action>Update last_updated field to current date</action>
         <action>Save file preserving ALL comments and structure</action>
-        <action>Run `git -C {{repo_root}} add {{sprint_status}}`</action>
-        <action>Run `git -C {{repo_root}} commit -m "update sprint-status: {{story_key}} → in-progress"`</action>
+        <action>Run `git add {{sprint_status}}`</action>
+        <action>Run `git commit -m "update sprint-status: {{story_key}} → in-progress"`</action>
         <check if="commit fails with index.lock error">
           <action>Retry up to 3 times with backoff (200ms, 400ms, 800ms)</action>
           <check if="all retries fail">
@@ -294,7 +264,7 @@ Load config from `{project-root}/_bmad/bmm/config.yaml` and resolve:
       <action>Store {{current_sprint_status}} for later use</action>
     </check>
 
-    <check if="sprint status file does NOT exist at {{repo_root}}/{{sprint_status}}">
+    <check if="sprint status file does NOT exist at {{sprint_status}}">
       <output>ℹ️ No sprint status file exists - story progress will be tracked in story file only</output>
       <action>Set {{current_sprint_status}} = "no-sprint-tracking"</action>
     </check>
@@ -421,26 +391,26 @@ Load config from `{project-root}/_bmad/bmm/config.yaml` and resolve:
       - Only permitted story sections were modified
     </action>
 
-    <!-- Mark story ready for review - sprint status on {default_branch} via git -C -->
-    <check if="sprint status file exists at {{repo_root}}/{{sprint_status}} AND {{current_sprint_status}} != 'no-sprint-tracking'">
-      <action>Read {{repo_root}}/{{sprint_status}} using absolute path</action>
+    <!-- Mark story ready for review -->
+    <check if="sprint status file exists at {{sprint_status}} AND {{current_sprint_status}} != 'no-sprint-tracking'">
+      <action>Read {{sprint_status}}</action>
       <action>Find development_status key matching {{story_key}}</action>
       <action>Verify current status is "in-progress" (expected previous state)</action>
       <action>Modify ONLY the line for {{story_key}}: set to "review"</action>
       <action>Update last_updated field to current date</action>
       <action>Save file, preserving ALL comments and structure including STATUS DEFINITIONS</action>
-      <action>Run `git -C {{repo_root}} add {{sprint_status}}`</action>
-      <action>Run `git -C {{repo_root}} commit -m "update sprint-status: {{story_key}} → review"`</action>
+      <action>Run `git add {{sprint_status}}`</action>
+      <action>Run `git commit -m "update sprint-status: {{story_key}} → review"`</action>
       <check if="commit fails with index.lock error">
         <action>Retry up to 3 times with backoff (200ms, 400ms, 800ms)</action>
         <check if="all retries fail">
-          <output>⚠️ Sprint-status commit failed (concurrent lock). Story is committed on branch. Update sprint-status manually if needed.</output>
+          <output>⚠️ Sprint-status commit failed (concurrent lock). Update sprint-status manually if needed.</output>
         </check>
       </check>
-      <output>✅ Story status updated to "review" in sprint-status.yaml on {{default_branch}}</output>
+      <output>✅ Story status updated to "review" in sprint-status.yaml</output>
     </check>
 
-    <check if="sprint status file does NOT exist at {{repo_root}}/{{sprint_status}} OR {{current_sprint_status}} == 'no-sprint-tracking'">
+    <check if="sprint status file does NOT exist at {{sprint_status}} OR {{current_sprint_status}} == 'no-sprint-tracking'">
       <output>ℹ️ Story status updated to "review" in story file (no sprint tracking configured)</output>
     </check>
 
@@ -461,7 +431,6 @@ Load config from `{project-root}/_bmad/bmm/config.yaml` and resolve:
   <step n="10" goal="Commit story changes">
     <critical>This step is fully automatic — no user confirmation, no HALT</critical>
     <action>Check if there are uncommitted changes in the working tree using `git status --porcelain`</action>
-    <action>Verify current directory is {{worktree_path}} and current branch is {{branch_name}} — if on {{default_branch}} or in the main repo, HALT: "Refusing to commit on {{default_branch}}. Switch to worktree {{worktree_path}} first."</action>
     <check if="no changes detected (empty output)">
       <output>Nothing to commit — working tree is clean.</output>
       <goto step="11">Completion communication</goto>
@@ -507,8 +476,7 @@ Load config from `{project-root}/_bmad/bmm/config.yaml` and resolve:
     </action>
 
     <output>💡 **Tip:** For best results, run `code-review` using a **different** LLM than the one that implemented this story.</output>
-    <output>ℹ️ Story branch {{branch_name}} and worktree remain open for review — no merge to {{default_branch}} at this stage.</output>
-    <check if="sprint status file exists at {{repo_root}}/{{sprint_status}}">
+    <check if="sprint status file exists at {{sprint_status}}">
       <action>Suggest checking sprint-status to see project progress</action>
     </check>
     <action>Remain flexible - allow user to choose their own path or ask for other assistance</action>

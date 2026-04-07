@@ -80,21 +80,21 @@ Skip this section if `{spec_file}` is not set.
 
 Save the story file.
 
-#### Sync sprint-status.yaml on {default_branch}
+#### Sync sprint-status.yaml
 
 If `{story_key}` is not set, skip this subsection and note that sprint status was not synced because no story key was available.
 
-If sprint status file exists at `{repo_root}/{sprint_status}` (absolute path — this is the `{default_branch}` version):
+If sprint status file exists at `{sprint_status}`:
 
-1. Read `{repo_root}/{sprint_status}` using absolute path.
+1. Read `{sprint_status}`.
 2. Find the `development_status` entry matching `{story_key}`.
 3. If found: modify ONLY the line for `{story_key}` to `{new_status}`. Update `last_updated` to current date. Save the file, preserving ALL comments and structure including STATUS DEFINITIONS.
-4. Run `git -C {repo_root} add {sprint_status}`.
-5. Run `git -C {repo_root} commit -m "update sprint-status: {story_key} → {new_status}"`.
+4. Run `git add {sprint_status}`.
+5. Run `git commit -m "update sprint-status: {story_key} → {new_status}"`.
    - If commit fails with `index.lock` error: retry up to 3 times with backoff (200ms, 400ms, 800ms). If all retries fail, warn that sprint-status update could not be committed.
 6. If `{story_key}` not found in sprint status: warn the user that the story file was updated but sprint-status sync failed.
 
-If sprint status file does not exist at `{repo_root}/{sprint_status}`, note that story status was updated in the story file only.
+If sprint status file does not exist at `{sprint_status}`, note that story status was updated in the story file only.
 
 #### Completion summary
 

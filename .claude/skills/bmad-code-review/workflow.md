@@ -46,8 +46,6 @@ Load and read full config from `{main_config}` and resolve:
 - `date` as system-generated current datetime
 - `sprint_status` = `{implementation_artifacts}/sprint-status.yaml`
 - `default_branch` = detected via `git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's@^refs/remotes/origin/@@'` (fallback: "master")
-- `repo_root` = `git rev-parse --show-toplevel`
-- `worktree_path` = "" (set at runtime after story_key is known)
 - `project_context` = `**/project-context.md` (load if exists)
 - CLAUDE.md / memory files (load if exist)
 

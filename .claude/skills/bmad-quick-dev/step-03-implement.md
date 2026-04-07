@@ -14,14 +14,6 @@
 
 Verify `{spec_file}` resolves to a non-empty path and the file exists on disk. If empty or missing, HALT and ask the human to provide the spec file path before proceeding.
 
-### Worktree Verification
-
-Derive `{slug}` from `{spec_file}` filename (strip `spec-` prefix and `.md` suffix). Set `{worktree_path}` = `{repo_root}-worktrees/{slug}`. Run `git worktree prune`. Check `git worktree list --porcelain` for branch `refs/heads/{slug}`:
-- If worktree exists: `cd {worktree_path}`. Verify branch with `git branch --show-current`.
-- If worktree does not exist but branch `{slug}` exists: `git worktree add {worktree_path} {slug}`. `cd {worktree_path}`.
-- If neither exists (resuming a spec created before worktree-per-spec): `git worktree add -b {slug} {worktree_path} {default_branch}`. `cd {worktree_path}`.
-All commits must happen in `{worktree_path}` on `{slug}`, never on `{default_branch}`.
-
 ## INSTRUCTIONS
 
 ### Baseline

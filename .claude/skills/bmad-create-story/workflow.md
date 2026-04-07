@@ -29,8 +29,6 @@ Load config from `{project-root}/_bmad/bmm/config.yaml` and resolve:
 
 - `sprint_status` = `{implementation_artifacts}/sprint-status.yaml`
 - `default_branch` = detected via `git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's@^refs/remotes/origin/@@'` (fallback: "master")
-- `repo_root` = `git rev-parse --show-toplevel`
-- `worktree_path` = "" (set at runtime after story_key is known)
 - `epics_file` = `{planning_artifacts}/epics.md`
 - `prd_file` = `{planning_artifacts}/prd.md`
 - `architecture_file` = `{planning_artifacts}/architecture.md`
@@ -216,34 +214,6 @@ Load config from `{project-root}/_bmad/bmm/config.yaml` and resolve:
 <step n="2" goal="Load and analyze core artifacts">
   <critical>🔬 EXHAUSTIVE ARTIFACT ANALYSIS - This is where you prevent future developer mistakes!</critical>
 
-  <!-- WORKTREE SETUP — story_key is now known, enter dedicated worktree -->
-  <action>Derive {{story_id}} from {{story_key}}: extract the leading N-N segment (e.g., "7-6" from "7-6-file-bash-sections-...")</action>
-  <action>Set {{branch_name}} = "story-{{story_id}}" (e.g., "story-7-6")</action>
-  <action>Set {{worktree_path}} = "{{repo_root}}-worktrees/{{branch_name}}"</action>
-  <action>Run `git worktree prune` to clean up stale entries</action>
-  <action>Check `git worktree list --porcelain` for a line "branch refs/heads/{{branch_name}}"</action>
-  <check if="worktree for {{branch_name}} exists">
-    <action>Verify branch still exists: `git rev-parse --verify {{branch_name}}`</action>
-    <check if="branch has been deleted">
-      <action>Run `git worktree remove {{worktree_path}}`</action>
-      <action>Recreate: `git worktree add -b {{branch_name}} {{worktree_path}} {{default_branch}}`</action>
-    </check>
-    <action>cd {{worktree_path}}</action>
-    <output>⏯️ Switched to existing worktree for {{branch_name}}</output>
-  </check>
-  <check if="worktree for {{branch_name}} does NOT exist">
-    <check if="branch {{branch_name}} exists locally (git branch --list {{branch_name}})">
-      <action>Run `git worktree add {{worktree_path}} {{branch_name}}`</action>
-    </check>
-    <check if="branch {{branch_name}} does NOT exist">
-      <action>Run `git worktree add -b {{branch_name}} {{worktree_path}} {{default_branch}}`</action>
-    </check>
-    <action>cd {{worktree_path}}</action>
-    <output>🌿 Created worktree and branch {{branch_name}}</output>
-  </check>
-  <critical>ALL work from this point happens in {{worktree_path}}. Never in the main repo, never on {{default_branch}}.
-    Exception: sprint-status updates use absolute paths and git -C to write to {{default_branch}}.</critical>
-
   <!-- Load all available content through discovery protocol -->
   <action>Read fully and follow `./discover-inputs.md` to load all input files</action>
   <note>Available content: {epics_content}, {prd_content}, {architecture_content}, {ux_content},
@@ -380,24 +350,23 @@ Load config from `{project-root}/_bmad/bmm/config.yaml` and resolve:
   <action>Validate the newly created story file {default_output_file} against `./checklist.md` and apply any required fixes before finalizing</action>
   <action>Save story document unconditionally</action>
 
-  <!-- AUTO-COMMIT — all files created in worktree must be committed -->
-  <action>List all new/modified files in the worktree using `git status --porcelain`</action>
+  <!-- AUTO-COMMIT -->
+  <action>List all new/modified files using `git status --porcelain`</action>
   <check if="changes detected">
     <action>Stage the created story file and any other new files by listing them explicitly (NOT `git add -A`)</action>
     <action>Commit: "{{story_key}}: story spec created"</action>
-    <critical>All files in the worktree MUST be committed. Uncommitted files do not survive a crash or git worktree prune.</critical>
   </check>
 
-  <!-- Update sprint-status on {default_branch} via git -C (never modify in worktree) -->
-  <check if="sprint status file exists at {{repo_root}}/{{sprint_status}}">
-    <action>Read {{repo_root}}/{{sprint_status}} using absolute path (this is the {{default_branch}} version)</action>
+  <!-- Update sprint-status -->
+  <check if="sprint status file exists at {{sprint_status}}">
+    <action>Read {{sprint_status}}</action>
     <action>Find development_status key matching {{story_key}}</action>
     <action>Verify current status is "backlog" (expected previous state)</action>
     <action>Modify ONLY the line for {{story_key}}: set to "ready-for-dev"</action>
     <action>Update last_updated field to current date</action>
     <action>Save file, preserving ALL comments and structure including STATUS DEFINITIONS</action>
-    <action>Run `git -C {{repo_root}} add {{sprint_status}}`</action>
-    <action>Run `git -C {{repo_root}} commit -m "update sprint-status: {{story_key}} → ready-for-dev"`</action>
+    <action>Run `git add {{sprint_status}}`</action>
+    <action>Run `git commit -m "update sprint-status: {{story_key}} → ready-for-dev"`</action>
     <check if="commit fails with index.lock error">
       <action>Retry up to 3 times with backoff (200ms, 400ms, 800ms)</action>
       <check if="all retries fail">
@@ -421,7 +390,6 @@ Load config from `{project-root}/_bmad/bmm/config.yaml` and resolve:
     3. Run `code-review` when complete (auto-marks done)
     4. Optional: If Test Architect module installed, run `/bmad:tea:automate` after `dev-story` to generate guardrail tests
 
-    **Worktree:** Branch {{branch_name}} and worktree remain open for implementation.
     **The developer now has everything needed for flawless implementation!**
   </output>
 </step>
