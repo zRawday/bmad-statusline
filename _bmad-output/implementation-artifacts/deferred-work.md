@@ -179,6 +179,10 @@
 - **MonitorDetailScreen scrollOffset not clamped** — Unlike MonitorScreen which has an explicit clamp effect, MonitorDetailScreen does not clamp scrollOffset when contentItems shrinks (e.g., sort toggle changes entry count). The `above` indicator can show a stale count. Fix: add a useEffect clamp similar to MonitorScreen lines 218-221.
 - **MonitorDetailScreen empty contentItems collapses viewport** — When no entries exist for a detail view, contentItems is empty and the viewport early-returns a zero-height Box (bypassing the fixed-height layout). MonitorScreen guards against this (line 430), but MonitorDetailScreen always renders the viewport. Fix: guard or ensure minimum content.
 
+## Deferred from: code review of 8-4-shared-constants-reader-new-llm-state-support (2026-04-07)
+
+- **`computeDisplayState` timeout converts `active:subagent` to `inactive` for long-running subagents** — The 5-minute `INACTIVE_TIMEOUT_MS` in `computeDisplayState()` applies to all states including `active:subagent`. A subagent running without frequent `updated_at` refreshes will silently appear as INACTIVE. Pre-existing behavior (spec forbids modifying `computeDisplayState()`). Consider adding subagent-specific freshness logic or heartbeat in a future story.
+
 ## Deferred from: code review of story-8.2 (2026-04-07)
 
 - **Missing AC#5 test coverage for subagent_type clearing via existing handlers** — Tests only verify SubagentStop, PostToolUseFailure, PermissionDenied clear subagent_type. Missing coverage for UserPromptSubmit, Read, Write, Edit, Bash, PreToolUse, Stop, Notification transitioning out of active:subagent. Code does clear it, but tests don't verify.

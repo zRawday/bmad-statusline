@@ -31,10 +31,12 @@ function colorize(text, ansiCode) {
 // --- LLM State widget ---
 
 const LLM_STATES = {
-  permission: { bg: '\x1b[103m', fg: '\x1b[30m', label: 'PERMISSION' },
-  waiting:    { bg: '\x1b[104m', fg: '\x1b[97m', label: 'WAITING' },
-  active:     { color: '\x1b[32m',  label: 'ACTIVE' },
-  inactive:   { color: '\x1b[90m',  label: 'INACTIVE' },
+  permission:        { bg: '\x1b[103m', fg: '\x1b[30m', label: 'PERMISSION' },
+  waiting:           { bg: '\x1b[104m', fg: '\x1b[97m', label: 'WAITING' },
+  error:             { bg: '\x1b[101m', fg: '\x1b[97m', label: 'ERROR' },
+  active:            { color: '\x1b[32m',  label: 'ACTIVE' },
+  'active:subagent': { color: '\x1b[36m',  label: 'SUBAGENT' },
+  inactive:          { color: '\x1b[90m',  label: 'INACTIVE' },
 };
 
 function formatLlmState(status) {

@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { getDefaultSkillColor } from '../skill-catalog.js';
 import { toInkColor } from '../preview-utils.js';
-import { ALIVE_MAX_AGE_MS, INACTIVE_TIMEOUT_MS, STORY_WORKFLOWS, PROJECT_COLOR_PALETTE, hashProjectColor, computeDisplayState, formatTimer as formatElapsed, formatStoryName } from '../../defaults.js';
+import { ALIVE_MAX_AGE_MS, INACTIVE_TIMEOUT_MS, STORY_WORKFLOWS, PROJECT_COLOR_PALETTE, hashProjectColor, computeDisplayState, formatTimer as formatElapsed, formatStoryName, LLM_STATE_PRIORITY } from '../../defaults.js';
 
 export { ALIVE_MAX_AGE_MS, INACTIVE_TIMEOUT_MS, STORY_WORKFLOWS, computeDisplayState, formatElapsed, formatStoryName as formatStoryTitle };
 
@@ -68,10 +68,6 @@ export function groupSessionsByProject(sessions) {
   }
   return groups;
 }
-
-// computeDisplayState, INACTIVE_TIMEOUT_MS imported from defaults.js
-
-const LLM_STATE_PRIORITY = { permission: 3, waiting: 2, active: 1, inactive: 0 };
 
 export function worstState(sessions) {
   let worst = 'inactive';

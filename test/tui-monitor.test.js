@@ -454,6 +454,31 @@ describe('worstState', () => {
     ];
     assert.equal(worstState(sessions), 'inactive');
   });
+
+  test('[active, error] → error', () => {
+    const sessions = [
+      { llm_state: 'active', updated_at: new Date().toISOString() },
+      { llm_state: 'error', updated_at: new Date().toISOString() },
+    ];
+    assert.equal(worstState(sessions), 'error');
+  });
+
+  test('[error, permission] → error', () => {
+    const sessions = [
+      { llm_state: 'error', updated_at: new Date().toISOString() },
+      { llm_state: 'permission', updated_at: new Date().toISOString() },
+    ];
+    // Both priority 3 — first-encountered wins with > comparison
+    assert.equal(worstState(sessions), 'error');
+  });
+
+  test('[active:subagent, waiting] → waiting', () => {
+    const sessions = [
+      { llm_state: 'active:subagent', updated_at: new Date().toISOString() },
+      { llm_state: 'waiting', updated_at: new Date().toISOString() },
+    ];
+    assert.equal(worstState(sessions), 'waiting');
+  });
 });
 
 // --- resolveSessionColor tests ---
