@@ -9,10 +9,13 @@ inputDocuments:
   - '_bmad-output/planning-artifacts/architecture.md (Rev.2, preserved for hook/reader/installer sections)'
   - '_bmad-output/project-context.md'
   - 'Conversation: Monitor feature specification (2026-04-04)'
-revision: 4
-revisionDate: '2026-04-04'
-revisionScope: 'Monitor — real-time session supervision TUI, hook expansion (Bash/Stop/Notification), status file v2 (history arrays, LLM state), viewport scroll, detail/chronology pages, CSV export, tab system with project grouping'
+revision: 5
+revisionDate: '2026-04-07'
+revisionScope: 'TUI Process Lifecycle — PID registry for multi-instance orphan prevention, signal handlers for graceful shutdown, TTY detection for terminal-close cleanup (Pattern 28)'
 previousRevisions:
+  - revision: 4
+    date: '2026-04-04'
+    scope: 'Monitor — real-time session supervision TUI, hook expansion (Bash/Stop/Notification), status file v2 (history arrays, LLM state), viewport scroll, detail/chronology pages, CSV export, tab system with project grouping'
   - revision: 3
     date: '2026-03-30'
     scope: 'TUI v2 redesign — multi-line model, internal config, reader line N command, legacy composite removal, per-line installer deployment, ThreeLinePreview, ScreenLayout restructure, bug fixes'
@@ -1409,6 +1412,88 @@ function resolveSeparator(style, custom) {
 - Reader separator map is its OWN copy (CJS, not imported from TUI). Must stay in sync manually.
 - Reader ALWAYS returns empty string on any error — config missing, malformed, line index out of bounds.
 
+### New for TUI Process Lifecycle — Pattern 28
+
+#### 28. TUI Process Lifecycle Management
+
+**Multi-instance PID registry + signal handlers + TTY orphan detection.** The TUI supports multiple simultaneous instances. Orphan prevention uses three complementary mechanisms:
+
+**A. PID Registry (`tui-pids.json` in cache directory):**
+
+```js
+// On startup — register PID, purge dead entries
+const registryPath = path.join(cachePath, 'tui-pids.json');
+
+function loadRegistry() {
+  try { return JSON.parse(fs.readFileSync(registryPath, 'utf8')); }
+  catch { return { pids: [] }; }
+}
+
+function saveRegistry(registry) {
+  // Atomic write (Pattern 22): tmp + renameSync
+  const tmp = registryPath + '.tmp';
+  fs.writeFileSync(tmp, JSON.stringify(registry, null, 2));
+  fs.renameSync(tmp, registryPath);
+}
+
+function registerPid() {
+  const registry = loadRegistry();
+  // Purge dead PIDs
+  registry.pids = registry.pids.filter(pid => {
+    try { process.kill(pid, 0); return true; }
+    catch { return false; }
+  });
+  registry.pids.push(process.pid);
+  saveRegistry(registry);
+}
+
+function unregisterPid() {
+  const registry = loadRegistry();
+  registry.pids = registry.pids.filter(pid => pid !== process.pid);
+  saveRegistry(registry);
+}
+```
+
+**B. Signal Handlers:**
+
+```js
+// Register BEFORE Ink render — cleanup on any exit path
+function gracefulShutdown() {
+  unregisterPid();
+  restoreScreen();
+  process.exit();
+}
+
+process.on('SIGINT', gracefulShutdown);
+process.on('SIGTERM', gracefulShutdown);
+process.on('SIGHUP', gracefulShutdown);
+process.on('uncaughtException', () => { unregisterPid(); restoreScreen(); process.exit(1); });
+process.on('unhandledRejection', () => { unregisterPid(); restoreScreen(); process.exit(1); });
+```
+
+**C. TTY Orphan Detection:**
+
+```js
+// Periodic check — catches "terminal closed" on Windows where signals aren't delivered
+const ttyCheckId = setInterval(() => {
+  if (!process.stdout.isTTY) {
+    clearInterval(ttyCheckId);
+    unregisterPid();
+    process.exit();
+  }
+}, 5000); // 5 seconds
+ttyCheckId.unref(); // Don't block Node exit
+```
+
+**Rules:**
+- Registry lives in cache directory (`BMAD_CACHE_DIR`), same location as `.alive-*` and `status-*.json` (Pattern 5)
+- Atomic write for registry (Pattern 22) — prevents corruption if two instances start simultaneously
+- `unregisterPid()` is idempotent — safe to call multiple times
+- `ttyCheckId.unref()` ensures the interval doesn't prevent natural Node.js exit
+- Signal handlers registered BEFORE `inkRender()` — not after
+- SIGINT handler coexists with Ink's internal SIGINT handling — Ink calls `process.exit()` which triggers the `exit` event listener (existing screen restore)
+- Never `process.kill(pid, 9)` live instances — only purge entries where `process.kill(pid, 0)` throws
+
 ### New for Monitor — Patterns 21-27
 
 #### 21. Polling Lifecycle
@@ -1576,6 +1661,13 @@ MonitorScreen reads `config.projectColors` and `config.skillColors` for tab colo
 - Respect `BMAD_CACHE_DIR` env var for cache path in monitor-utils.js (pattern 5)
 - MonitorScreen receives paths via props — never resolve paths internally (pattern 27)
 - Append to history arrays (`reads[]`, `writes[]`, `commands[]`) alongside scalar updates — never replace scalars-only (backward compat)
+
+**New for TUI Process Lifecycle (Rev.5):**
+- Register PID on startup, unregister on exit — never skip PID cleanup (pattern 28)
+- Use atomic write (tmp + rename) for `tui-pids.json` — never direct write (pattern 22, 28)
+- Only purge dead PIDs from registry — never kill live instances (pattern 28)
+- Register signal handlers BEFORE `inkRender()` — never after (pattern 28)
+- Use `ttyCheckId.unref()` — never block Node.js exit with orphan detection interval (pattern 28)
 
 ### Test Organization & Conventions
 
@@ -1974,7 +2066,7 @@ Claude Code event → stdin JSON → node bmad-hook.js
 - [x] LLM state machine with 4 states
 
 **Implementation Patterns**
-- [x] 28 patterns (0-27): 14 Rev.2, 7 Rev.3, 7 Rev.4
+- [x] 29 patterns (0-28): 14 Rev.2, 7 Rev.3, 7 Rev.4, 1 Rev.5
 - [x] Error handling triad extended for TUI
 - [x] Enforcement guidelines updated for all 3 revisions
 - [x] Test organization documented with new fixtures
@@ -1994,7 +2086,7 @@ Claude Code event → stdin JSON → node bmad-hook.js
 - Clean separation: Monitor isolated in sub-boundary, cache I/O encapsulated in single module
 - Backward compatible: reader works unchanged with status file v2, existing TUI screens unaffected
 - All Rev.3 bug fixes preserved (BF1/BF2/BF3 eliminated by architecture)
-- 28 prescriptive patterns prevent agent implementation conflicts
+- 29 prescriptive patterns prevent agent implementation conflicts
 - Atomic writes protect status file integrity at scale
 - Paradigm evolution (configurator → configurator + live dashboard) cleanly separated by boundary
 

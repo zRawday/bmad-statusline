@@ -2217,3 +2217,68 @@ So that **the Monitor is practical for long-running use**.
 **When** executed
 **Then** tests for all toggles on/off, bell emit, timestamp/sort switching, shortcut colors, contextual arrays, Esc navigation
 **And** all existing tests pass (`npm test`)
+
+## Epic 8: LLM State Machine v2 — Direct Hook Signal Detection
+
+Le hook évolue pour capturer les signaux directs de Claude Code (PermissionRequest, Stop, StopFailure, SessionEnd, SubagentStart/Stop, PostToolUseFailure, PermissionDenied) au lieu de les inférer par timeout. Le reader et le monitor s'adaptent pour afficher les nouveaux états.
+
+**Architecture:** Rev.5 — extends hook dispatch table and LLM state machine
+**Stories:** 8.1–8.5 (see sprint-status.yaml and story files in implementation-artifacts/)
+
+_Note: Epic 8 stories were created directly from conversation-driven specifications. Full acceptance criteria are in individual story files._
+
+## Epic 9: TUI Process Lifecycle — Orphan Prevention & Graceful Shutdown
+
+Le TUI n'a actuellement aucune protection contre les processus orphelins. Quand l'utilisateur ferme le terminal brutalement (Ctrl+C, fermeture de fenêtre, crash), les processus Node.js persistent en arrière-plan. Avec plusieurs instances simultanées légitimes, il faut un mécanisme qui nettoie les orphelins sans tuer les instances actives.
+
+**Architecture:** Rev.5 — Pattern 28
+**Stories:** 9.1
+
+### Story 9.1: TUI Process Lifecycle — PID Registry, Signal Handlers, TTY Detection
+
+As a **developer running one or more TUI instances**,
+I want **orphaned TUI processes to be automatically cleaned up**,
+So that **closing terminals or crashing doesn't leave zombie Node.js processes consuming resources**.
+
+**Acceptance Criteria:**
+
+**Given** the TUI starts
+**When** `launchTui()` is called in `app.js`
+**Then** the current PID is registered in `tui-pids.json` in the cache directory (`BMAD_CACHE_DIR` / `~/.cache/bmad-status/`)
+**And** before registering, all existing PIDs in the registry are checked for liveness via `process.kill(pid, 0)`
+**And** dead PIDs (orphans from previous crashes) are removed from the registry
+**And** the registry file is written atomically (tmp + rename, Pattern 22)
+
+**Given** multiple TUI instances are running simultaneously
+**When** a new instance starts
+**Then** it does NOT kill or interfere with existing live instances
+**And** only dead PIDs are purged from the registry
+**And** all live instances coexist without conflict
+
+**Given** the TUI exits normally (user presses `q` or Esc from HomeScreen)
+**When** the quit handler fires
+**Then** the current PID is removed from `tui-pids.json`
+**And** the config is flushed (existing debounce behavior preserved)
+**And** the alternate screen buffer is restored
+
+**Given** the TUI receives SIGINT, SIGTERM, or SIGHUP
+**When** the signal handler fires
+**Then** the current PID is removed from `tui-pids.json`
+**And** the alternate screen buffer is restored
+**And** the process exits cleanly via `process.exit()`
+
+**Given** an uncaught exception or unhandled rejection occurs
+**When** the error handler fires
+**Then** the current PID is removed from `tui-pids.json`
+**And** the alternate screen buffer is restored
+**And** the process exits with code 1
+
+**Given** the user closes the terminal window (no signal delivered on Windows)
+**When** a periodic TTY check runs (every 5-10 seconds)
+**Then** `process.stdout.isTTY` returns falsy
+**And** the TUI initiates graceful shutdown: removes PID from registry, restores screen buffer, exits
+
+**Given** tests
+**When** executed
+**Then** tests for PID registration on startup, dead PID cleanup, PID removal on normal exit, PID removal on signal, TTY detection triggering exit, multi-instance coexistence, atomic write of registry file
+**And** all existing tests pass (`npm test`)
