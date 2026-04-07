@@ -14,6 +14,7 @@ import { ReorderLinesScreen } from './screens/ReorderLinesScreen.js';
 import { SkillColorsScreen } from './screens/SkillColorsScreen.js';
 import { ProjectColorsScreen } from './screens/ProjectColorsScreen.js';
 import { MonitorScreen } from './monitor/MonitorScreen.js';
+import { registerPid, unregisterPid, setupSignalHandlers, startTtyWatch, stopTtyWatch } from './tui-lifecycle.js';
 import path from 'node:path';
 import os from 'node:os';
 
@@ -110,7 +111,7 @@ export function App({ paths }) {
   if (screen === 'home') {
     return e(HomeScreen, {
       ...screenProps,
-      onQuit: () => { if (writeTimerRef.current) { clearTimeout(writeTimerRef.current); writeInternalConfig(config, paths); } exit(); },
+      onQuit: () => { if (writeTimerRef.current) { clearTimeout(writeTimerRef.current); writeInternalConfig(config, paths); } try { unregisterPid(cachePath); } catch {} exit(); },
       resetToOriginal,
       onLaunchCcstatusline: () => { exit(); launchCcstatuslineAfterExit = true; },
     });
@@ -162,12 +163,19 @@ let launchCcstatuslineAfterExit = false;
 
 export default async function launchTui(paths) {
   const { render: inkRender } = await import('ink');
+  const cachePath = process.env.BMAD_CACHE_DIR || path.join(os.homedir(), '.cache', 'bmad-status');
   const restoreScreen = () => process.stdout.write('\x1b[?1049l');
+  // PID registry, signal handlers, TTY watch — before render (Pattern 28)
+  try { registerPid(cachePath); } catch {}
+  setupSignalHandlers(cachePath, restoreScreen);
+  startTtyWatch(cachePath, restoreScreen);
   // Enter alternate screen buffer
   process.stdout.write('\x1b[?1049h');
   process.on('exit', restoreScreen);
   const instance = inkRender(e(App, { paths }));
   await instance.waitUntilExit();
+  try { unregisterPid(cachePath); } catch {}
+  stopTtyWatch();
   restoreScreen();
   process.removeListener('exit', restoreScreen);
   if (launchCcstatuslineAfterExit) {

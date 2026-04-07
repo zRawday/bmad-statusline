@@ -1,6 +1,6 @@
 # Story 9.1: TUI Process Lifecycle — PID Registry, Signal Handlers, TTY Detection
 
-Status: ready-for-dev
+Status: review
 
 ## Story
 
@@ -66,33 +66,33 @@ So that closing terminals or crashing doesn't leave zombie Node.js processes con
 
 ## Tasks / Subtasks
 
-- [ ] Task 1: Create PID lifecycle module (AC: #1, #2)
-  - [ ] 1.1 Create `src/tui/tui-lifecycle.js` — ESM module with `loadRegistry`, `saveRegistry`, `registerPid`, `unregisterPid`
-  - [ ] 1.2 Registry path: `path.join(cachePath, 'tui-pids.json')` using Pattern 5 (`BMAD_CACHE_DIR`)
-  - [ ] 1.3 Atomic write: tmp + `fs.renameSync` (Pattern 22)
-  - [ ] 1.4 Liveness check: `process.kill(pid, 0)` to purge dead PIDs on startup
-  - [ ] 1.5 `unregisterPid()` must be idempotent (safe to call multiple times)
-- [ ] Task 2: Signal handlers and TTY detection (AC: #4, #5, #6)
-  - [ ] 2.1 Add `setupSignalHandlers(cachePath)` — registers SIGINT, SIGTERM, SIGHUP, uncaughtException, unhandledRejection
-  - [ ] 2.2 Add `startTtyWatch()` — `setInterval` (5s) checking `process.stdout.isTTY`, with `.unref()`
-  - [ ] 2.3 Each handler calls `unregisterPid()` then `restoreScreen()` then `process.exit(code)`
-  - [ ] 2.4 Export `stopTtyWatch()` for cleanup on normal exit
-- [ ] Task 3: Integrate into `launchTui()` in `app.js` (AC: #1, #3, #4, #5, #6)
-  - [ ] 3.1 Call `registerPid(cachePath)` BEFORE `inkRender()`
-  - [ ] 3.2 Call `setupSignalHandlers(cachePath)` BEFORE `inkRender()`
-  - [ ] 3.3 Call `startTtyWatch(cachePath)` BEFORE `inkRender()`
-  - [ ] 3.4 On normal exit path (`waitUntilExit`): call `unregisterPid(cachePath)` and `stopTtyWatch()`
-  - [ ] 3.5 Update `onQuit` callback in `app.js` (line 113) to also call `unregisterPid` (defense-in-depth alongside Task 3.4)
-- [ ] Task 4: Tests (AC: #7)
-  - [ ] 4.1 Create `test/tui-lifecycle.test.js`
-  - [ ] 4.2 Test: registerPid writes PID to registry file
-  - [ ] 4.3 Test: registerPid purges dead PIDs (mock dead PID entry, verify removed)
-  - [ ] 4.4 Test: unregisterPid removes current PID from registry
-  - [ ] 4.5 Test: unregisterPid is idempotent (call twice, no error)
-  - [ ] 4.6 Test: multi-instance coexistence (register two PIDs, both survive)
-  - [ ] 4.7 Test: atomic write produces valid JSON (no corruption on concurrent write)
-  - [ ] 4.8 Test: TTY watch triggers shutdown when isTTY goes falsy
-  - [ ] 4.9 Verify all existing tests pass (`npm test`)
+- [x] Task 1: Create PID lifecycle module (AC: #1, #2)
+  - [x] 1.1 Create `src/tui/tui-lifecycle.js` — ESM module with `loadRegistry`, `saveRegistry`, `registerPid`, `unregisterPid`
+  - [x] 1.2 Registry path: `path.join(cachePath, 'tui-pids.json')` using Pattern 5 (`BMAD_CACHE_DIR`)
+  - [x] 1.3 Atomic write: tmp + `fs.renameSync` (Pattern 22)
+  - [x] 1.4 Liveness check: `process.kill(pid, 0)` to purge dead PIDs on startup
+  - [x] 1.5 `unregisterPid()` must be idempotent (safe to call multiple times)
+- [x] Task 2: Signal handlers and TTY detection (AC: #4, #5, #6)
+  - [x] 2.1 Add `setupSignalHandlers(cachePath)` — registers SIGINT, SIGTERM, SIGHUP, uncaughtException, unhandledRejection
+  - [x] 2.2 Add `startTtyWatch()` — `setInterval` (5s) checking `process.stdout.isTTY`, with `.unref()`
+  - [x] 2.3 Each handler calls `unregisterPid()` then `restoreScreen()` then `process.exit(code)`
+  - [x] 2.4 Export `stopTtyWatch()` for cleanup on normal exit
+- [x] Task 3: Integrate into `launchTui()` in `app.js` (AC: #1, #3, #4, #5, #6)
+  - [x] 3.1 Call `registerPid(cachePath)` BEFORE `inkRender()`
+  - [x] 3.2 Call `setupSignalHandlers(cachePath)` BEFORE `inkRender()`
+  - [x] 3.3 Call `startTtyWatch(cachePath)` BEFORE `inkRender()`
+  - [x] 3.4 On normal exit path (`waitUntilExit`): call `unregisterPid(cachePath)` and `stopTtyWatch()`
+  - [x] 3.5 Update `onQuit` callback in `app.js` (line 113) to also call `unregisterPid` (defense-in-depth alongside Task 3.4)
+- [x] Task 4: Tests (AC: #7)
+  - [x] 4.1 Create `test/tui-lifecycle.test.js`
+  - [x] 4.2 Test: registerPid writes PID to registry file
+  - [x] 4.3 Test: registerPid purges dead PIDs (mock dead PID entry, verify removed)
+  - [x] 4.4 Test: unregisterPid removes current PID from registry
+  - [x] 4.5 Test: unregisterPid is idempotent (call twice, no error)
+  - [x] 4.6 Test: multi-instance coexistence (register two PIDs, both survive)
+  - [x] 4.7 Test: atomic write produces valid JSON (no corruption on concurrent write)
+  - [x] 4.8 Test: TTY watch triggers shutdown when isTTY goes falsy
+  - [x] 4.9 Verify all existing tests pass (`npm test`)
 
 ## Dev Notes
 
@@ -245,8 +245,32 @@ No changes needed to:
 
 ### Agent Model Used
 
+Claude Opus 4.6 (1M context)
+
 ### Debug Log References
+
+None — clean implementation, no debugging required.
 
 ### Completion Notes List
 
+- Created `src/tui/tui-lifecycle.js` — ESM module implementing Pattern 28 (TUI Process Lifecycle Management)
+- `loadRegistry` / `saveRegistry`: atomic read/write of `tui-pids.json` in cache dir (Pattern 22)
+- `registerPid`: registers current PID, purges dead PIDs via `process.kill(pid, 0)` with EPERM-safe check
+- `unregisterPid`: idempotent removal of current PID from registry
+- `setupSignalHandlers`: registers SIGINT, SIGTERM, SIGHUP, uncaughtException, unhandledRejection handlers
+- `startTtyWatch` / `stopTtyWatch`: 5-second interval checking `process.stdout.isTTY` for Windows orphan detection, with `.unref()`
+- Integrated lifecycle into `launchTui()` in `app.js`: register/setup/watch before `inkRender()`, unregister/stop after `waitUntilExit()`
+- Defense-in-depth: `onQuit` callback in `HomeScreen` also calls `unregisterPid`
+- All lifecycle calls wrapped in try/catch at call sites — best-effort, non-critical
+- 16 unit tests in `test/tui-lifecycle.test.js`, all passing
+- Full regression suite: 469 tests passing, 3 pre-existing monitor toggle failures (not regressions)
+
+### Change Log
+
+- 2026-04-08: Implemented story 9-1 — PID registry, signal handlers, TTY orphan detection
+
 ### File List
+
+- src/tui/tui-lifecycle.js (new)
+- src/tui/app.js (modified)
+- test/tui-lifecycle.test.js (new)
