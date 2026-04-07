@@ -149,6 +149,6 @@ development_status:
   epic-8-retrospective: optional
 
   # Epic 9: TUI Process Lifecycle — Orphan Prevention & Graceful Shutdown
-  epic-9: backlog
+  epic-9: in-progress
   9-1-tui-process-lifecycle-pid-registry-signal-handlers-tty-detection: backlog
   epic-9-retrospective: optional
