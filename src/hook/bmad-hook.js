@@ -1,4 +1,4 @@
-// bmad-hook.js — 5-signal hook entry point for passive workflow detection
+// bmad-hook.js — 8-signal hook entry point for passive workflow detection
 // CommonJS, zero dependencies, synchronous I/O only, silent always
 
 // ─── 1. Requires ───────────────────────────────────────────────────────────────
@@ -147,10 +147,16 @@ if (hookEvent === 'UserPromptSubmit') {
   }
 } else if (hookEvent === 'Stop') {
   handleStop();
+} else if (hookEvent === 'StopFailure') {
+  handleStopFailure();
 } else if (hookEvent === 'Notification') {
   handleNotification();
+} else if (hookEvent === 'PermissionRequest') {
+  handlePermissionRequest();
 } else if (hookEvent === 'SessionStart') {
   // no-op — alive already touched
+} else if (hookEvent === 'SessionEnd') {
+  handleSessionEnd();
 }
 
 process.exit(0);
@@ -195,6 +201,7 @@ function handleUserPrompt() {
   const now = new Date().toISOString();
   status.llm_state = 'active';
   status.llm_state_since = now;
+  status.error_type = null;
   status.session_id = sessionId;
   status.skill = skillName;
   status.workflow = workflowName;
@@ -213,6 +220,7 @@ function handleRead() {
   const normCwd = normalize(cwd);
   const inProject = normPath.toLowerCase().startsWith(normCwd.toLowerCase() + '/');
   const status = readStatus(sessionId);
+  status.error_type = null;
 
   // File tracking: project-relative (strip project folder prefix) or full path
   let displayPath = inProject ? normPath.slice(normCwd.length + 1) : normPath;
@@ -384,6 +392,7 @@ function handleWrite() {
   const normCwd = normalize(cwd);
   const inProject = normPath.toLowerCase().startsWith(normCwd.toLowerCase() + '/');
   const status = readStatus(sessionId);
+  status.error_type = null;
 
   // File tracking: project-relative (strip project folder prefix) or full path
   let displayPath = inProject ? normPath.slice(normCwd.length + 1) : normPath;
@@ -477,6 +486,7 @@ function handleEdit() {
   const normCwd = normalize(cwd);
   const inProject = normPath.toLowerCase().startsWith(normCwd.toLowerCase() + '/');
   const status = readStatus(sessionId);
+  status.error_type = null;
 
   // File tracking: project-relative (strip project folder prefix) or full path
   let displayPath = inProject ? normPath.slice(normCwd.length + 1) : normPath;
@@ -547,6 +557,7 @@ function handleBash() {
   if (!command || typeof command !== 'string') return;
 
   const status = readStatus(sessionId);
+  status.error_type = null;
   const now = new Date().toISOString();
 
   if (!Array.isArray(status.commands)) status.commands = [];
@@ -565,6 +576,7 @@ function handleBash() {
 // ─── 12. handleStop (waiting state) ─────────────────────────────────────────
 function handleStop() {
   const status = readStatus(sessionId);
+  status.error_type = null;
   const now = new Date().toISOString();
 
   status.llm_state = 'waiting';
@@ -582,8 +594,40 @@ function handleNotification() {
 
   status.llm_state = 'permission';
   status.llm_state_since = now;
+  status.error_type = null;
   status.session_id = sessionId;
   writeStatus(sessionId, status);
+}
+
+// ─── 14. handlePermissionRequest (direct permission signal) ─────────────────
+function handlePermissionRequest() {
+  const status = readStatus(sessionId);
+  const now = new Date().toISOString();
+
+  status.llm_state = 'permission';
+  status.llm_state_since = now;
+  status.error_type = null;
+  status.session_id = sessionId;
+  writeStatus(sessionId, status);
+}
+
+// ─── 15. handleStopFailure (error state) ────────────────────────────────────
+function handleStopFailure() {
+  const status = readStatus(sessionId);
+  const now = new Date().toISOString();
+
+  status.llm_state = 'error';
+  status.error_type = payload.error_type ?? 'unknown';
+  status.llm_state_since = now;
+  status.session_id = sessionId;
+  writeStatus(sessionId, status);
+}
+
+// ─── 16. handleSessionEnd (session cleanup) ─────────────────────────────────
+function handleSessionEnd() {
+  if (!isSafeId(sessionId)) return;
+  try { fs.unlinkSync(path.join(CACHE_DIR, '.alive-' + sessionId)); } catch {}
+  try { fs.unlinkSync(path.join(CACHE_DIR, 'status-' + sessionId + '.json')); } catch {}
 }
 
 // ─── Document name + step enrichment helper ─────────────────────────────────
@@ -696,12 +740,15 @@ function readStatus(sid) {
     last_read: null, last_write: null, last_write_op: null, document_name: null,
     started_at: null, updated_at: null,
     llm_state: null, llm_state_since: null,
+    error_type: null,
     reads: [], writes: [], commands: []
   };
   try {
     const fp = path.join(CACHE_DIR, 'status-' + sid + '.json');
     const raw = fs.readFileSync(fp, 'utf8');
-    return JSON.parse(raw);
+    const status = JSON.parse(raw);
+    status.error_type = status.error_type ?? null;
+    return status;
   } catch (e) {
     return {
       session_id: sid,
@@ -727,6 +774,7 @@ function readStatus(sid) {
       updated_at: null,
       llm_state: null,
       llm_state_since: null,
+      error_type: null,
       reads: [],
       writes: [],
       commands: []
