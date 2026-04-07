@@ -617,7 +617,7 @@ function handleStopFailure() {
   const now = new Date().toISOString();
 
   status.llm_state = 'error';
-  status.error_type = payload.error_type || 'unknown';
+  status.error_type = payload.error_type ?? 'unknown';
   status.llm_state_since = now;
   status.session_id = sessionId;
   writeStatus(sessionId, status);
@@ -747,7 +747,7 @@ function readStatus(sid) {
     const fp = path.join(CACHE_DIR, 'status-' + sid + '.json');
     const raw = fs.readFileSync(fp, 'utf8');
     const status = JSON.parse(raw);
-    status.error_type = status.error_type || null;
+    status.error_type = status.error_type ?? null;
     return status;
   } catch (e) {
     return {

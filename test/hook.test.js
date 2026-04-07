@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const HOOK_PATH = path.resolve(__dirname, '..', 'src', 'hook', 'bmad-hook.js');
 
-describe('hook — 5-signal passive detection', () => {
+describe('hook — 8-signal passive detection', () => {
   let tmpDir;
   let cacheDir;
 
@@ -1731,6 +1731,42 @@ describe('hook — 5-signal passive detection', () => {
     const fp = path.join(tmpDir, 'src', 'index.js').replace(/\\/g, '/');
     execHook(makeReadPayload('et-read', fp));
     assert.equal(readStatusFile('et-read').error_type, null);
+  });
+
+  it('8.1 AC#4: error_type cleared on Write (PostToolUse)', () => {
+    seedStatus('et-write', { session_id: 'et-write', project: 'TestProject', skill: 'bmad-dev-story', workflow: 'dev-story', llm_state: 'error', error_type: 'rate_limit', writes: [] });
+    const fp = path.join(tmpDir, 'src', 'index.js').replace(/\\/g, '/');
+    execHook(makeWritePayload('et-write', fp, 'content'));
+    assert.equal(readStatusFile('et-write').error_type, null);
+  });
+
+  it('8.1 AC#4: error_type cleared on Edit (PostToolUse)', () => {
+    seedStatus('et-edit', { session_id: 'et-edit', project: 'TestProject', skill: 'bmad-dev-story', workflow: 'dev-story', llm_state: 'error', error_type: 'rate_limit', writes: [] });
+    const fp = path.join(tmpDir, 'src', 'index.js').replace(/\\/g, '/');
+    execHook(makeEditPayload('et-edit', fp, 'old', 'new'));
+    assert.equal(readStatusFile('et-edit').error_type, null);
+  });
+
+  it('8.1 AC#4: error_type cleared on Bash (PostToolUse)', () => {
+    seedStatus('et-bash', { session_id: 'et-bash', project: 'TestProject', llm_state: 'error', error_type: 'server_error', commands: [] });
+    execHook({ session_id: 'et-bash', cwd: tmpDir, hook_event_name: 'PostToolUse', tool_name: 'Bash', tool_input: { command: 'echo hello' } });
+    assert.equal(readStatusFile('et-bash').error_type, null);
+  });
+
+  it('8.1 AC#4: error_type cleared on Notification', () => {
+    seedStatus('et-notif', { session_id: 'et-notif', project: 'TestProject', llm_state: 'error', error_type: 'rate_limit' });
+    execHook({ session_id: 'et-notif', cwd: tmpDir, hook_event_name: 'Notification', notification: { type: 'permission' } });
+    const status = readStatusFile('et-notif');
+    assert.equal(status.error_type, null);
+    assert.equal(status.llm_state, 'permission');
+  });
+
+  it('8.1 AC#4: error_type cleared on PermissionRequest', () => {
+    seedStatus('et-perm', { session_id: 'et-perm', project: 'TestProject', llm_state: 'error', error_type: 'billing_error' });
+    execHook(makePermissionRequestPayload('et-perm'));
+    const status = readStatusFile('et-perm');
+    assert.equal(status.error_type, null);
+    assert.equal(status.llm_state, 'permission');
   });
 
   // ─── 8.1: readStatus defaults ─────────────────────────────────────────────
