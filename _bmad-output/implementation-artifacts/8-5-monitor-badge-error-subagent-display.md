@@ -1,6 +1,6 @@
 # Story 8.5: Monitor Badge — Error & Subagent Display
 
-Status: review
+Status: done
 
 ## Story
 
@@ -35,6 +35,14 @@ so that I can immediately see when a session has an error condition or is runnin
 - [x] Task 4: Verify no regressions (AC: 5, 6)
   - [x] 4.1 Run full test suite: `node --test test/tui-monitor-components.test.js test/tui-monitor.test.js`
   - [x] 4.2 Verify worstState tests still pass — error, permission, active:subagent priority resolution confirmed
+
+### Review Findings
+
+- [x] [Review][Decision] SessionTabs error icon `'red'` vs `'redBright'` — Resolved: technical. AC3 says "red-colored" (satisfied by `'red'`). Pre-existing permission pattern uses `'yellow'` not `'yellowBright'`. No change needed.
+- [x] [Review][Defer] error/permission priority tie in LLM_STATE_PRIORITY (both=3) — deferred, pre-existing
+- [x] [Review][Defer] active/active:subagent priority tie in LLM_STATE_PRIORITY (both=1) — deferred, pre-existing
+- [x] [Review][Defer] error state suppressed to inactive after 5min computeDisplayState timeout — deferred, pre-existing
+- [x] [Review][Defer] permission color inconsistency yellowBright/yellow between LlmBadge/SessionTabs — deferred, pre-existing
 
 ## Dev Notes
 
