@@ -7,10 +7,12 @@ import { resolveProjectColor, resolveSessionColor, worstState, computeDisplaySta
 const e = React.createElement;
 
 const STATE_ICONS = {
-  active:     { icon: '\u2B24', color: 'green' },
-  permission: { icon: '\u2B24', color: 'yellow' },
-  waiting:    { icon: '\u2B24', color: 'blueBright' },
-  inactive:   { icon: '\u2B24', color: 'grey' },
+  active:            { icon: '\u2B24', color: 'green' },
+  permission:        { icon: '\u2B24', color: 'yellow' },
+  waiting:           { icon: '\u2B24', color: 'blueBright' },
+  error:             { icon: '\u2B24', color: 'red' },
+  inactive:          { icon: '\u2B24', color: 'grey' },
+  'active:subagent': { icon: '\u2B24', color: 'cyan' },
 };
 
 function SessionTabs({ groups, activeProject, activeSessionIndex, config, mode, reorderTarget, reorderCursor, reorderGrabbed }) {

@@ -179,6 +179,13 @@
 - **MonitorDetailScreen scrollOffset not clamped** — Unlike MonitorScreen which has an explicit clamp effect, MonitorDetailScreen does not clamp scrollOffset when contentItems shrinks (e.g., sort toggle changes entry count). The `above` indicator can show a stale count. Fix: add a useEffect clamp similar to MonitorScreen lines 218-221.
 - **MonitorDetailScreen empty contentItems collapses viewport** — When no entries exist for a detail view, contentItems is empty and the viewport early-returns a zero-height Box (bypassing the fixed-height layout). MonitorScreen guards against this (line 430), but MonitorDetailScreen always renders the viewport. Fix: guard or ensure minimum content.
 
+## Deferred from: code review of 8-5-monitor-badge-error-subagent-display (2026-04-07)
+
+- **error/permission priority tie in LLM_STATE_PRIORITY** — Both `error` and `permission` have priority `3`. When a project has sessions in both states, `worstState` returns whichever appears first. Pre-existing from story 8.4.
+- **active/active:subagent priority tie in LLM_STATE_PRIORITY** — Both have priority `1`. A project with `active` and `active:subagent` sessions shows `active` (green) at project level, masking subagent (cyan). Pre-existing from story 8.4.
+- **error state suppressed to inactive after 5min timeout** — `computeDisplayState` returns `inactive` for any state after `INACTIVE_TIMEOUT_MS` (5min) without `updated_at` refresh. Pre-existing behavior for all states.
+- **permission color inconsistency yellowBright/yellow between LlmBadge/SessionTabs** — LlmBadge uses `bgColor: 'yellowBright'`, SessionTabs uses `color: 'yellow'`. Pre-existing inconsistency.
+
 ## Deferred from: code review of 8-4-shared-constants-reader-new-llm-state-support (2026-04-07)
 
 - **`computeDisplayState` timeout converts `active:subagent` to `inactive` for long-running subagents** — The 5-minute `INACTIVE_TIMEOUT_MS` in `computeDisplayState()` applies to all states including `active:subagent`. A subagent running without frequent `updated_at` refreshes will silently appear as INACTIVE. Pre-existing behavior (spec forbids modifying `computeDisplayState()`). Consider adding subagent-specific freshness logic or heartbeat in a future story.
