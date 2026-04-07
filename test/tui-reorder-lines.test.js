@@ -40,7 +40,9 @@ describe('ReorderLinesScreen', () => {
   });
 
   test('renders empty lines as (empty)', () => {
-    const { lastFrame } = render(e(ReorderLinesScreen, makeScreenProps()));
+    const config = createDefaultConfig();
+    config.lines[2] = { widgets: [], widgetOrder: [], colorModes: {} };
+    const { lastFrame } = render(e(ReorderLinesScreen, makeScreenProps({ config })));
     const frame = lastFrame();
     assert.ok(frame.includes('(empty)'), 'empty line shown');
   });

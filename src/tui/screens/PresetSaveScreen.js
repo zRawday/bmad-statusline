@@ -5,7 +5,7 @@ import { Box, Text, useInput } from 'ink';
 import { TextInput } from '@inkjs/ui';
 import { ScreenLayout } from '../components/ScreenLayout.js';
 import { ConfirmDialog } from '../components/ConfirmDialog.js';
-import { getIndividualWidgets } from '../widget-registry.js';
+import { getPresetSlotData } from '../preview-utils.js';
 
 const e = React.createElement;
 
@@ -14,19 +14,6 @@ const SHORTCUTS = [
   { key: 'Enter', label: 'Save here' },
   { key: 'Esc', label: 'Back' },
 ];
-
-function getPresetSlotData(preset) {
-  if (!preset || !preset.lines) return { isEmpty: true, name: null, lineSummaries: [] };
-  const allWidgets = getIndividualWidgets();
-  const lineSummaries = preset.lines.map(line => {
-    const names = (line.widgets || []).map(id => {
-      const w = allWidgets.find(wd => wd.id === id);
-      return w ? w.name : id;
-    });
-    return names;
-  });
-  return { isEmpty: false, name: preset.name, lineSummaries };
-}
 
 function renderSlot(slotIndex, slotData, isCursor) {
   const prefix = isCursor ? '> ' : '  ';

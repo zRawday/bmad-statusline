@@ -6,6 +6,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import React from 'react';
+import { Text } from 'ink';
 import { render } from 'ink-testing-library';
 import {
   pollSessions, filterReadOnly, deduplicateCommands,
@@ -16,6 +17,7 @@ import {
 } from '../src/tui/monitor/monitor-utils.js';
 import { MonitorScreen } from '../src/tui/monitor/MonitorScreen.js';
 import { renderBashSection } from '../src/tui/monitor/components/BashSection.js';
+import ScrollableViewport from '../src/tui/monitor/components/ScrollableViewport.js';
 
 const e = React.createElement;
 const delay = (ms) => new Promise(r => setTimeout(r, ms));
@@ -1033,5 +1035,40 @@ describe('MonitorScreen — scroll offset clamping', () => {
     } finally {
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }
+  });
+});
+
+describe('ScrollableViewport — content correctness after scroll', () => {
+  test('scroll down 1 shows correct content slice and indicators', async () => {
+    const items = [];
+    for (let i = 0; i < 10; i++) {
+      items.push(e(Text, { key: `item-${i}` }, `LINE-${i}`));
+    }
+    const viewportHeight = 5;
+
+    // Render at offset 0
+    const { lastFrame: frame0, unmount: u0 } = render(
+      e(ScrollableViewport, { items, height: viewportHeight, scrollOffset: 0 }),
+    );
+    const out0 = frame0();
+    for (let i = 0; i < 5; i++) {
+      assert.ok(out0.includes(`LINE-${i}`), `offset=0 should show LINE-${i}`);
+    }
+    assert.ok(!out0.includes('LINE-5'), 'offset=0 should not show LINE-5');
+    assert.ok(out0.includes('5 more'), 'should show 5 more below');
+    u0();
+
+    // Render at offset 1
+    const { lastFrame: frame1, unmount: u1 } = render(
+      e(ScrollableViewport, { items, height: viewportHeight, scrollOffset: 1 }),
+    );
+    const out1 = frame1();
+    assert.ok(!out1.includes('LINE-0'), 'offset=1 should not show LINE-0');
+    for (let i = 1; i <= 5; i++) {
+      assert.ok(out1.includes(`LINE-${i}`), `offset=1 should show LINE-${i}`);
+    }
+    assert.ok(out1.includes('1 more'), 'should show 1 more above');
+    assert.ok(out1.includes('4 more'), 'should show 4 more below');
+    u1();
   });
 });

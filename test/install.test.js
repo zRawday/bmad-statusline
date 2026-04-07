@@ -259,44 +259,71 @@ describe('Target 4: cache directory', () => {
 // --- Target 5: ~/.claude/settings.json hooks ---
 
 describe('Target 5: hook config injection', () => {
-  it('injects 5 matchers across 3 event types when hooks absent', () => {
+  it('injects 16 matchers across 13 event types when hooks absent (Rev.5)', () => {
     const { baseDir, paths } = setup();
     try {
       copyFixture('claude-settings-empty.json', paths.claudeSettings);
       captureOutput(() => install(paths));
       const config = JSON.parse(fs.readFileSync(paths.claudeSettings, 'utf8'));
       assert.ok(config.hooks, 'hooks key should exist');
-      // UserPromptSubmit
-      assert.ok(Array.isArray(config.hooks.UserPromptSubmit), 'UserPromptSubmit should be array');
+      // 13 event types
+      const eventTypes = Object.keys(config.hooks);
+      assert.equal(eventTypes.length, 13, 'should have 13 event types');
+      // UserPromptSubmit — regex
       assert.equal(config.hooks.UserPromptSubmit.length, 1);
       assert.equal(config.hooks.UserPromptSubmit[0].matcher, '(?:bmad|gds|wds)[:-]');
-      // PostToolUse
-      assert.ok(Array.isArray(config.hooks.PostToolUse), 'PostToolUse should be array');
-      assert.equal(config.hooks.PostToolUse.length, 3, 'should have 3 PostToolUse matchers');
-      assert.deepEqual(config.hooks.PostToolUse.map(e => e.matcher), ['Read', 'Write', 'Edit']);
-      // SessionStart
-      assert.ok(Array.isArray(config.hooks.SessionStart), 'SessionStart should be array');
+      // PreToolUse — single wildcard
+      assert.equal(config.hooks.PreToolUse.length, 1, 'PreToolUse: 1 wildcard matcher');
+      assert.equal(config.hooks.PreToolUse[0].matcher, '');
+      // PostToolUse — 4 tool-specific
+      assert.equal(config.hooks.PostToolUse.length, 4);
+      assert.deepEqual(config.hooks.PostToolUse.map(e => e.matcher), ['Read', 'Write', 'Edit', 'Bash']);
+      // 7 new event types — wildcard
+      for (const evt of ['PermissionRequest', 'PermissionDenied', 'PostToolUseFailure', 'StopFailure', 'SubagentStart', 'SubagentStop', 'SessionEnd']) {
+        assert.ok(Array.isArray(config.hooks[evt]), `${evt} should be array`);
+        assert.equal(config.hooks[evt].length, 1, `${evt}: 1 matcher`);
+        assert.equal(config.hooks[evt][0].matcher, '', `${evt} should have wildcard matcher`);
+      }
+      // Existing event types
+      assert.equal(config.hooks.Stop.length, 1);
+      assert.equal(config.hooks.Stop[0].matcher, '');
+      assert.equal(config.hooks.Notification.length, 1);
+      assert.equal(config.hooks.Notification[0].matcher, '');
       assert.equal(config.hooks.SessionStart.length, 1);
       assert.equal(config.hooks.SessionStart[0].matcher, 'resume');
       // All commands reference bmad-hook.js
-      for (const event of ['UserPromptSubmit', 'PostToolUse', 'SessionStart']) {
+      for (const event of eventTypes) {
         for (const entry of config.hooks[event]) {
           assert.ok(entry.hooks[0].command.includes('bmad-hook.js'), `${event} command should reference bmad-hook.js`);
         }
       }
+      // Total: 16 matchers
+      const total = Object.values(config.hooks).reduce((sum, arr) => sum + arr.length, 0);
+      assert.equal(total, 16, 'total matchers should be 16');
     } finally { teardown(baseDir); }
   });
 
-  it('skips when all 5 bmad-hook matchers already present', () => {
+  it('upgrades Phase 3 hooks (5 matchers) to Rev.5 (adds new event types)', () => {
     const { baseDir, paths } = setup();
     try {
       copyFixture('claude-settings-with-hooks.json', paths.claudeSettings);
       const output = captureOutput(() => install(paths));
-      assert.ok(output.includes('hook config already present'), 'should log skipped');
+      assert.ok(output.includes('hook config injected'), 'should log injected for upgrade');
       const config = JSON.parse(fs.readFileSync(paths.claudeSettings, 'utf8'));
-      assert.equal(config.hooks.PostToolUse.length, 3, 'should still have exactly 3 PostToolUse matchers');
+      // PreToolUse: wildcard added alongside existing specific matchers
+      assert.ok(config.hooks.PreToolUse.length >= 1, 'PreToolUse has matchers');
+      assert.ok(config.hooks.PreToolUse.some(e => e.matcher === ''), 'PreToolUse wildcard added');
+      // PostToolUse upgraded
+      assert.equal(config.hooks.PostToolUse.length, 4, 'PostToolUse upgraded to 4 matchers');
       assert.equal(config.hooks.UserPromptSubmit.length, 1);
+      assert.equal(config.hooks.Stop.length, 1, 'Stop added');
+      assert.equal(config.hooks.Notification.length, 1, 'Notification added');
       assert.equal(config.hooks.SessionStart.length, 1);
+      // 7 new Rev.5 event types
+      for (const evt of ['PermissionRequest', 'PermissionDenied', 'PostToolUseFailure', 'StopFailure', 'SubagentStart', 'SubagentStop', 'SessionEnd']) {
+        assert.ok(Array.isArray(config.hooks[evt]), `${evt} should be added`);
+        assert.equal(config.hooks[evt].length, 1, `${evt}: 1 matcher`);
+      }
     } finally { teardown(baseDir); }
   });
 
@@ -315,13 +342,17 @@ describe('Target 5: hook config injection', () => {
       fs.writeFileSync(paths.claudeSettings, JSON.stringify(existing, null, 2) + '\n');
       captureOutput(() => install(paths));
       const config = JSON.parse(fs.readFileSync(paths.claudeSettings, 'utf8'));
-      // 1 existing non-bmad + 3 bmad (Read, Write, Edit)
-      assert.equal(config.hooks.PostToolUse.length, 4, 'should have 4 entries (1 non-bmad + 3 bmad)');
+      // 1 existing non-bmad + 4 bmad (Read, Write, Edit, Bash)
+      assert.equal(config.hooks.PostToolUse.length, 5, 'should have 5 entries (1 non-bmad + 4 bmad)');
       assert.equal(config.hooks.PostToolUse[0].matcher, 'Write', 'existing non-bmad hook preserved at index 0');
       assert.ok(config.hooks.PostToolUse[0].hooks[0].command.includes('other-tool.js'), 'non-bmad command preserved');
       // UserPromptSubmit and SessionStart created
       assert.equal(config.hooks.UserPromptSubmit.length, 1);
       assert.equal(config.hooks.SessionStart.length, 1);
+      // Rev.5 event types also created
+      for (const evt of ['PermissionRequest', 'PermissionDenied', 'PostToolUseFailure', 'StopFailure', 'SubagentStart', 'SubagentStop', 'SessionEnd']) {
+        assert.ok(Array.isArray(config.hooks[evt]), `${evt} should be created`);
+      }
     } finally { teardown(baseDir); }
   });
 
@@ -338,12 +369,18 @@ describe('Target 5: hook config injection', () => {
       assert.ok(config.statusLine, 'statusLine preserved');
       assert.ok(config.hooks, 'hooks key created');
       assert.equal(config.hooks.UserPromptSubmit.length, 1, '1 UserPromptSubmit matcher');
-      assert.equal(config.hooks.PostToolUse.length, 3, '3 PostToolUse matchers');
+      assert.equal(config.hooks.PreToolUse.length, 1, '1 PreToolUse wildcard matcher');
+      assert.equal(config.hooks.PostToolUse.length, 4, '4 PostToolUse matchers');
+      assert.equal(config.hooks.Stop.length, 1, '1 Stop matcher');
+      assert.equal(config.hooks.Notification.length, 1, '1 Notification matcher');
       assert.equal(config.hooks.SessionStart.length, 1, '1 SessionStart matcher');
+      // Rev.5 event types
+      const total = Object.values(config.hooks).reduce((sum, arr) => sum + arr.length, 0);
+      assert.equal(total, 16, '16 total matchers');
     } finally { teardown(baseDir); }
   });
 
-  it('upgrades from Phase 2: removes Skill, keeps Read, adds Write/Edit/UserPromptSubmit/SessionStart', () => {
+  it('upgrades from Phase 2: removes Skill, keeps Read, adds all Rev.5 matchers', () => {
     const { baseDir, paths } = setup();
     try {
       copyFixture('claude-settings-with-hooks-phase2.json', paths.claudeSettings);
@@ -355,12 +392,22 @@ describe('Target 5: hook config injection', () => {
       assert.ok(ptuMatchers.includes('Read'), 'Read matcher should be kept');
       assert.ok(ptuMatchers.includes('Write'), 'Write matcher should be added');
       assert.ok(ptuMatchers.includes('Edit'), 'Edit matcher should be added');
-      assert.equal(config.hooks.PostToolUse.length, 3, 'should have 3 PostToolUse matchers');
-      // UserPromptSubmit and SessionStart added
+      assert.ok(ptuMatchers.includes('Bash'), 'Bash matcher should be added');
+      assert.equal(config.hooks.PostToolUse.length, 4, 'should have 4 PostToolUse matchers');
+      // UserPromptSubmit, Stop, Notification, SessionStart added
       assert.equal(config.hooks.UserPromptSubmit.length, 1);
       assert.equal(config.hooks.UserPromptSubmit[0].matcher, '(?:bmad|gds|wds)[:-]');
+      assert.equal(config.hooks.Stop.length, 1, 'Stop matcher added');
+      assert.equal(config.hooks.Notification.length, 1, 'Notification matcher added');
       assert.equal(config.hooks.SessionStart.length, 1);
       assert.equal(config.hooks.SessionStart[0].matcher, 'resume');
+      // PreToolUse wildcard added
+      assert.ok(config.hooks.PreToolUse.some(e => e.matcher === ''), 'PreToolUse wildcard added');
+      // Rev.5 event types
+      for (const evt of ['PermissionRequest', 'PermissionDenied', 'PostToolUseFailure', 'StopFailure', 'SubagentStart', 'SubagentStop', 'SessionEnd']) {
+        assert.ok(Array.isArray(config.hooks[evt]), `${evt} should be added`);
+        assert.equal(config.hooks[evt].length, 1, `${evt}: 1 matcher`);
+      }
     } finally { teardown(baseDir); }
   });
 
@@ -382,9 +429,101 @@ describe('Target 5: hook config injection', () => {
       const output = captureOutput(() => install(paths));
       assert.ok(output.includes('hook config injected'), 'should inject missing event types');
       const config = JSON.parse(fs.readFileSync(paths.claudeSettings, 'utf8'));
-      assert.equal(config.hooks.PostToolUse.length, 3, 'PostToolUse unchanged');
+      assert.equal(config.hooks.PostToolUse.length, 4, 'PostToolUse: Bash added');
       assert.equal(config.hooks.UserPromptSubmit.length, 1, 'UserPromptSubmit added');
+      assert.equal(config.hooks.PreToolUse.length, 1, 'PreToolUse wildcard added');
+      assert.equal(config.hooks.Stop.length, 1, 'Stop added');
+      assert.equal(config.hooks.Notification.length, 1, 'Notification added');
       assert.equal(config.hooks.SessionStart.length, 1, 'SessionStart added');
+      // Rev.5 event types
+      for (const evt of ['PermissionRequest', 'PermissionDenied', 'PostToolUseFailure', 'StopFailure', 'SubagentStart', 'SubagentStop', 'SessionEnd']) {
+        assert.ok(Array.isArray(config.hooks[evt]), `${evt} should be added`);
+      }
+    } finally { teardown(baseDir); }
+  });
+
+  it('Phase 3→Rev.5 upgrade adds PreToolUse wildcard, 7 new event types', () => {
+    const { baseDir, paths } = setup();
+    try {
+      copyFixture('claude-settings-with-hooks.json', paths.claudeSettings);
+      captureOutput(() => install(paths));
+      const config = JSON.parse(fs.readFileSync(paths.claudeSettings, 'utf8'));
+      // PreToolUse: wildcard added
+      assert.ok(Array.isArray(config.hooks.PreToolUse), 'PreToolUse should be array');
+      assert.ok(config.hooks.PreToolUse.some(e => e.matcher === ''), 'PreToolUse wildcard added');
+      // PostToolUse: Read/Write/Edit preserved + Bash added
+      assert.equal(config.hooks.PostToolUse.length, 4, 'PostToolUse should have 4 matchers');
+      assert.deepEqual(config.hooks.PostToolUse.map(e => e.matcher), ['Read', 'Write', 'Edit', 'Bash']);
+      // Stop: new event type
+      assert.ok(Array.isArray(config.hooks.Stop), 'Stop should be array');
+      assert.equal(config.hooks.Stop.length, 1);
+      assert.equal(config.hooks.Stop[0].matcher, '');
+      // Notification: new event type
+      assert.ok(Array.isArray(config.hooks.Notification), 'Notification should be array');
+      assert.equal(config.hooks.Notification.length, 1);
+      assert.equal(config.hooks.Notification[0].matcher, '');
+      // UserPromptSubmit and SessionStart unchanged
+      assert.equal(config.hooks.UserPromptSubmit.length, 1, 'UserPromptSubmit unchanged');
+      assert.equal(config.hooks.SessionStart.length, 1, 'SessionStart unchanged');
+      // 7 new Rev.5 event types
+      for (const evt of ['PermissionRequest', 'PermissionDenied', 'PostToolUseFailure', 'StopFailure', 'SubagentStart', 'SubagentStop', 'SessionEnd']) {
+        assert.ok(Array.isArray(config.hooks[evt]), `${evt} should be added`);
+        assert.equal(config.hooks[evt].length, 1, `${evt}: 1 matcher`);
+        assert.equal(config.hooks[evt][0].matcher, '', `${evt} should have wildcard matcher`);
+      }
+      // Total: 16 matchers after upgrade
+      const total = Object.values(config.hooks).reduce((sum, arr) => sum + arr.length, 0);
+      assert.equal(total, 16, '16 total matchers after Phase 3 upgrade');
+    } finally { teardown(baseDir); }
+  });
+
+  it('Rev.4→Rev.5 upgrade adds 7 new event types, preserves existing matchers', () => {
+    const { baseDir, paths } = setup();
+    try {
+      copyFixture('claude-settings-with-hooks-phase4.json', paths.claudeSettings);
+      const output = captureOutput(() => install(paths));
+      assert.ok(output.includes('hook config injected'), 'should log injected for upgrade');
+      const config = JSON.parse(fs.readFileSync(paths.claudeSettings, 'utf8'));
+      // Existing Rev.4 matchers preserved
+      assert.equal(config.hooks.UserPromptSubmit.length, 1, 'UserPromptSubmit preserved');
+      assert.equal(config.hooks.UserPromptSubmit[0].matcher, '(?:bmad|gds|wds)[:-]', 'UserPromptSubmit matcher preserved');
+      // PreToolUse: existing 4 specific + 1 new wildcard = 5
+      assert.equal(config.hooks.PreToolUse.length, 5, 'PreToolUse: 4 existing + 1 wildcard');
+      assert.ok(config.hooks.PreToolUse.some(e => e.matcher === ''), 'PreToolUse wildcard added');
+      assert.ok(config.hooks.PreToolUse.some(e => e.matcher === 'Read'), 'PreToolUse Read preserved');
+      // PostToolUse unchanged
+      assert.equal(config.hooks.PostToolUse.length, 4, 'PostToolUse still 4');
+      assert.equal(config.hooks.Stop.length, 1, 'Stop preserved');
+      assert.equal(config.hooks.Notification.length, 1, 'Notification preserved');
+      assert.equal(config.hooks.SessionStart.length, 1, 'SessionStart preserved');
+      // 7 new Rev.5 event types added
+      for (const evt of ['PermissionRequest', 'PermissionDenied', 'PostToolUseFailure', 'StopFailure', 'SubagentStart', 'SubagentStop', 'SessionEnd']) {
+        assert.ok(Array.isArray(config.hooks[evt]), `${evt} should be added`);
+        assert.equal(config.hooks[evt].length, 1, `${evt}: 1 matcher`);
+        assert.equal(config.hooks[evt][0].matcher, '', `${evt} wildcard matcher`);
+      }
+    } finally { teardown(baseDir); }
+  });
+
+  it('Rev.5 idempotent — no changes when all 16 matchers present', () => {
+    const { baseDir, paths } = setup();
+    try {
+      copyFixture('claude-settings-with-hooks-phase5.json', paths.claudeSettings);
+      const output = captureOutput(() => install(paths));
+      assert.ok(output.includes('hook config already present'), 'should log skipped');
+      const config = JSON.parse(fs.readFileSync(paths.claudeSettings, 'utf8'));
+      // All counts unchanged
+      assert.equal(config.hooks.UserPromptSubmit.length, 1, 'UserPromptSubmit still 1');
+      assert.equal(config.hooks.PreToolUse.length, 1, 'PreToolUse still 1');
+      assert.equal(config.hooks.PostToolUse.length, 4, 'PostToolUse still 4');
+      assert.equal(config.hooks.Stop.length, 1, 'Stop still 1');
+      assert.equal(config.hooks.Notification.length, 1, 'Notification still 1');
+      assert.equal(config.hooks.SessionStart.length, 1, 'SessionStart still 1');
+      for (const evt of ['PermissionRequest', 'PermissionDenied', 'PostToolUseFailure', 'StopFailure', 'SubagentStart', 'SubagentStop', 'SessionEnd']) {
+        assert.equal(config.hooks[evt].length, 1, `${evt} still 1`);
+      }
+      const total = Object.values(config.hooks).reduce((sum, arr) => sum + arr.length, 0);
+      assert.equal(total, 16, 'total still 16');
     } finally { teardown(baseDir); }
   });
 });
@@ -441,10 +580,19 @@ describe('idempotency', () => {
         assert.equal(allBmad.length, refBmad.length, 'BMAD widget count should not grow');
       } finally { teardown(bd2); }
 
-      // Hook matchers: no duplication after 3 runs — 5 matchers across 3 event types
+      // Hook matchers: no duplication after 3 runs — 16 matchers across 13 event types
       assert.equal(claudeConfig.hooks.UserPromptSubmit.length, 1, 'UserPromptSubmit: 1 matcher after 3 runs');
-      assert.equal(claudeConfig.hooks.PostToolUse.length, 3, 'PostToolUse: 3 matchers after 3 runs');
+      assert.equal(claudeConfig.hooks.PreToolUse.length, 1, 'PreToolUse: 1 matcher after 3 runs');
+      assert.equal(claudeConfig.hooks.PostToolUse.length, 4, 'PostToolUse: 4 matchers after 3 runs');
+      assert.equal(claudeConfig.hooks.Stop.length, 1, 'Stop: 1 matcher after 3 runs');
+      assert.equal(claudeConfig.hooks.Notification.length, 1, 'Notification: 1 matcher after 3 runs');
       assert.equal(claudeConfig.hooks.SessionStart.length, 1, 'SessionStart: 1 matcher after 3 runs');
+      // Rev.5 event types: no duplication
+      for (const evt of ['PermissionRequest', 'PermissionDenied', 'PostToolUseFailure', 'StopFailure', 'SubagentStart', 'SubagentStop', 'SessionEnd']) {
+        assert.equal(claudeConfig.hooks[evt].length, 1, `${evt}: 1 matcher after 3 runs`);
+      }
+      const total = Object.values(claudeConfig.hooks).reduce((sum, arr) => sum + arr.length, 0);
+      assert.equal(total, 16, '16 total matchers after 3 runs');
     } finally { teardown(baseDir); }
   });
 });

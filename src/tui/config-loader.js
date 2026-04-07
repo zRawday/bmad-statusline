@@ -63,7 +63,8 @@ function ensureWidgetOrder(config) {
     if (!Array.isArray(line.widgetOrder)) {
       line.widgetOrder = [...line.widgets, ...allIds.filter(id => !line.widgets.includes(id))];
     } else {
-      // Add any new widgets missing from existing widgetOrder
+      // Prune stale IDs no longer in registry, then add any new widgets
+      line.widgetOrder = line.widgetOrder.filter(id => allIds.includes(id));
       for (const id of allIds) {
         if (!line.widgetOrder.includes(id)) {
           line.widgetOrder.push(id);
@@ -85,7 +86,8 @@ function isValidV2(config) {
     Array.isArray(config.lines) &&
     config.lines.length === 3 &&
     config.lines.every(line =>
-      line && typeof line === 'object' && Array.isArray(line.widgets)
+      line && typeof line === 'object' && Array.isArray(line.widgets) &&
+      line.colorModes && typeof line.colorModes === 'object'
     );
 }
 

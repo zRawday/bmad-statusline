@@ -1,8 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-
-const ALIVE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+import { ALIVE_MAX_AGE_MS } from './defaults.js';
 
 const DEFAULT_PATHS = {
   cacheDir: process.env.BMAD_CACHE_DIR || path.join(os.homedir(), '.cache', 'bmad-status'),

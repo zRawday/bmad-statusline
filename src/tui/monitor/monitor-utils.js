@@ -4,10 +4,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { getDefaultSkillColor } from '../skill-catalog.js';
 import { toInkColor } from '../preview-utils.js';
+import { ALIVE_MAX_AGE_MS, INACTIVE_TIMEOUT_MS, STORY_WORKFLOWS, PROJECT_COLOR_PALETTE, hashProjectColor, computeDisplayState, formatTimer as formatElapsed, formatStoryName } from '../../defaults.js';
+
+export { ALIVE_MAX_AGE_MS, INACTIVE_TIMEOUT_MS, STORY_WORKFLOWS, computeDisplayState, formatElapsed, formatStoryName as formatStoryTitle };
 
 export const MONITOR_STALE_MS = 2 * 60 * 1000; // 2 minutes
 export const MONITOR_IDLE_WINDOW_MS = 4 * 60 * 60 * 1000; // 4 hours — keep idle sessions visible
-export const ALIVE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 const MAX_SESSIONS = 20;
 
 function isProcessAlive(pid) {
@@ -67,17 +69,7 @@ export function groupSessionsByProject(sessions) {
   return groups;
 }
 
-// --- LLM state computation ---
-
-export const INACTIVE_TIMEOUT_MS = 5 * 60 * 1000;
-
-export function computeDisplayState(session) {
-  if (session.updated_at) {
-    const age = Date.now() - new Date(session.updated_at).getTime();
-    if (isNaN(age) || age > INACTIVE_TIMEOUT_MS) return 'inactive';
-  }
-  return session.llm_state || 'inactive';
-}
+// computeDisplayState, INACTIVE_TIMEOUT_MS imported from defaults.js
 
 const LLM_STATE_PRIORITY = { permission: 3, waiting: 2, active: 1, inactive: 0 };
 
@@ -100,19 +92,7 @@ export function resolveSessionColor(workflow, config) {
   return 'white';
 }
 
-const PROJECT_COLOR_PALETTE = [
-  'red', 'green', 'yellow', 'blue', 'magenta', 'cyan',
-  'brightRed', 'brightGreen', 'brightYellow', 'brightBlue', 'brightMagenta', 'brightCyan',
-];
-
-function hashProjectColor(name) {
-  if (!name) return null;
-  let h = 0;
-  for (let i = 0; i < name.length; i++) {
-    h = ((h << 5) - h + name.charCodeAt(i)) | 0;
-  }
-  return PROJECT_COLOR_PALETTE[Math.abs(h) % PROJECT_COLOR_PALETTE.length];
-}
+// PROJECT_COLOR_PALETTE, hashProjectColor imported from defaults.js
 
 export function resolveProjectColor(projectName, config) {
   const projectColors = config.projectColors || {};
@@ -123,7 +103,7 @@ export function resolveProjectColor(projectName, config) {
 
 // --- Story/document context helpers ---
 
-export const STORY_WORKFLOWS = ['create-story', 'dev-story', 'code-review'];
+// STORY_WORKFLOWS imported from defaults.js
 
 export function extractStoryNumber(story) {
   if (!story) return '';
@@ -131,27 +111,8 @@ export function extractStoryNumber(story) {
   return m ? m[1] : '';
 }
 
-export function formatStoryTitle(story) {
-  if (!story) return '';
-  const m = story.match(/^(\d+-\d+)-(.+)$/);
-  if (!m) return story;
-  const title = m[2].split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
-  return `${m[1]} ${title}`;
-}
-
-// --- Elapsed timer ---
-
-export function formatElapsed(startedAt) {
-  if (!startedAt) return '';
-  const ms = Date.now() - new Date(startedAt).getTime();
-  if (isNaN(ms) || ms < 0) return '';
-  const sec = Math.floor(ms / 1000);
-  if (sec < 60) return `${sec}s`;
-  const min = Math.floor(sec / 60);
-  if (min < 60) return `${min}m${String(sec % 60).padStart(2, '0')}s`;
-  const hr = Math.floor(min / 60);
-  return `${hr}h${String(min % 60).padStart(2, '0')}m`;
-}
+// formatStoryTitle (aliased from formatStoryName), formatElapsed (aliased from formatTimer)
+// imported and re-exported from defaults.js
 
 // --- File tree building (Pattern 26) ---
 

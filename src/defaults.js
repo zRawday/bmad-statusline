@@ -3,6 +3,7 @@
 import { createRequire } from 'node:module';
 const _require = createRequire(import.meta.url);
 const _wc = _require('./reader/workflow-colors.cjs');
+const _sc = _require('./reader/shared-constants.cjs');
 
 export function getStatusLineConfig() {
   return {
@@ -29,20 +30,44 @@ export function getHookConfig(hookPath) {
       UserPromptSubmit: [
         { matcher: '(?:bmad|gds|wds)[:-]', hooks: [{ type: 'command', command: cmd }] }
       ],
+      PreToolUse: [
+        { matcher: '', hooks: [{ type: 'command', command: cmd }] }
+      ],
       PostToolUse: [
         { matcher: 'Read', hooks: [{ type: 'command', command: cmd }] },
         { matcher: 'Write', hooks: [{ type: 'command', command: cmd }] },
         { matcher: 'Edit', hooks: [{ type: 'command', command: cmd }] },
         { matcher: 'Bash', hooks: [{ type: 'command', command: cmd }] }
       ],
+      PermissionRequest: [
+        { matcher: '', hooks: [{ type: 'command', command: cmd }] }
+      ],
+      PermissionDenied: [
+        { matcher: '', hooks: [{ type: 'command', command: cmd }] }
+      ],
+      PostToolUseFailure: [
+        { matcher: '', hooks: [{ type: 'command', command: cmd }] }
+      ],
       Stop: [
+        { matcher: '', hooks: [{ type: 'command', command: cmd }] }
+      ],
+      StopFailure: [
         { matcher: '', hooks: [{ type: 'command', command: cmd }] }
       ],
       Notification: [
         { matcher: '', hooks: [{ type: 'command', command: cmd }] }
       ],
+      SubagentStart: [
+        { matcher: '', hooks: [{ type: 'command', command: cmd }] }
+      ],
+      SubagentStop: [
+        { matcher: '', hooks: [{ type: 'command', command: cmd }] }
+      ],
       SessionStart: [
         { matcher: 'resume', hooks: [{ type: 'command', command: cmd }] }
+      ],
+      SessionEnd: [
+        { matcher: '', hooks: [{ type: 'command', command: cmd }] }
       ]
     }
   };
@@ -69,3 +94,15 @@ export const AGENT_COLORS = {
 
 export const WORKFLOW_COLORS = _wc.WORKFLOW_COLORS;
 export const WORKFLOW_PREFIX_COLORS = _wc.WORKFLOW_PREFIX_COLORS;
+
+// Shared constants bridged from CJS
+export const ALIVE_MAX_AGE_MS = _sc.ALIVE_MAX_AGE_MS;
+export const INACTIVE_TIMEOUT_MS = _sc.INACTIVE_TIMEOUT_MS;
+export const STORY_WORKFLOWS = _sc.STORY_WORKFLOWS;
+export const PROJECT_COLOR_PALETTE = _sc.PROJECT_COLOR_PALETTE;
+export const SEPARATOR_VALUES = _sc.SEPARATOR_VALUES;
+export const isValidSessionId = _sc.isValidSessionId;
+export const hashProjectColor = _sc.hashProjectColor;
+export const computeDisplayState = _sc.computeDisplayState;
+export const formatTimer = _sc.formatTimer;
+export const formatStoryName = _sc.formatStoryName;

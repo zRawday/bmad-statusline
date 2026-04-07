@@ -181,20 +181,29 @@ describe('hook — 8-signal passive detection', () => {
     };
   }
 
-  function makeStopPayload(sessionId) {
-    return { session_id: sessionId, cwd: tmpDir, hook_event_name: 'Stop' };
-  }
-
   function makePermissionRequestPayload(sessionId) {
-    return { hook_event_name: 'PermissionRequest', session_id: sessionId, cwd: tmpDir };
+    return {
+      hook_event_name: 'PermissionRequest',
+      session_id: sessionId,
+      cwd: tmpDir
+    };
   }
 
   function makeStopFailurePayload(sessionId, errorType) {
-    return { hook_event_name: 'StopFailure', session_id: sessionId, error_type: errorType, cwd: tmpDir };
+    return {
+      hook_event_name: 'StopFailure',
+      session_id: sessionId,
+      error_type: errorType,
+      cwd: tmpDir
+    };
   }
 
   function makeSessionEndPayload(sessionId) {
-    return { hook_event_name: 'SessionEnd', session_id: sessionId, cwd: tmpDir };
+    return {
+      hook_event_name: 'SessionEnd',
+      session_id: sessionId,
+      cwd: tmpDir
+    };
   }
 
   // ─── AC #1: UserPromptSubmit bmad skill ─────────────────────────────────────
@@ -360,7 +369,8 @@ describe('hook — 8-signal passive detection', () => {
       workflow: 'create-architecture',
       started_at: fixedTime,
       updated_at: fixedTime,
-      step: { total: null }
+      step: { total: null },
+      _outputFolders: ['dummy']
     });
     cleanAlive('ac10');
     execHook(makeSessionStartPayload('ac10'));
@@ -382,12 +392,17 @@ describe('hook — 8-signal passive detection', () => {
     assert.equal(status.workflow, null, 'no workflow set');
   });
 
-  // ─── AC #11: Dispatch routes all 5 event types ─────────────────────────────
+  // ─── AC #11: Dispatch routes all 6 event types ─────────────────────────────
 
-  it('AC #11: dispatch routes all 5 event types correctly', () => {
+  it('AC #11: dispatch routes all 6 event types correctly', () => {
     // UserPromptSubmit
     execHook(makeUserPromptPayload('ac11-ups', '/bmad-create-architecture'));
     assert.ok(readStatusFile('ac11-ups'), 'UserPromptSubmit should create status');
+
+    // PreToolUse
+    seedStatus('ac11-pre', { session_id: 'ac11-pre', llm_state: 'permission' });
+    execHook({ session_id: 'ac11-pre', cwd: tmpDir, hook_event_name: 'PreToolUse', tool_name: 'Bash' });
+    assert.equal(readStatusFile('ac11-pre').llm_state, 'active', 'PreToolUse should set active');
 
     // PostToolUse/Read
     seedStatus('ac11-read', { session_id: 'ac11-read', skill: 'bmad-create-architecture', workflow: 'create-architecture', step: {} });
@@ -428,10 +443,9 @@ describe('hook — 8-signal passive detection', () => {
 
   // ─── AC #14: ALIVE_MAX_AGE_MS constant ──────────────────────────────────────
 
-  it('AC #14: ALIVE_MAX_AGE_MS constant exists', () => {
+  it('AC #14: ALIVE_MAX_AGE_MS removed from hook (now in shared-constants.cjs)', () => {
     const src = fs.readFileSync(HOOK_PATH, 'utf8');
-    assert.ok(src.includes('ALIVE_MAX_AGE_MS'), 'ALIVE_MAX_AGE_MS should exist');
-    assert.ok(src.includes('7 * 24 * 60 * 60 * 1000'), 'should be 7 days in ms');
+    assert.ok(!src.includes('ALIVE_MAX_AGE_MS'), 'ALIVE_MAX_AGE_MS should not be in hook (moved to shared-constants.cjs)');
   });
 
   // ─── AC #16: Fixture updated ───────────────────────────────────────────────
@@ -1573,15 +1587,14 @@ describe('hook — 8-signal passive detection', () => {
     assert.equal(status.step.current, null);
   });
 
-  it('Edit with stepsCompleted in new_string sets step.current', () => {
+  it('Edit with stepsCompleted in new_string does NOT set step.current (partial content unreliable)', () => {
     const sid = 'step-fm-edit';
     execHook(makeUserPromptPayload(sid, '/bmad-brainstorming'));
     const filePath = path.join(tmpDir, '_bmad-output', 'session.md');
     const newString = '---\nstepsCompleted: [1, 2]\nstatus: draft\n---\n# Updated';
     execHook(makeEditPayload(sid, filePath, 'old content', newString));
     const status = readStatusFile(sid);
-    assert.equal(status.step.current, 2);
-    assert.equal(status.step.current_name, 'completed');
+    assert.equal(status.step.current, null, 'Edit should skip step enrichment');
   });
 
   // ─── Document detection with default output folders (no custom config) ─────
@@ -1616,27 +1629,521 @@ describe('hook — 8-signal passive detection', () => {
     assert.equal(status.project, 'TestProject');
   });
 
-  // ─── 8.1: handlePermissionRequest ─────────────────────────────────────────
+  // ─── 7.1: handleBash — command tracking ────────────────────────────────────
+
+  function makeBashPayload(sessionId, command, agentId) {
+    const p = {
+      session_id: sessionId,
+      cwd: tmpDir,
+      hook_event_name: 'PostToolUse',
+      tool_name: 'Bash',
+      tool_input: { command: command },
+      tool_use_id: 'toolu_test'
+    };
+    if (agentId) p.agent_id = agentId;
+    return p;
+  }
+
+  function makeStopPayload(sessionId) {
+    return {
+      session_id: sessionId,
+      cwd: tmpDir,
+      hook_event_name: 'Stop'
+    };
+  }
+
+  function makeNotificationPayload(sessionId) {
+    return {
+      session_id: sessionId,
+      cwd: tmpDir,
+      hook_event_name: 'Notification',
+      notification_type: 'permission_prompt'
+    };
+  }
+
+  it('7.1 AC#1: handleBash appends to commands[]', () => {
+    seedStatus('bash1', {
+      session_id: 'bash1',
+      project: 'TestProject',
+      skill: 'bmad-dev-story',
+      workflow: 'dev-story',
+      commands: []
+    });
+    execHook(makeBashPayload('bash1', 'npm test'));
+    const status = readStatusFile('bash1');
+    assert.ok(Array.isArray(status.commands), 'commands should be array');
+    assert.equal(status.commands.length, 1);
+    assert.equal(status.commands[0].cmd, 'npm test');
+    assert.ok(status.commands[0].at, 'at should be ISO string');
+    assert.equal(status.commands[0].agent_id, null);
+    assert.equal(status.llm_state, 'active');
+  });
+
+  it('7.1 AC#1: handleBash with agent_id propagates', () => {
+    seedStatus('bash2', {
+      session_id: 'bash2',
+      project: 'TestProject',
+      skill: 'bmad-dev-story',
+      workflow: 'dev-story',
+      commands: []
+    });
+    execHook(makeBashPayload('bash2', 'git status', 'sub-1'));
+    const status = readStatusFile('bash2');
+    assert.equal(status.commands.length, 1);
+    assert.equal(status.commands[0].agent_id, 'sub-1');
+  });
+
+  // ─── 7.1: handleStop — llm_state waiting ──────────────────────────────────
+
+  it('7.1 AC#2: handleStop sets llm_state waiting', () => {
+    seedStatus('stop1', {
+      session_id: 'stop1',
+      project: 'TestProject',
+      skill: 'bmad-dev-story',
+      workflow: 'dev-story',
+      llm_state: 'active',
+      llm_state_since: '2026-01-01T00:00:00.000Z'
+    });
+    execHook(makeStopPayload('stop1'));
+    const status = readStatusFile('stop1');
+    assert.equal(status.llm_state, 'waiting');
+    assert.ok(status.llm_state_since, 'llm_state_since should be set');
+    assert.notEqual(status.llm_state_since, '2026-01-01T00:00:00.000Z');
+  });
+
+  // ─── 7.1: handleNotification — llm_state permission ───────────────────────
+
+  it('7.1 AC#3: handleNotification sets llm_state permission', () => {
+    seedStatus('notif1', {
+      session_id: 'notif1',
+      project: 'TestProject',
+      skill: 'bmad-dev-story',
+      workflow: 'dev-story',
+      llm_state: 'active',
+      llm_state_since: '2026-01-01T00:00:00.000Z'
+    });
+    execHook(makeNotificationPayload('notif1'));
+    const status = readStatusFile('notif1');
+    assert.equal(status.llm_state, 'permission');
+    assert.ok(status.llm_state_since);
+  });
+
+  it('handleNotification ignores non-permission notification types', () => {
+    seedStatus('notif-skip', {
+      session_id: 'notif-skip',
+      project: 'TestProject',
+      skill: 'bmad-dev-story',
+      workflow: 'dev-story',
+      llm_state: 'active',
+      llm_state_since: '2026-01-01T00:00:00.000Z'
+    });
+    // notification_type is not 'permission_prompt'
+    execHook({
+      session_id: 'notif-skip',
+      cwd: tmpDir,
+      hook_event_name: 'Notification',
+      notification_type: 'idle_prompt'
+    });
+    const status = readStatusFile('notif-skip');
+    assert.equal(status.llm_state, 'active', 'llm_state should remain active');
+    assert.equal(status.llm_state_since, '2026-01-01T00:00:00.000Z', 'llm_state_since should be unchanged');
+  });
+
+  it('handleNotification ignores payload without notification_type field', () => {
+    seedStatus('notif-none', {
+      session_id: 'notif-none',
+      project: 'TestProject',
+      skill: 'bmad-dev-story',
+      workflow: 'dev-story',
+      llm_state: 'active',
+      llm_state_since: '2026-01-01T00:00:00.000Z'
+    });
+    execHook({
+      session_id: 'notif-none',
+      cwd: tmpDir,
+      hook_event_name: 'Notification'
+    });
+    const status = readStatusFile('notif-none');
+    assert.equal(status.llm_state, 'active', 'llm_state should remain active');
+  });
+
+  // ─── handlePreToolUse — clears permission on tool start ───────────────────
+
+  it('PreToolUse clears permission→active on tool start', () => {
+    seedStatus('pre1', {
+      session_id: 'pre1',
+      project: 'TestProject',
+      skill: 'bmad-dev-story',
+      workflow: 'dev-story',
+      llm_state: 'permission',
+      llm_state_since: '2026-01-01T00:00:00.000Z'
+    });
+    execHook({
+      session_id: 'pre1',
+      cwd: tmpDir,
+      hook_event_name: 'PreToolUse',
+      tool_name: 'Bash'
+    });
+    const status = readStatusFile('pre1');
+    assert.equal(status.llm_state, 'active');
+    assert.notEqual(status.llm_state_since, '2026-01-01T00:00:00.000Z');
+  });
+
+  it('PreToolUse is idempotent when already active', () => {
+    seedStatus('pre2', {
+      session_id: 'pre2',
+      project: 'TestProject',
+      skill: 'bmad-dev-story',
+      workflow: 'dev-story',
+      llm_state: 'active',
+      llm_state_since: '2026-03-01T00:00:00.000Z'
+    });
+    execHook({
+      session_id: 'pre2',
+      cwd: tmpDir,
+      hook_event_name: 'PreToolUse',
+      tool_name: 'Read'
+    });
+    const status = readStatusFile('pre2');
+    assert.equal(status.llm_state, 'active');
+  });
+
+  // ─── 7.1: handleRead — reads[] append ──────────────────────────────────────
+
+  it('7.1 AC#4: handleRead appends to reads[] and updates last_read', () => {
+    seedStatus('read-hist1', {
+      session_id: 'read-hist1',
+      project: 'TestProject',
+      skill: 'bmad-dev-story',
+      workflow: 'dev-story',
+      reads: [],
+      last_read: null
+    });
+    const filePath = path.join(tmpDir, 'src', 'index.js').replace(/\\/g, '/');
+    execHook(makeReadPayload('read-hist1', filePath));
+    const status = readStatusFile('read-hist1');
+    assert.ok(Array.isArray(status.reads), 'reads should be array');
+    assert.equal(status.reads.length, 1);
+    assert.equal(status.reads[0].in_project, true);
+    assert.ok(status.reads[0].at);
+    assert.equal(status.reads[0].agent_id, null);
+    assert.ok(status.last_read, 'last_read scalar should also be updated');
+    assert.equal(status.llm_state, 'active');
+  });
+
+  // ─── 7.1: handleWrite — writes[] append with is_new ───────────────────────
+
+  it('7.1 AC#5: handleWrite appends to writes[] with is_new true (no prior read)', () => {
+    seedStatus('write-hist1', {
+      session_id: 'write-hist1',
+      project: 'TestProject',
+      skill: 'bmad-dev-story',
+      workflow: 'dev-story',
+      reads: [],
+      writes: [],
+      last_write: null,
+      last_write_op: null
+    });
+    const filePath = path.join(tmpDir, 'src', 'new-file.js').replace(/\\/g, '/');
+    execHook(makeWritePayload('write-hist1', filePath, 'console.log("new")'));
+    const status = readStatusFile('write-hist1');
+    assert.ok(Array.isArray(status.writes), 'writes should be array');
+    assert.equal(status.writes.length, 1);
+    assert.equal(status.writes[0].op, 'write');
+    assert.equal(status.writes[0].is_new, true, 'should be is_new=true (no prior read)');
+    assert.equal(status.writes[0].old_string, null);
+    assert.equal(status.writes[0].new_string, null);
+    assert.equal(status.llm_state, 'active');
+  });
+
+  it('7.1 AC#5: handleWrite with prior read → is_new false', () => {
+    const filePath = path.join(tmpDir, 'src', 'existing.js').replace(/\\/g, '/');
+    const displayPath = 'src/existing.js';
+    seedStatus('write-hist2', {
+      session_id: 'write-hist2',
+      project: 'TestProject',
+      skill: 'bmad-dev-story',
+      workflow: 'dev-story',
+      reads: [{ path: displayPath, in_project: true, at: '2026-01-01T00:00:00.000Z', agent_id: null }],
+      writes: [],
+      last_write: null,
+      last_write_op: null
+    });
+    execHook(makeWritePayload('write-hist2', filePath, 'updated'));
+    const status = readStatusFile('write-hist2');
+    assert.equal(status.writes.length, 1);
+    assert.equal(status.writes[0].is_new, false, 'should be is_new=false (file was read before)');
+  });
+
+  // ─── 7.1: handleEdit — writes[] with old/new_string ───────────────────────
+
+  it('7.1 AC#6: handleEdit appends to writes[] with old/new_string', () => {
+    seedStatus('edit-hist1', {
+      session_id: 'edit-hist1',
+      project: 'TestProject',
+      skill: 'bmad-dev-story',
+      workflow: 'dev-story',
+      reads: [],
+      writes: [],
+      last_write: null,
+      last_write_op: null
+    });
+    const filePath = path.join(tmpDir, 'src', 'index.js').replace(/\\/g, '/');
+    execHook(makeEditPayload('edit-hist1', filePath, 'old code', 'new code'));
+    const status = readStatusFile('edit-hist1');
+    assert.equal(status.writes.length, 1);
+    assert.equal(status.writes[0].op, 'edit');
+    assert.equal(status.writes[0].is_new, false);
+    assert.equal(status.writes[0].old_string, 'old code');
+    assert.equal(status.writes[0].new_string, 'new code');
+    assert.equal(status.llm_state, 'active');
+  });
+
+  // ─── 7.1: skill change resets arrays ───────────────────────────────────────
+
+  it('7.1 AC#7: skill change resets arrays', () => {
+    seedStatus('reset1', {
+      session_id: 'reset1',
+      project: 'TestProject',
+      skill: 'bmad-create-architecture',
+      workflow: 'create-architecture',
+      reads: [{ path: 'a.js', in_project: true, at: '2026-01-01T00:00:00.000Z', agent_id: null }],
+      writes: [{ path: 'b.js', in_project: true, op: 'write', is_new: true, at: '2026-01-01T00:00:00.000Z', agent_id: null, old_string: null, new_string: null }],
+      commands: [{ cmd: 'ls', at: '2026-01-01T00:00:00.000Z', agent_id: null }],
+      llm_state: 'waiting'
+    });
+    execHook(makeUserPromptPayload('reset1', '/bmad-dev-story'));
+    const status = readStatusFile('reset1');
+    assert.deepStrictEqual(status.reads, [], 'reads should be reset');
+    assert.deepStrictEqual(status.writes, [], 'writes should be reset');
+    assert.deepStrictEqual(status.commands, [], 'commands should be reset');
+    assert.equal(status.llm_state, 'active', 'llm_state should be active');
+  });
+
+  // ─── 7.1: atomic write ─────────────────────────────────────────────────────
+
+  it('7.1 AC#8: atomic write — no .tmp file remains after hook', () => {
+    execHook(makeUserPromptPayload('atomic1', '/bmad-dev-story'));
+    const tmpFiles = fs.readdirSync(cacheDir).filter(f => f.endsWith('.tmp'));
+    assert.equal(tmpFiles.length, 0, 'no .tmp files should remain after atomic write');
+  });
+
+  // ─── 7.1: 10 MB guard ─────────────────────────────────────────────────────
+
+  it('7.1 AC#9: 10MB guard skips array append but updates scalars', () => {
+    const sid = 'guard-10mb';
+    // Create an oversized status file (>10 MB)
+    const bigStatus = {
+      session_id: sid,
+      project: 'TestProject',
+      skill: 'bmad-dev-story',
+      workflow: 'dev-story',
+      reads: [],
+      writes: [],
+      commands: [],
+      last_read: null,
+      llm_state: null,
+      llm_state_since: null,
+      _padding: 'x'.repeat(10 * 1024 * 1024)
+    };
+    fs.mkdirSync(cacheDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(cacheDir, `status-${sid}.json`),
+      JSON.stringify(bigStatus, null, 2)
+    );
+    const filePath = path.join(tmpDir, 'src', 'big.js').replace(/\\/g, '/');
+    execHook(makeReadPayload(sid, filePath));
+    const status = readStatusFile(sid);
+    assert.equal(status.reads.length, 0, 'reads[] should not grow (10MB guard)');
+    assert.ok(status.last_read, 'last_read scalar should still be updated');
+    assert.equal(status.llm_state, 'active', 'llm_state should still be updated');
+  });
+
+  // ─── 7.1: llm_state transitions ───────────────────────────────────────────
+
+  it('7.1 AC#10: llm_state transitions active→waiting→permission→active (PreToolUse)→active (PostToolUse)', () => {
+    const sid = 'llm-trans';
+    // Start with active (via UserPromptSubmit)
+    execHook(makeUserPromptPayload(sid, '/bmad-dev-story'));
+    let status = readStatusFile(sid);
+    assert.equal(status.llm_state, 'active');
+
+    // Stop → waiting
+    execHook(makeStopPayload(sid));
+    status = readStatusFile(sid);
+    assert.equal(status.llm_state, 'waiting');
+
+    // Notification → permission
+    execHook(makeNotificationPayload(sid));
+    status = readStatusFile(sid);
+    assert.equal(status.llm_state, 'permission');
+
+    // PreToolUse → active (permission cleared on tool start)
+    execHook({
+      session_id: sid,
+      cwd: tmpDir,
+      hook_event_name: 'PreToolUse',
+      tool_name: 'Read'
+    });
+    status = readStatusFile(sid);
+    assert.equal(status.llm_state, 'active', 'PreToolUse should clear permission');
+
+    // PostToolUse/Read → active (still active, idempotent)
+    const filePath = path.join(tmpDir, 'src', 'index.js').replace(/\\/g, '/');
+    execHook(makeReadPayload(sid, filePath));
+    status = readStatusFile(sid);
+    assert.equal(status.llm_state, 'active');
+  });
+
+  // ─── 7.1: fixture validation ───────────────────────────────────────────────
+
+  it('7.1: status-with-history.json fixture has v2 schema fields', () => {
+    const fixture = JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures', 'status-with-history.json'), 'utf8'));
+    assert.ok('llm_state' in fixture, 'fixture should have llm_state');
+    assert.ok('llm_state_since' in fixture, 'fixture should have llm_state_since');
+    assert.ok(Array.isArray(fixture.reads), 'reads should be array');
+    assert.ok(Array.isArray(fixture.writes), 'writes should be array');
+    assert.ok(Array.isArray(fixture.commands), 'commands should be array');
+    assert.ok(fixture.reads.length >= 2, 'reads should have 2+ entries');
+    assert.ok(fixture.writes.length >= 2, 'writes should have 2+ entries');
+    assert.ok(fixture.commands.length >= 2, 'commands should have 2+ entries');
+    // agent_id examples: one null, one with value
+    const hasNullAgent = fixture.reads.some(r => r.agent_id === null);
+    const hasValueAgent = fixture.reads.some(r => r.agent_id !== null);
+    assert.ok(hasNullAgent, 'should have null agent_id example');
+    assert.ok(hasValueAgent, 'should have non-null agent_id example');
+    // writes ops mix
+    const hasWrite = fixture.writes.some(w => w.op === 'write');
+    const hasEdit = fixture.writes.some(w => w.op === 'edit');
+    assert.ok(hasWrite, 'should have write op');
+    assert.ok(hasEdit, 'should have edit op');
+  });
+
+  // ─── 7.1: readStatus defaults include new fields ──────────────────────────
+
+  it('7.1: new status defaults include llm_state, reads, writes, commands', () => {
+    execHook(makeUserPromptPayload('defaults1', '/bmad-dev-story'));
+    const status = readStatusFile('defaults1');
+    assert.ok('llm_state' in status, 'should have llm_state');
+    assert.ok('llm_state_since' in status, 'should have llm_state_since');
+    assert.ok('reads' in status, 'should have reads');
+    assert.ok('writes' in status, 'should have writes');
+    assert.ok('commands' in status, 'should have commands');
+  });
+
+  // ─── Deferred fixes: walk-up depth limit ──────────────────────────────────
+
+  it('walk-up exits silently when depth exceeds 20', () => {
+    // Create a deeply nested cwd with no _bmad anywhere
+    const deepBase = fs.mkdtempSync(path.join(os.tmpdir(), 'bmad-deep-'));
+    let deepPath = deepBase;
+    for (let i = 0; i < 25; i++) {
+      deepPath = path.join(deepPath, `level${i}`);
+    }
+    fs.mkdirSync(deepPath, { recursive: true });
+    try {
+      const payload = { session_id: 'walkup-depth', cwd: deepPath, hook_event_name: 'UserPromptSubmit', prompt: '/bmad-dev-story' };
+      const output = execHook(payload);
+      assert.equal(output, '', 'should produce no output');
+      assert.equal(readStatusFile('walkup-depth'), null, 'no status file created');
+    } finally {
+      fs.rmSync(deepBase, { recursive: true, force: true });
+    }
+  });
+
+  // ─── Deferred fixes: bash command truncation ──────────────────────────────
+
+  it('bash command truncated to 1000 chars', () => {
+    seedStatus('bash-trunc', {
+      session_id: 'bash-trunc',
+      project: 'TestProject',
+      skill: 'bmad-dev-story',
+      workflow: 'dev-story',
+      commands: []
+    });
+    const longCommand = 'x'.repeat(5000);
+    execHook(makeBashPayload('bash-trunc', longCommand));
+    const status = readStatusFile('bash-trunc');
+    assert.equal(status.commands.length, 1);
+    assert.equal(status.commands[0].cmd.length, 1000, 'command should be truncated to 1000 chars');
+  });
+
+  it('bash command under 1000 chars stored as-is', () => {
+    seedStatus('bash-short', {
+      session_id: 'bash-short',
+      project: 'TestProject',
+      skill: 'bmad-dev-story',
+      workflow: 'dev-story',
+      commands: []
+    });
+    execHook(makeBashPayload('bash-short', 'npm test'));
+    const status = readStatusFile('bash-short');
+    assert.equal(status.commands[0].cmd, 'npm test');
+  });
+
+  // ─── Deferred fixes: Edit ?? coalescing preserves empty string ────────────
+
+  it('Edit with empty old_string preserves "" not null', () => {
+    seedStatus('edit-empty', {
+      session_id: 'edit-empty',
+      project: 'TestProject',
+      skill: 'bmad-dev-story',
+      workflow: 'dev-story',
+      reads: [],
+      writes: [],
+      last_write: null,
+      last_write_op: null
+    });
+    const filePath = path.join(tmpDir, 'src', 'index.js').replace(/\\/g, '/');
+    execHook(makeEditPayload('edit-empty', filePath, '', 'new code'));
+    const status = readStatusFile('edit-empty');
+    assert.equal(status.writes.length, 1);
+    assert.equal(status.writes[0].old_string, '', 'empty old_string should be preserved as ""');
+    assert.equal(status.writes[0].new_string, 'new code');
+  });
+
+
+  // ─── 8.1: handlePermissionRequest — llm_state permission ─────────────────
 
   it('8.1 AC#1: handlePermissionRequest sets llm_state permission', () => {
-    seedStatus('perm-req1', { session_id: 'perm-req1', project: 'TestProject', llm_state: 'active', llm_state_since: '2026-01-01T00:00:00.000Z' });
+    seedStatus('perm-req1', {
+      session_id: 'perm-req1',
+      project: 'TestProject',
+      skill: 'bmad-dev-story',
+      workflow: 'dev-story',
+      llm_state: 'active',
+      llm_state_since: '2026-01-01T00:00:00.000Z'
+    });
     execHook(makePermissionRequestPayload('perm-req1'));
     const status = readStatusFile('perm-req1');
     assert.equal(status.llm_state, 'permission');
+    assert.ok(status.llm_state_since);
     assert.notEqual(status.llm_state_since, '2026-01-01T00:00:00.000Z');
   });
 
   it('8.1 AC#1: handlePermissionRequest works without notification_type filtering', () => {
-    seedStatus('perm-req2', { session_id: 'perm-req2', project: 'TestProject', llm_state: 'active', llm_state_since: '2026-01-01T00:00:00.000Z' });
+    seedStatus('perm-req2', {
+      session_id: 'perm-req2',
+      project: 'TestProject',
+      skill: 'bmad-dev-story',
+      workflow: 'dev-story',
+      llm_state: 'active',
+      llm_state_since: '2026-01-01T00:00:00.000Z'
+    });
     execHook(makePermissionRequestPayload('perm-req2'));
     const status = readStatusFile('perm-req2');
     assert.equal(status.llm_state, 'permission', 'should set permission without notification_type guard');
   });
 
-  // ─── 8.1: handleStopFailure ───────────────────────────────────────────────
+  // ─── 8.1: handleStopFailure — llm_state error + error_type ───────────────
 
-  it('8.1 AC#2: handleStopFailure with rate_limit', () => {
-    seedStatus('sf-rate', { session_id: 'sf-rate', project: 'TestProject', llm_state: 'active', llm_state_since: '2026-01-01T00:00:00.000Z' });
+  it('8.1 AC#2: handleStopFailure with rate_limit sets error state', () => {
+    seedStatus('sf-rate', {
+      session_id: 'sf-rate',
+      project: 'TestProject',
+      llm_state: 'active',
+      llm_state_since: '2026-01-01T00:00:00.000Z'
+    });
     execHook(makeStopFailurePayload('sf-rate', 'rate_limit'));
     const status = readStatusFile('sf-rate');
     assert.equal(status.llm_state, 'error');
@@ -1645,58 +2152,80 @@ describe('hook — 8-signal passive detection', () => {
   });
 
   it('8.1 AC#2: handleStopFailure with authentication_failed', () => {
-    seedStatus('sf-auth', { session_id: 'sf-auth', project: 'TestProject', llm_state: 'active' });
+    seedStatus('sf-auth', { session_id: 'sf-auth', project: 'TestProject', llm_state: 'active', llm_state_since: '2026-01-01T00:00:00.000Z' });
     execHook(makeStopFailurePayload('sf-auth', 'authentication_failed'));
-    assert.equal(readStatusFile('sf-auth').error_type, 'authentication_failed');
+    const status = readStatusFile('sf-auth');
+    assert.equal(status.llm_state, 'error');
+    assert.equal(status.error_type, 'authentication_failed');
   });
 
   it('8.1 AC#2: handleStopFailure with billing_error', () => {
-    seedStatus('sf-bill', { session_id: 'sf-bill', project: 'TestProject', llm_state: 'active' });
+    seedStatus('sf-bill', { session_id: 'sf-bill', project: 'TestProject', llm_state: 'active', llm_state_since: '2026-01-01T00:00:00.000Z' });
     execHook(makeStopFailurePayload('sf-bill', 'billing_error'));
-    assert.equal(readStatusFile('sf-bill').error_type, 'billing_error');
+    const status = readStatusFile('sf-bill');
+    assert.equal(status.llm_state, 'error');
+    assert.equal(status.error_type, 'billing_error');
   });
 
   it('8.1 AC#2: handleStopFailure with server_error', () => {
-    seedStatus('sf-server', { session_id: 'sf-server', project: 'TestProject', llm_state: 'active' });
+    seedStatus('sf-server', { session_id: 'sf-server', project: 'TestProject', llm_state: 'active', llm_state_since: '2026-01-01T00:00:00.000Z' });
     execHook(makeStopFailurePayload('sf-server', 'server_error'));
-    assert.equal(readStatusFile('sf-server').error_type, 'server_error');
+    const status = readStatusFile('sf-server');
+    assert.equal(status.llm_state, 'error');
+    assert.equal(status.error_type, 'server_error');
   });
 
   it('8.1 AC#2: handleStopFailure with max_output_tokens', () => {
-    seedStatus('sf-tokens', { session_id: 'sf-tokens', project: 'TestProject', llm_state: 'active' });
+    seedStatus('sf-tokens', { session_id: 'sf-tokens', project: 'TestProject', llm_state: 'active', llm_state_since: '2026-01-01T00:00:00.000Z' });
     execHook(makeStopFailurePayload('sf-tokens', 'max_output_tokens'));
-    assert.equal(readStatusFile('sf-tokens').error_type, 'max_output_tokens');
+    const status = readStatusFile('sf-tokens');
+    assert.equal(status.llm_state, 'error');
+    assert.equal(status.error_type, 'max_output_tokens');
   });
 
-  it('8.1 AC#2: handleStopFailure with unknown', () => {
-    seedStatus('sf-unk', { session_id: 'sf-unk', project: 'TestProject', llm_state: 'active' });
+  it('8.1 AC#2: handleStopFailure with unknown error_type', () => {
+    seedStatus('sf-unk', { session_id: 'sf-unk', project: 'TestProject', llm_state: 'active', llm_state_since: '2026-01-01T00:00:00.000Z' });
     execHook(makeStopFailurePayload('sf-unk', 'unknown'));
-    assert.equal(readStatusFile('sf-unk').error_type, 'unknown');
+    const status = readStatusFile('sf-unk');
+    assert.equal(status.llm_state, 'error');
+    assert.equal(status.error_type, 'unknown');
   });
 
-  it('8.1 AC#2: handleStopFailure missing error_type falls back to unknown', () => {
-    seedStatus('sf-miss', { session_id: 'sf-miss', project: 'TestProject', llm_state: 'active' });
-    execHook({ hook_event_name: 'StopFailure', session_id: 'sf-miss', cwd: tmpDir });
-    assert.equal(readStatusFile('sf-miss').error_type, 'unknown');
+  it('8.1 AC#2: handleStopFailure with missing error_type falls back to unknown', () => {
+    seedStatus('sf-missing', { session_id: 'sf-missing', project: 'TestProject', llm_state: 'active', llm_state_since: '2026-01-01T00:00:00.000Z' });
+    execHook({
+      hook_event_name: 'StopFailure',
+      session_id: 'sf-missing',
+      cwd: tmpDir
+    });
+    const status = readStatusFile('sf-missing');
+    assert.equal(status.llm_state, 'error');
+    assert.equal(status.error_type, 'unknown', 'missing error_type should fallback to unknown');
   });
 
-  // ─── 8.1: handleSessionEnd ────────────────────────────────────────────────
+  // ─── 8.1: handleSessionEnd — file deletion + idempotency ─────────────────
 
   it('8.1 AC#3: handleSessionEnd deletes alive and status files', () => {
     const sid = 'se-del';
     seedStatus(sid, { session_id: sid, project: 'TestProject', llm_state: 'active' });
     fs.writeFileSync(path.join(cacheDir, `.alive-${sid}`), '12345');
+    assert.ok(aliveExists(sid), 'alive should exist before');
+    assert.ok(readStatusFile(sid), 'status should exist before');
+
     execHook(makeSessionEndPayload(sid));
-    assert.equal(aliveExists(sid), false, 'alive should be deleted');
-    assert.equal(readStatusFile(sid), null, 'status should be deleted');
+
+    assert.equal(aliveExists(sid), false, 'alive file should be deleted');
+    assert.equal(readStatusFile(sid), null, 'status file should be deleted');
   });
 
-  it('8.1 AC#3: handleSessionEnd idempotent — no error when files missing', () => {
+  it('8.1 AC#3: handleSessionEnd is idempotent — no error when files already removed', () => {
     const sid = 'se-idem';
     cleanAlive(sid);
-    const sp = path.join(cacheDir, `status-${sid}.json`);
-    if (fs.existsSync(sp)) fs.unlinkSync(sp);
+    const statusPath = path.join(cacheDir, `status-${sid}.json`);
+    if (fs.existsSync(statusPath)) fs.unlinkSync(statusPath);
+
     execHook(makeSessionEndPayload(sid));
+    assert.equal(aliveExists(sid), false);
     assert.equal(readStatusFile(sid), null);
   });
 
@@ -1704,33 +2233,60 @@ describe('hook — 8-signal passive detection', () => {
     const sid = 'se-no-write';
     fs.mkdirSync(cacheDir, { recursive: true });
     fs.writeFileSync(path.join(cacheDir, `.alive-${sid}`), '12345');
+
     execHook(makeSessionEndPayload(sid));
-    assert.equal(readStatusFile(sid), null, 'no status file after SessionEnd');
+    assert.equal(readStatusFile(sid), null, 'status file should NOT exist after SessionEnd');
   });
 
-  // ─── 8.1: error_type clearing ─────────────────────────────────────────────
+  // ─── 8.1: error_type clearing on state transitions ───────────────────────
 
-  it('8.1 AC#4: error_type cleared on UserPromptSubmit', () => {
-    seedStatus('et-prompt', { session_id: 'et-prompt', project: 'TestProject', skill: 'bmad-dev-story', workflow: 'dev-story', llm_state: 'error', error_type: 'rate_limit' });
-    execHook(makeUserPromptPayload('et-prompt', '/bmad-dev-story'));
-    const status = readStatusFile('et-prompt');
-    assert.equal(status.error_type, null);
+  it('8.1 AC#4: error_type cleared on UserPromptSubmit after error state', () => {
+    seedStatus('et-clear-prompt', {
+      session_id: 'et-clear-prompt',
+      project: 'TestProject',
+      skill: 'bmad-dev-story',
+      workflow: 'dev-story',
+      llm_state: 'error',
+      error_type: 'rate_limit',
+      llm_state_since: '2026-01-01T00:00:00.000Z'
+    });
+    execHook(makeUserPromptPayload('et-clear-prompt', '/bmad-dev-story'));
+    const status = readStatusFile('et-clear-prompt');
+    assert.equal(status.error_type, null, 'error_type should be cleared');
     assert.equal(status.llm_state, 'active');
   });
 
-  it('8.1 AC#4: error_type cleared on Stop', () => {
-    seedStatus('et-stop', { session_id: 'et-stop', project: 'TestProject', llm_state: 'error', error_type: 'rate_limit' });
-    execHook(makeStopPayload('et-stop'));
-    const status = readStatusFile('et-stop');
-    assert.equal(status.error_type, null);
+  it('8.1 AC#4: error_type cleared on Stop after error state', () => {
+    seedStatus('et-clear-stop', {
+      session_id: 'et-clear-stop',
+      project: 'TestProject',
+      llm_state: 'error',
+      error_type: 'rate_limit',
+      llm_state_since: '2026-01-01T00:00:00.000Z'
+    });
+    execHook(makeStopPayload('et-clear-stop'));
+    const status = readStatusFile('et-clear-stop');
+    assert.equal(status.error_type, null, 'error_type should be cleared on Stop');
     assert.equal(status.llm_state, 'waiting');
   });
 
-  it('8.1 AC#4: error_type cleared on Read (PostToolUse)', () => {
-    seedStatus('et-read', { session_id: 'et-read', project: 'TestProject', skill: 'bmad-dev-story', workflow: 'dev-story', llm_state: 'error', error_type: 'server_error', reads: [] });
-    const fp = path.join(tmpDir, 'src', 'index.js').replace(/\\/g, '/');
-    execHook(makeReadPayload('et-read', fp));
-    assert.equal(readStatusFile('et-read').error_type, null);
+  it('8.1 AC#4: error_type cleared on PreToolUse after error state', () => {
+    seedStatus('et-clear-pre', {
+      session_id: 'et-clear-pre',
+      project: 'TestProject',
+      llm_state: 'error',
+      error_type: 'rate_limit',
+      llm_state_since: '2026-01-01T00:00:00.000Z'
+    });
+    execHook({
+      session_id: 'et-clear-pre',
+      cwd: tmpDir,
+      hook_event_name: 'PreToolUse',
+      tool_name: 'Read'
+    });
+    const status = readStatusFile('et-clear-pre');
+    assert.equal(status.error_type, null, 'error_type should be cleared on PreToolUse');
+    assert.equal(status.llm_state, 'active');
   });
 
   it('8.1 AC#4: error_type cleared on Write (PostToolUse)', () => {
@@ -1749,13 +2305,13 @@ describe('hook — 8-signal passive detection', () => {
 
   it('8.1 AC#4: error_type cleared on Bash (PostToolUse)', () => {
     seedStatus('et-bash', { session_id: 'et-bash', project: 'TestProject', llm_state: 'error', error_type: 'server_error', commands: [] });
-    execHook({ session_id: 'et-bash', cwd: tmpDir, hook_event_name: 'PostToolUse', tool_name: 'Bash', tool_input: { command: 'echo hello' } });
+    execHook(makeBashPayload('et-bash', 'echo hello'));
     assert.equal(readStatusFile('et-bash').error_type, null);
   });
 
   it('8.1 AC#4: error_type cleared on Notification', () => {
     seedStatus('et-notif', { session_id: 'et-notif', project: 'TestProject', llm_state: 'error', error_type: 'rate_limit' });
-    execHook({ session_id: 'et-notif', cwd: tmpDir, hook_event_name: 'Notification', notification: { type: 'permission' } });
+    execHook(makeNotificationPayload('et-notif'));
     const status = readStatusFile('et-notif');
     assert.equal(status.error_type, null);
     assert.equal(status.llm_state, 'permission');
@@ -1769,17 +2325,185 @@ describe('hook — 8-signal passive detection', () => {
     assert.equal(status.llm_state, 'permission');
   });
 
-  // ─── 8.1: readStatus defaults ─────────────────────────────────────────────
+  // ─── 8.1: readStatus defaults include error_type ──────────────────────────
 
   it('8.1: new status defaults include error_type null', () => {
     execHook(makeUserPromptPayload('defaults-et', '/bmad-dev-story'));
     const status = readStatusFile('defaults-et');
-    assert.ok('error_type' in status);
-    assert.equal(status.error_type, null);
+    assert.ok('error_type' in status, 'should have error_type field');
+    assert.equal(status.error_type, null, 'error_type should default to null');
   });
 
-  it('8.1 AC#5: full suite regression — npm test passes', () => {
-    // This test is a placeholder — the full suite run validates regression
-    assert.ok(true);
+  // ─── 8.2: handleSubagentStart — llm_state active:subagent ─────────────────
+
+  it('8.2 AC#1: handleSubagentStart sets active:subagent and subagent_type', () => {
+    seedStatus('sub-start1', {
+      session_id: 'sub-start1', project: 'TestProject',
+      skill: 'bmad-dev-story', workflow: 'dev-story',
+      llm_state: 'active', llm_state_since: '2026-01-01T00:00:00.000Z'
+    });
+    execHook({
+      session_id: 'sub-start1', cwd: tmpDir,
+      hook_event_name: 'SubagentStart', agent_type: 'Explore'
+    });
+    const status = readStatusFile('sub-start1');
+    assert.equal(status.llm_state, 'active:subagent');
+    assert.equal(status.subagent_type, 'Explore');
+    assert.ok(status.llm_state_since);
+    assert.notEqual(status.llm_state_since, '2026-01-01T00:00:00.000Z');
+  });
+
+  it('8.2 AC#1: handleSubagentStart with Plan agent_type', () => {
+    seedStatus('sub-start2', {
+      session_id: 'sub-start2', project: 'TestProject',
+      llm_state: 'active', llm_state_since: '2026-01-01T00:00:00.000Z'
+    });
+    execHook({
+      session_id: 'sub-start2', cwd: tmpDir,
+      hook_event_name: 'SubagentStart', agent_type: 'Plan'
+    });
+    const status = readStatusFile('sub-start2');
+    assert.equal(status.llm_state, 'active:subagent');
+    assert.equal(status.subagent_type, 'Plan');
+  });
+
+  it('8.2 AC#1: handleSubagentStart with general-purpose agent_type', () => {
+    seedStatus('sub-start3', {
+      session_id: 'sub-start3', project: 'TestProject',
+      llm_state: 'active', llm_state_since: '2026-01-01T00:00:00.000Z'
+    });
+    execHook({
+      session_id: 'sub-start3', cwd: tmpDir,
+      hook_event_name: 'SubagentStart', agent_type: 'general-purpose'
+    });
+    const status = readStatusFile('sub-start3');
+    assert.equal(status.llm_state, 'active:subagent');
+    assert.equal(status.subagent_type, 'general-purpose');
+  });
+
+  // ─── 8.2: handleSubagentStop — llm_state active, clear subagent_type ──────
+
+  it('8.2 AC#2: handleSubagentStop sets active and clears subagent_type', () => {
+    seedStatus('sub-stop1', {
+      session_id: 'sub-stop1', project: 'TestProject',
+      llm_state: 'active:subagent', subagent_type: 'Explore',
+      llm_state_since: '2026-01-01T00:00:00.000Z'
+    });
+    execHook({
+      session_id: 'sub-stop1', cwd: tmpDir,
+      hook_event_name: 'SubagentStop'
+    });
+    const status = readStatusFile('sub-stop1');
+    assert.equal(status.llm_state, 'active');
+    assert.equal(status.subagent_type, null);
+    assert.notEqual(status.llm_state_since, '2026-01-01T00:00:00.000Z');
+  });
+
+  // ─── 8.2: handlePostToolUseFailure — llm_state active ────────────────────
+
+  it('8.2 AC#3: handlePostToolUseFailure sets active', () => {
+    seedStatus('fail1', {
+      session_id: 'fail1', project: 'TestProject',
+      llm_state: 'active', llm_state_since: '2026-01-01T00:00:00.000Z'
+    });
+    execHook({
+      session_id: 'fail1', cwd: tmpDir,
+      hook_event_name: 'PostToolUseFailure'
+    });
+    const status = readStatusFile('fail1');
+    assert.equal(status.llm_state, 'active');
+    assert.notEqual(status.llm_state_since, '2026-01-01T00:00:00.000Z');
+  });
+
+  // ─── 8.2: handlePermissionDenied — llm_state active ──────────────────────
+
+  it('8.2 AC#4: handlePermissionDenied sets active', () => {
+    seedStatus('denied1', {
+      session_id: 'denied1', project: 'TestProject',
+      llm_state: 'permission', llm_state_since: '2026-01-01T00:00:00.000Z'
+    });
+    execHook({
+      session_id: 'denied1', cwd: tmpDir,
+      hook_event_name: 'PermissionDenied'
+    });
+    const status = readStatusFile('denied1');
+    assert.equal(status.llm_state, 'active');
+    assert.notEqual(status.llm_state_since, '2026-01-01T00:00:00.000Z');
+  });
+
+  // ─── 8.2 AC#5: subagent_type clearing on transitions ─────────────────────
+
+  it('8.2 AC#5: SubagentStop clears subagent_type from active:subagent', () => {
+    seedStatus('clear-stop', {
+      session_id: 'clear-stop', project: 'TestProject',
+      llm_state: 'active:subagent', subagent_type: 'Explore',
+      llm_state_since: '2026-01-01T00:00:00.000Z'
+    });
+    execHook({
+      session_id: 'clear-stop', cwd: tmpDir,
+      hook_event_name: 'SubagentStop'
+    });
+    const status = readStatusFile('clear-stop');
+    assert.equal(status.llm_state, 'active');
+    assert.equal(status.subagent_type, null);
+  });
+
+  it('8.2 AC#5: PostToolUseFailure clears subagent_type from active:subagent', () => {
+    seedStatus('clear-fail', {
+      session_id: 'clear-fail', project: 'TestProject',
+      llm_state: 'active:subagent', subagent_type: 'Plan',
+      llm_state_since: '2026-01-01T00:00:00.000Z'
+    });
+    execHook({
+      session_id: 'clear-fail', cwd: tmpDir,
+      hook_event_name: 'PostToolUseFailure'
+    });
+    const status = readStatusFile('clear-fail');
+    assert.equal(status.llm_state, 'active');
+    assert.equal(status.subagent_type, null);
+  });
+
+  it('8.2 AC#5: PermissionDenied clears subagent_type from active:subagent', () => {
+    seedStatus('clear-denied', {
+      session_id: 'clear-denied', project: 'TestProject',
+      llm_state: 'active:subagent', subagent_type: 'general-purpose',
+      llm_state_since: '2026-01-01T00:00:00.000Z'
+    });
+    execHook({
+      session_id: 'clear-denied', cwd: tmpDir,
+      hook_event_name: 'PermissionDenied'
+    });
+    const status = readStatusFile('clear-denied');
+    assert.equal(status.llm_state, 'active');
+    assert.equal(status.subagent_type, null);
+  });
+
+  // ─── Deferred fixes: _outputFolders independent of project ────────────────
+
+  it('_outputFolders computed on resumed session with project already set', () => {
+    const sid = 'output-folders-resume';
+    // Seed with project set but no _outputFolders
+    seedStatus(sid, {
+      session_id: sid,
+      project: 'TestProject',
+      skill: null,
+      workflow: null
+    });
+    execHook(makeUserPromptPayload(sid, '/bmad-create-prd'));
+    const status = readStatusFile(sid);
+    assert.ok(Array.isArray(status._outputFolders), '_outputFolders should be computed');
+    assert.ok(status._outputFolders.length > 0, '_outputFolders should have entries');
+  });
+
+  // ─── Deferred fixes: Edit step enrichment skipped ─────────────────────────
+
+  it('Edit with stepsCompleted in new_string does NOT set step.current', () => {
+    const sid = 'edit-no-step-enrich';
+    execHook(makeUserPromptPayload(sid, '/bmad-brainstorming'));
+    const filePath = path.join(tmpDir, '_bmad-output', 'session.md');
+    const newString = '---\nstepsCompleted: [1, 2, 3]\nstatus: draft\n---\n# Updated';
+    execHook(makeEditPayload(sid, filePath, 'old content', newString));
+    const status = readStatusFile(sid);
+    assert.equal(status.step.current, null, 'Edit should not trigger step enrichment');
   });
 });

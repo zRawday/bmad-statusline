@@ -5,7 +5,7 @@ import { Box, Text, useInput, useStdout } from 'ink';
 import { ShortcutBar } from '../components/ShortcutBar.js';
 import LlmBadge from './components/LlmBadge.js';
 import SessionTabs from './components/SessionTabs.js';
-import { pollSessions, groupSessionsByProject, computeDisplayState, filterReadOnly, findFirstSelectable, findNextSelectable, mergeChronology, generateCsv, writeCsvExport, STORY_WORKFLOWS, formatStoryTitle } from './monitor-utils.js';
+import { pollSessions, groupSessionsByProject, computeDisplayState, filterReadOnly, findFirstSelectable, findNextSelectable, mergeChronology, generateCsv, writeCsvExport, STORY_WORKFLOWS, formatStoryTitle, resolveProjectColor } from './monitor-utils.js';
 import { MonitorDetailScreen } from './MonitorDetailScreen.js';
 import { ExportPrompt } from './components/ExportPrompt.js';
 import ScrollableViewport from './components/ScrollableViewport.js';
@@ -34,7 +34,7 @@ function useSessionPolling(cachePath) {
   return sessions;
 }
 
-function getShortcuts(navMode, detailMode, toggleState, reorderMode, reorderGrabbed) {
+function getShortcuts(navMode, detailMode, toggleState, reorderMode, reorderGrabbed, { hasSubAgents, canScroll } = {}) {
   if (reorderMode) {
     if (reorderGrabbed) {
       return [
@@ -50,14 +50,16 @@ function getShortcuts(navMode, detailMode, toggleState, reorderMode, reorderGrab
     ];
   }
   if (detailMode === 'detail') {
-    return [
+    const detail = [
       { key: '\u2191\u2193', label: 'navigate', color: 'cyan' },
       { key: 'Enter', label: 'open', color: 'green' },
-      { key: 'f', label: 'agents', color: 'magenta', checked: toggleState.showSubAgents },
-      { key: 's', label: 'sort', color: 'magenta', checked: toggleState.sortMode === 'alpha' },
-      { key: 't', label: 'time', color: 'magenta', checked: toggleState.timeFormat === 'relative' },
-      { key: 'Esc', label: 'back' },
     ];
+    if (hasSubAgents) detail.push({ key: 'f', label: 'Subagents', color: 'magenta', checked: toggleState.showSubAgents });
+    detail.push({ key: 'b', label: 'Bash', color: 'magenta', checked: toggleState.showBash });
+    detail.push({ key: 's', label: 'sort', color: 'magenta', checked: toggleState.sortMode === 'alpha' });
+    detail.push({ key: 't', label: 'time', color: 'magenta', checked: toggleState.timeFormat === 'relative' });
+    detail.push({ key: 'Esc', label: 'back' });
+    return detail;
   }
   const shortcuts = [];
   if (navMode === 'multi-project') {
@@ -70,10 +72,11 @@ function getShortcuts(navMode, detailMode, toggleState, reorderMode, reorderGrab
     shortcuts.push({ key: 'R', label: 'reorder sessions', color: 'cyan' });
   }
   shortcuts.push({ key: 'd', label: 'detail', color: 'yellow' });
-  shortcuts.push({ key: '\u2191\u2193', label: 'scroll', color: 'cyan' });
+  if (canScroll) shortcuts.push({ key: '\u2191\u2193', label: 'scroll', color: 'cyan' });
   shortcuts.push({ key: 'c', label: 'timeline', color: 'yellow' });
   shortcuts.push({ key: 'e', label: 'export', color: 'green' });
-  shortcuts.push({ key: 'f', label: 'agents', color: 'magenta', checked: toggleState.showSubAgents });
+  if (hasSubAgents) shortcuts.push({ key: 'f', label: 'Subagents', color: 'magenta', checked: toggleState.showSubAgents });
+  shortcuts.push({ key: 'b', label: 'Bash', color: 'magenta', checked: toggleState.showBash });
   shortcuts.push({ key: 'Esc', label: 'home' });
   return shortcuts;
 }
@@ -98,6 +101,7 @@ export function MonitorScreen({ config, navigate, goBack, isActive, paths }) {
   const [timeFormat, setTimeFormat] = useState('absolute');
   const [sortMode, setSortMode] = useState('chrono');
   const [showSubAgents, setShowSubAgents] = useState(true);
+  const [showBash, setShowBash] = useState(false);
 
   // Derived state — session grouping and navigation
   const groups = groupSessionsByProject(sessions);
@@ -148,9 +152,13 @@ export function MonitorScreen({ config, navigate, goBack, isActive, paths }) {
   const sortedReadOnly = sortEntries(readOnly, 'path');
   const sortedCommands = sortEntries(commands, 'cmd');
 
+  // Detect sub-agent activity from raw (unfiltered) data
+  const hasAgent = entry => entry.agent_id !== null && entry.agent_id !== undefined;
+  const hasSubAgents = rawWrites.some(hasAgent) || rawReads.some(hasAgent) || rawCommands.some(hasAgent);
+
   const writesResult = renderFileSection('EDITED FILES', sortedWrites);
   const readsResult = renderFileSection('READ FILES', sortedReadOnly);
-  const bashResult = renderBashSection(sortedCommands);
+  const bashResult = showBash ? renderBashSection(sortedCommands) : { elements: [], items: [] };
 
   // Concatenate sections with spacers between non-empty ones
   const sectionPairs = [writesResult, readsResult, bashResult];
@@ -159,11 +167,10 @@ export function MonitorScreen({ config, navigate, goBack, isActive, paths }) {
   for (let i = 0; i < sectionPairs.length; i++) {
     const section = sectionPairs[i];
     if (section.items.length === 0) continue;
-    // Section spacers disabled for scroll debugging
-    // if (allItems.length > 0) {
-    //   allItems.push({ text: ' ', selectable: false, type: 'spacer' });
-    //   items.push(e(Text, { key: `section-sep-${i}` }, ' '));
-    // }
+    if (allItems.length > 0) {
+      allItems.push({ text: ' ', selectable: false, type: 'spacer' });
+      items.push(e(Text, { key: `section-sep-${i}` }, ' '));
+    }
     allItems.push(...section.items);
     items.push(...section.elements);
   }
@@ -171,13 +178,16 @@ export function MonitorScreen({ config, navigate, goBack, isActive, paths }) {
   const rows = (stdout && stdout.rows) || 24;
 
   // Dynamic header/footer row count for sticky layout
-  // NOTE: e(Text, null, '') spacers collapse to 0 rows in Ink — do NOT count them
-  let headerRows = 1; // title
-  if (sessions.length > 0 && mode !== 'single-session') {
-    headerRows += mode === 'multi-project' ? 2 : 1; // SessionTabs
+  // All spacers render as Text(' ') = 1 row — count them
+  const showTabs = sessions.length > 0 && mode !== 'single-session';
+  let headerRows = 2; // title + spacer after title
+  if (showTabs) {
+    headerRows += mode === 'multi-project' ? 3 : 1; // SessionTabs (multi: project+spacer+session)
+    headerRows += 1; // spacer after tabs
   }
   if (currentSession) headerRows += 1; // LlmBadge
-  const footerRows = 1; // shortcuts only
+  headerRows += 1; // spacer before viewport
+  const footerRows = 2; // spacer after viewport + shortcuts
 
   // Always reserve 2 rows for ScrollableViewport indicator placeholders
   const rawAvailable = rows - headerRows - footerRows;
@@ -229,6 +239,7 @@ export function MonitorScreen({ config, navigate, goBack, isActive, paths }) {
       if (key.return && allItems[cursorIndex]?.selectable) { setDetailItem(allItems[cursorIndex]); return; }
       // Toggle keys in detail cursor mode
       if (input === 'f') { setShowSubAgents(prev => !prev); return; }
+      if (input === 'b') { setShowBash(prev => !prev); return; }
       if (input === 's') { setSortMode(prev => prev === 'chrono' ? 'alpha' : 'chrono'); return; }
       if (input === 't') { setTimeFormat(prev => prev === 'absolute' ? 'relative' : 'absolute'); return; }
       return;
@@ -263,6 +274,7 @@ export function MonitorScreen({ config, navigate, goBack, isActive, paths }) {
 
     // Toggle keys in normal mode
     if (input === 'f') { setShowSubAgents(prev => !prev); return; }
+    if (input === 'b') { setShowBash(prev => !prev); return; }
 
     // Reorder triggers — initialize order arrays so we can swap in them
     if (input === 'r' && projectKeys.length > 1) {
@@ -387,14 +399,16 @@ export function MonitorScreen({ config, navigate, goBack, isActive, paths }) {
 
   return e(Box, { flexDirection: 'column', height: rows },
     // Sticky top: title + session count
-    e(Text, { bold: true, color: 'cyan' }, 'MONITOR', '  ',
+    e(Text, { bold: true, color: 'cyan' }, 'MONITOR',
+      activeProject && projectKeys.length === 1 ? e(Text, { color: resolveProjectColor(activeProject, config) }, `  ${activeProject}  `) : '  ',
       e(Text, { dimColor: true }, `${sessions.length} session${sessions.length !== 1 ? 's' : ''}`)),
-    e(Text, null, ''),
+    e(Text, null, ' '),
     // Tabs
-    sessions.length > 0 ? e(SessionTabs, {
+    showTabs ? e(SessionTabs, {
       groups: orderedGroups, activeProject, activeSessionIndex: clampedSessionIndex, config, mode,
       reorderTarget: reorderMode, reorderCursor, reorderGrabbed,
     }) : null,
+    showTabs ? e(Text, null, ' ') : null,
     // Badge for current session
     currentSession ? e(LlmBadge, {
       state: computeDisplayState(currentSession),
@@ -406,7 +420,7 @@ export function MonitorScreen({ config, navigate, goBack, isActive, paths }) {
           ? currentSession.document_name
           : '',
     }) : null,
-    e(Text, null, ''),
+    e(Text, null, ' '),
     // Content — hidden during reorder
     reorderMode
       ? null
@@ -415,12 +429,12 @@ export function MonitorScreen({ config, navigate, goBack, isActive, paths }) {
         : displayItems.length === 0
           ? null
           : e(ScrollableViewport, { items: displayItems, height: viewportHeight, scrollOffset: effectiveScrollOffset }),
-    e(Text, null, ''),
+    e(Text, null, ' '),
     // Sticky bottom — shortcut bar or export prompt/confirmation
     exportMode === 'prompt'
       ? e(ExportPrompt, { onSelect: handleExport, onCancel: () => setExportMode(null), isActive })
       : exportMode === 'confirm'
         ? e(Text, { dimColor: true }, confirmPath.startsWith('Error:') ? confirmPath : 'Exported: ' + confirmPath)
-        : e(ShortcutBar, { actions: getShortcuts(mode, detailMode, { showSubAgents, sortMode, timeFormat }, reorderMode, reorderGrabbed) }),
+        : e(ShortcutBar, { actions: getShortcuts(mode, detailMode, { showSubAgents, showBash, sortMode, timeFormat }, reorderMode, reorderGrabbed, { hasSubAgents, canScroll: items.length > viewportHeight }) }),
   );
 }

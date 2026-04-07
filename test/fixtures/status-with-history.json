@@ -1,0 +1,40 @@
+{
+  "session_id": "test-history-session",
+  "project": "Toulou",
+  "skill": "bmad-dev-story",
+  "workflow": "dev-story",
+  "active_skill": null,
+  "story": "7-1-hook-expansion",
+  "story_priority": 2,
+  "step": {
+    "current": 3,
+    "current_name": "implement",
+    "next": 4,
+    "next_name": "test",
+    "total": 6,
+    "track": ""
+  },
+  "last_read": "src/hook/bmad-hook.js",
+  "last_write": "src/hook/bmad-hook.js",
+  "last_write_op": "edit",
+  "document_name": null,
+  "started_at": "2026-04-04T10:00:00.000Z",
+  "updated_at": "2026-04-04T10:30:00.000Z",
+  "llm_state": "active",
+  "llm_state_since": "2026-04-04T10:30:00.000Z",
+  "reads": [
+    { "path": "src/hook/bmad-hook.js", "in_project": true, "at": "2026-04-04T10:05:00.000Z", "agent_id": null },
+    { "path": "test/hook.test.js", "in_project": true, "at": "2026-04-04T10:10:00.000Z", "agent_id": null },
+    { "path": "package.json", "in_project": true, "at": "2026-04-04T10:15:00.000Z", "agent_id": "sub-agent-1" }
+  ],
+  "writes": [
+    { "path": "src/hook/bmad-hook.js", "in_project": true, "op": "edit", "is_new": false, "at": "2026-04-04T10:20:00.000Z", "agent_id": null, "old_string": "old code", "new_string": "new code" },
+    { "path": "test/fixtures/status-with-history.json", "in_project": true, "op": "write", "is_new": true, "at": "2026-04-04T10:25:00.000Z", "agent_id": null, "old_string": null, "new_string": null },
+    { "path": "src/utils.js", "in_project": true, "op": "write", "is_new": false, "at": "2026-04-04T10:28:00.000Z", "agent_id": "sub-agent-1", "old_string": null, "new_string": null }
+  ],
+  "commands": [
+    { "cmd": "npm test", "at": "2026-04-04T10:12:00.000Z", "agent_id": null },
+    { "cmd": "git status", "at": "2026-04-04T10:22:00.000Z", "agent_id": null },
+    { "cmd": "node --version", "at": "2026-04-04T10:27:00.000Z", "agent_id": "sub-agent-1" }
+  ]
+}

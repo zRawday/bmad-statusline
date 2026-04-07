@@ -1,8 +1,9 @@
 // widget-registry.js — Widget metadata and config builder
 
-import { WORKFLOW_COLORS } from '../defaults.js';
+import { WORKFLOW_COLORS, SEPARATOR_VALUES } from '../defaults.js';
 
 const INDIVIDUAL_WIDGETS = [
+  { id: 'bmad-llmstate',    command: 'llmstate',    name: 'LLM State',     hint: 'LLM needs attention signal',           defaultEnabled: true,  defaultColor: null,         defaultMode: 'dynamic' },
   { id: 'bmad-project',      command: 'project',      name: 'Project',       hint: 'Name from BMAD config.yaml',           defaultEnabled: true,  defaultColor: null,         defaultMode: 'dynamic' },
   { id: 'bmad-workflow',     command: 'workflow',     name: 'Initial Skill', hint: 'Skill invoked by user prompt',         defaultEnabled: true,  defaultColor: null,         defaultMode: 'dynamic' },
   { id: 'bmad-activeskill', command: 'activeskill', name: 'Active Skill',  hint: 'Skill actually running',               defaultEnabled: false, defaultColor: null,         defaultMode: 'dynamic' },
@@ -15,36 +16,37 @@ const INDIVIDUAL_WIDGETS = [
   { id: 'bmad-timer',        command: 'timer',        name: 'Timer',         hint: 'Refreshes only while LLM is active',     defaultEnabled: true,  defaultColor: 'brightBlack', defaultMode: 'fixed' },
 ];
 
-export const CCSTATUSLINE_COLORS = [
-  'white', 'black', 'red', 'green', 'yellow', 'blue', 'magenta', 'cyan',
-  'gray', 'brightRed', 'brightGreen', 'brightYellow', 'brightBlue',
-  'brightMagenta', 'brightCyan', 'brightWhite',
+export { SEPARATOR_VALUES };
+
+export const ANSI_COLORS = [
+  'red', 'green', 'yellow', 'blue', 'magenta', 'cyan', 'white',
+  'brightRed', 'brightGreen', 'brightYellow', 'brightBlue',
+  'brightMagenta', 'brightCyan', 'brightWhite', 'brightBlack',
 ];
 
 export function getIndividualWidgets() {
   return INDIVIDUAL_WIDGETS.map(w => ({ ...w }));
 }
 
-export function getWorkflowColors() {
-  return WORKFLOW_COLORS;
-}
-
 export function createDefaultConfig() {
   const allIds = INDIVIDUAL_WIDGETS.map(w => w.id);
   const widgets = INDIVIDUAL_WIDGETS.filter(w => w.defaultEnabled);
+  const widgetsLine1 = widgets.filter(w => w.id !== 'bmad-llmstate');
   const colorModes = {};
   for (const w of widgets) {
     colorModes[w.id] = w.defaultMode === 'dynamic'
       ? { mode: 'dynamic' }
       : { mode: 'fixed', fixedColor: w.defaultColor };
   }
+  const colorModesLine1 = { ...colorModes };
+  delete colorModesLine1['bmad-llmstate'];
   return {
     separator: 'modere',
     customSeparator: null,
     lines: [
-      { widgets: widgets.map(w => w.id), widgetOrder: [...allIds], colorModes },
-      { widgets: ['bmad-fileread'], widgetOrder: [...allIds], colorModes: { 'bmad-fileread': { mode: 'fixed', fixedColor: 'cyan' } } },
-      { widgets: ['bmad-filewrite'], widgetOrder: [...allIds], colorModes: { 'bmad-filewrite': { mode: 'fixed', fixedColor: 'brightRed' } } },
+      { widgets: widgetsLine1.map(w => w.id), widgetOrder: [...allIds], colorModes: colorModesLine1 },
+      { widgets: ['bmad-llmstate'], widgetOrder: [...allIds], colorModes: { 'bmad-llmstate': { mode: 'dynamic' } } },
+      { widgets: [], widgetOrder: [...allIds], colorModes: {} },
     ],
     skillColors: {},
     projectColors: {},

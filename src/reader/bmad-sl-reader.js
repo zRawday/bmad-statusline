@@ -8,9 +8,12 @@ const os = require('os');
 const CACHE_DIR = process.env.BMAD_CACHE_DIR || path.join(os.homedir(), '.cache', 'bmad-status');
 const CONFIG_DIR = process.env.BMAD_CONFIG_DIR || path.join(os.homedir(), '.config', 'bmad-statusline');
 const CONFIG_PATH = path.join(CONFIG_DIR, 'config.json');
-const ALIVE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 const FRESH_THRESHOLD_MS = 60 * 1000;   // 60 seconds
 const STALE_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes
+
+// --- Shared constants ---
+
+const { ALIVE_MAX_AGE_MS, INACTIVE_TIMEOUT_MS, PROJECT_COLOR_PALETTE, SEPARATOR_VALUES: READER_SEPARATORS, isValidSessionId, hashProjectColor, computeDisplayState: computeLlmDisplayState, formatTimer, formatStoryName } = require('./shared-constants.cjs');
 
 // --- Color maps ---
 
@@ -27,22 +30,12 @@ function colorize(text, ansiCode) {
 
 // --- LLM State widget ---
 
-const INACTIVE_TIMEOUT_MS = 5 * 60 * 1000;
-
 const LLM_STATES = {
   permission: { bg: '\x1b[103m', fg: '\x1b[30m', label: 'PERMISSION' },
-  waiting:    { bg: '\x1b[104m', fg: '\x1b[97m', label: 'EN ATTENTE' },
-  active:     { color: '\x1b[32m',  label: 'Actif' },
-  inactive:   { color: '\x1b[90m',  label: 'Inactif' },
+  waiting:    { bg: '\x1b[104m', fg: '\x1b[97m', label: 'WAITING' },
+  active:     { color: '\x1b[32m',  label: 'ACTIVE' },
+  inactive:   { color: '\x1b[90m',  label: 'INACTIVE' },
 };
-
-function computeLlmDisplayState(status) {
-  if (status.updated_at) {
-    const age = Date.now() - new Date(status.updated_at).getTime();
-    if (isNaN(age) || age > INACTIVE_TIMEOUT_MS) return 'inactive';
-  }
-  return status.llm_state || 'inactive';
-}
 
 function formatLlmState(status) {
   const state = computeLlmDisplayState(status);
@@ -51,20 +44,6 @@ function formatLlmState(status) {
     return `${cfg.bg}${cfg.fg} \u2B24  ${cfg.label} ${RESET}`;
   }
   return `${cfg.color}\u2B24  ${cfg.label}${RESET}`;
-}
-
-const PROJECT_COLOR_PALETTE = [
-  'red', 'green', 'yellow', 'blue', 'magenta', 'cyan',
-  'brightRed', 'brightGreen', 'brightYellow', 'brightBlue', 'brightMagenta', 'brightCyan',
-];
-
-function hashProjectColor(name) {
-  if (!name) return null;
-  let h = 0;
-  for (let i = 0; i < name.length; i++) {
-    h = ((h << 5) - h + name.charCodeAt(i)) | 0;
-  }
-  return PROJECT_COLOR_PALETTE[Math.abs(h) % PROJECT_COLOR_PALETTE.length];
 }
 
 function getProjectColor(project, projectColors) {
@@ -107,9 +86,7 @@ function readStdin() {
   }
 }
 
-function isValidSessionId(sessionId) {
-  return typeof sessionId === 'string' && /^[a-zA-Z0-9_-]+$/.test(sessionId);
-}
+// isValidSessionId imported from shared-constants.cjs
 
 function readStatusFile(sessionId) {
   try {
@@ -121,16 +98,59 @@ function readStatusFile(sessionId) {
   }
 }
 
+// --- PID detection (mirrors hook's findClaudeAncestorPid) ---
+
+function findClaudeAncestorPid() {
+  try {
+    const { execSync } = require('child_process');
+    const out = execSync('wmic process get ProcessId,ParentProcessId,Name /FORMAT:CSV', { encoding: 'utf8', timeout: 5000 });
+    const procs = new Map();
+    for (const line of out.split('\n')) {
+      const parts = line.trim().split(',');
+      if (parts.length < 4 || parts[0] === 'Node') continue;
+      procs.set(parseInt(parts[3]), { name: parts[1], ppid: parseInt(parts[2]) });
+    }
+    let pid = process.ppid;
+    for (let i = 0; i < 15; i++) {
+      const p = procs.get(pid);
+      if (!p) break;
+      if (p.name.toLowerCase().includes('claude')) return pid;
+      pid = p.ppid;
+    }
+  } catch {}
+  return null;
+}
+
 // --- Piggybacking cleanup ---
 
 function touchAlive(sessionId) {
   try {
     if (!isValidSessionId(sessionId)) return;
     const alivePath = path.join(CACHE_DIR, `.alive-${sessionId}`);
-    // Only touch mtime — don't overwrite content (hook caches claude.exe PID there)
     if (fs.existsSync(alivePath)) {
+      // Fast path: alive file exists — just touch mtime
       const now = new Date();
       fs.utimesSync(alivePath, now, now);
+      return;
+    }
+    // No alive file — new session (likely after /clear). Detect PID + cleanup stale sessions.
+    const claudePid = findClaudeAncestorPid();
+    if (!claudePid) return; // Let the hook create the alive file with proper PID detection
+    fs.writeFileSync(alivePath, String(claudePid));
+    {
+      // Same-PID cleanup: delete alive+status for old sessions from this Claude instance
+      const pidStr = String(claudePid);
+      for (const f of fs.readdirSync(CACHE_DIR)) {
+        if (!f.startsWith('.alive-')) continue;
+        const otherSid = f.slice('.alive-'.length);
+        if (otherSid === sessionId) continue;
+        try {
+          if (fs.readFileSync(path.join(CACHE_DIR, f), 'utf8').trim() === pidStr) {
+            fs.unlinkSync(path.join(CACHE_DIR, f));
+            try { fs.unlinkSync(path.join(CACHE_DIR, `status-${otherSid}.json`)); } catch {}
+          }
+        } catch {}
+      }
     }
   } catch {}
 }
@@ -155,11 +175,7 @@ function purgeStale() {
 
 // --- Internal config support ---
 
-const READER_SEPARATORS = {
-  serre: '\u2503',
-  modere: ' \u2503 ',
-  large: '  \u2503  ',
-};
+// READER_SEPARATORS aliased from SEPARATOR_VALUES in shared-constants.cjs
 
 const COLOR_CODES = {
   red: '\x1b[31m',
@@ -255,30 +271,9 @@ function handleLineCommand(lineIndex) {
 
 // --- Story formatting ---
 
-function formatStoryName(slug, displayMode) {
-  if (!slug) return '';
-  const match = slug.match(/^(\d+-\d+)-(.+)$/);
-  if (!match) return slug;
-  if (displayMode === 'compact') return match[1];
-  const title = match[2].split('-').filter(Boolean).map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
-  return `${match[1]} ${title}`;
-}
+// formatStoryName, formatTimer imported from shared-constants.cjs
 
 // --- Field extractors ---
-
-function formatTimer(startedAt) {
-  if (!startedAt) return '';
-  const diffMs = Date.now() - new Date(startedAt).getTime();
-  if (isNaN(diffMs) || diffMs < 0) return '';
-  const totalSec = Math.floor(diffMs / 1000);
-  if (totalSec < 60) return `${totalSec}s`;
-  const totalMin = Math.floor(totalSec / 60);
-  const s = totalSec % 60;
-  if (totalMin < 60) return `${totalMin}m${s.toString().padStart(2, '0')}s`;
-  const h = Math.floor(totalMin / 60);
-  const m = totalMin % 60;
-  return `${h}h${m.toString().padStart(2, '0')}m`;
-}
 
 function formatProgressStep(step) {
   if (!step || (!step.total && !step.current)) return '';

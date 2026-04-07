@@ -4,10 +4,12 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { getStatusLineConfig, getWidgetDefinitions, getHookConfig } from './defaults.js';
 import { createDefaultConfig } from './tui/widget-registry.js';
+import { G, R, C, D, B, _, logSuccess, logSkipped, logError, logSection, readJsonFile, backupFile, writeJsonSafe } from './cli-utils.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const readerSource = path.join(__dirname, 'reader', 'bmad-sl-reader.js');
 const workflowColorsSource = path.join(__dirname, 'reader', 'workflow-colors.cjs');
+const sharedConstantsSource = path.join(__dirname, 'reader', 'shared-constants.cjs');
 const hookSource = path.join(__dirname, 'hook', 'bmad-hook.js');
 
 const home = os.homedir();
@@ -19,37 +21,10 @@ const defaultPaths = {
   readerDest: path.join(home, '.config', 'bmad-statusline', 'bmad-sl-reader.js'),
   readerDir: path.join(home, '.config', 'bmad-statusline'),
   hookDest: path.join(home, '.config', 'bmad-statusline', 'bmad-hook.js'),
-  cacheDir: path.join(home, '.cache', 'bmad-status'),
+  cacheDir: process.env.BMAD_CACHE_DIR || path.join(home, '.cache', 'bmad-status'),
 };
 
-// --- ANSI colors ---
-
-const G = '\x1b[32m', R = '\x1b[31m', C = '\x1b[36m', D = '\x1b[90m', B = '\x1b[1m', _ = '\x1b[0m';
-
-// --- Logging helpers ---
-
-function logSuccess(target, message) { console.log(`     ${G}\u2713${_} ${target} ${D}\u2014${_} ${G}${message}${_}`); }
-function logSkipped(target, message) { console.log(`     ${D}\u25CB ${target} \u2014 ${message}${_}`); }
-function logError(target, message)   { console.log(`     ${R}\u2717 ${target} \u2014 ${message}${_}`); }
-function logSection(emoji, title) { console.log(`\n  ${emoji} ${B}${C}${title}${_}`); }
-
-// --- JSON mutation helpers ---
-
-function readJsonFile(filePath) {
-  return JSON.parse(fs.readFileSync(filePath, 'utf8'));
-}
-
-function backupFile(filePath) {
-  fs.copyFileSync(filePath, filePath + '.bak');
-}
-
-function writeJsonSafe(filePath, obj) {
-  const json = JSON.stringify(obj, null, 2);
-  fs.writeFileSync(filePath, json + '\n', 'utf8');
-  // Validate post-write by rereading and parsing
-  const reread = fs.readFileSync(filePath, 'utf8');
-  JSON.parse(reread);
-}
+// ANSI colors, logging helpers, JSON helpers imported from cli-utils.js
 
 // --- Install targets ---
 
@@ -160,6 +135,7 @@ function installTarget3(paths) {
     const existed = fs.existsSync(paths.readerDest);
     fs.copyFileSync(readerSource, paths.readerDest);
     fs.copyFileSync(workflowColorsSource, path.join(paths.readerDir, 'workflow-colors.cjs'));
+    fs.copyFileSync(sharedConstantsSource, path.join(paths.readerDir, 'shared-constants.cjs'));
     logSuccess(target, existed ? 'updated' : 'installed');
   } catch (err) {
     logError(target, err.message);

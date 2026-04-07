@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { G, R, B, D, _, logSuccess, logSkipped, logError, logSection, readJsonFile, backupFile, writeJsonSafe } from './cli-utils.js';
 
 const home = os.homedir();
 const defaultPaths = {
@@ -12,33 +13,7 @@ const defaultPaths = {
   settingsLocal: path.join(process.cwd(), '.claude', 'settings.local.json'),
 };
 
-// --- ANSI colors ---
-
-const G = '\x1b[32m', R = '\x1b[31m', C = '\x1b[36m', D = '\x1b[90m', B = '\x1b[1m', _ = '\x1b[0m';
-
-// --- Logging helpers ---
-
-function logSuccess(target, message) { console.log(`     ${G}\u2713${_} ${target} ${D}\u2014${_} ${G}${message}${_}`); }
-function logSkipped(target, message) { console.log(`     ${D}\u25CB ${target} \u2014 ${message}${_}`); }
-function logError(target, message)   { console.log(`     ${R}\u2717 ${target} \u2014 ${message}${_}`); }
-function logSection(emoji, title) { console.log(`\n  ${emoji} ${B}${C}${title}${_}`); }
-
-// --- JSON mutation helpers ---
-
-function readJsonFile(filePath) {
-  return JSON.parse(fs.readFileSync(filePath, 'utf8'));
-}
-
-function backupFile(filePath) {
-  fs.copyFileSync(filePath, filePath + '.bak');
-}
-
-function writeJsonSafe(filePath, obj) {
-  const json = JSON.stringify(obj, null, 2);
-  fs.writeFileSync(filePath, json + '\n', 'utf8');
-  const reread = fs.readFileSync(filePath, 'utf8');
-  JSON.parse(reread);
-}
+// ANSI colors, logging helpers, JSON helpers imported from cli-utils.js
 
 // --- Uninstall targets ---
 

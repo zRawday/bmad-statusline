@@ -7,6 +7,8 @@ import { ScreenLayout } from '../components/ScreenLayout.js';
 const e = React.createElement;
 
 const HOME_OPTIONS = [
+  { label: '\uD83D\uDDA5  Monitor', value: 'monitor' },
+  { label: '\u2500\u2500\u2500', value: '_sep0' },
   { label: '\uD83D\uDCDD Edit widget line 1', value: 'editLine1' },
   { label: '\uD83D\uDCDD Edit widget line 2', value: 'editLine2' },
   { label: '\uD83D\uDCDD Edit widget line 3', value: 'editLine3' },
@@ -57,6 +59,7 @@ export function HomeScreen({ config, previewOverride, navigate, resetToOriginal,
       else if (value === 'presetSave') navigate('presetSave');
       else if (value === 'presetLoad') navigate('presetLoad');
       else if (value === 'ccstatusline') onLaunchCcstatusline();
+      else if (value === 'monitor') navigate('monitor');
     }
   }, { isActive });
 

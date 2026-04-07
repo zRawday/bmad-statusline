@@ -32,31 +32,75 @@ describe('src/defaults.js config templates', () => {
     }
   });
 
-  it('getHookConfig returns 3 event type keys with correct matcher counts (1+3+1)', () => {
+  it('getHookConfig returns 13 event type keys with 16 total matchers (Rev.5)', () => {
     const result = getHookConfig('/test/path/bmad-hook.js');
     assert.ok(result.hooks, 'should have hooks key');
-    assert.ok(Array.isArray(result.hooks.UserPromptSubmit), 'should have UserPromptSubmit array');
-    assert.ok(Array.isArray(result.hooks.PostToolUse), 'should have PostToolUse array');
-    assert.ok(Array.isArray(result.hooks.SessionStart), 'should have SessionStart array');
+    const eventTypes = Object.keys(result.hooks);
+    assert.equal(eventTypes.length, 13, 'should have 13 event types');
+    // Verify all 13 event types exist
+    const expected = [
+      'UserPromptSubmit', 'PreToolUse', 'PostToolUse',
+      'PermissionRequest', 'PermissionDenied', 'PostToolUseFailure',
+      'Stop', 'StopFailure', 'Notification',
+      'SubagentStart', 'SubagentStop', 'SessionStart', 'SessionEnd'
+    ];
+    for (const evt of expected) {
+      assert.ok(Array.isArray(result.hooks[evt]), `should have ${evt} array`);
+    }
+    // Verify matcher counts
     assert.equal(result.hooks.UserPromptSubmit.length, 1, 'UserPromptSubmit: 1 matcher');
-    assert.equal(result.hooks.PostToolUse.length, 3, 'PostToolUse: 3 matchers');
+    assert.equal(result.hooks.PreToolUse.length, 1, 'PreToolUse: 1 wildcard matcher');
+    assert.equal(result.hooks.PostToolUse.length, 4, 'PostToolUse: 4 matchers');
+    assert.equal(result.hooks.PermissionRequest.length, 1, 'PermissionRequest: 1 matcher');
+    assert.equal(result.hooks.PermissionDenied.length, 1, 'PermissionDenied: 1 matcher');
+    assert.equal(result.hooks.PostToolUseFailure.length, 1, 'PostToolUseFailure: 1 matcher');
+    assert.equal(result.hooks.Stop.length, 1, 'Stop: 1 matcher');
+    assert.equal(result.hooks.StopFailure.length, 1, 'StopFailure: 1 matcher');
+    assert.equal(result.hooks.Notification.length, 1, 'Notification: 1 matcher');
+    assert.equal(result.hooks.SubagentStart.length, 1, 'SubagentStart: 1 matcher');
+    assert.equal(result.hooks.SubagentStop.length, 1, 'SubagentStop: 1 matcher');
     assert.equal(result.hooks.SessionStart.length, 1, 'SessionStart: 1 matcher');
+    assert.equal(result.hooks.SessionEnd.length, 1, 'SessionEnd: 1 matcher');
+    // Verify total: 16 matchers
+    const total = Object.values(result.hooks).reduce((sum, arr) => sum + arr.length, 0);
+    assert.equal(total, 16, 'total matchers should be 16');
   });
 
   it('getHookConfig matchers have correct values and commands', () => {
     const result = getHookConfig('/test/path/bmad-hook.js');
-    // UserPromptSubmit
+    // UserPromptSubmit — regex matcher
     assert.equal(result.hooks.UserPromptSubmit[0].matcher, '(?:bmad|gds|wds)[:-]');
     assert.equal(result.hooks.UserPromptSubmit[0].hooks[0].type, 'command');
     assert.ok(result.hooks.UserPromptSubmit[0].hooks[0].command.includes('/test/path/bmad-hook.js'));
-    // PostToolUse
+    // PreToolUse — single wildcard
+    assert.equal(result.hooks.PreToolUse[0].matcher, '');
+    assert.equal(result.hooks.PreToolUse[0].hooks[0].type, 'command');
+    assert.ok(result.hooks.PreToolUse[0].hooks[0].command.includes('/test/path/bmad-hook.js'));
+    // PostToolUse — 4 tool-specific matchers
     const ptuMatchers = result.hooks.PostToolUse.map(e => e.matcher);
-    assert.deepEqual(ptuMatchers, ['Read', 'Write', 'Edit']);
+    assert.deepEqual(ptuMatchers, ['Read', 'Write', 'Edit', 'Bash']);
     for (const entry of result.hooks.PostToolUse) {
       assert.equal(entry.hooks[0].type, 'command');
       assert.ok(entry.hooks[0].command.includes('/test/path/bmad-hook.js'));
     }
-    // SessionStart
+    // 7 new event types — all wildcard matchers
+    const wildcardEvents = [
+      'PermissionRequest', 'PermissionDenied', 'PostToolUseFailure',
+      'StopFailure', 'SubagentStart', 'SubagentStop', 'SessionEnd'
+    ];
+    for (const evt of wildcardEvents) {
+      assert.equal(result.hooks[evt][0].matcher, '', `${evt} should have wildcard matcher`);
+      assert.equal(result.hooks[evt][0].hooks[0].type, 'command');
+      assert.ok(result.hooks[evt][0].hooks[0].command.includes('/test/path/bmad-hook.js'), `${evt} command should reference bmad-hook.js`);
+    }
+    // Stop, Notification — wildcard (type + command validation)
+    assert.equal(result.hooks.Stop[0].matcher, '');
+    assert.equal(result.hooks.Stop[0].hooks[0].type, 'command');
+    assert.ok(result.hooks.Stop[0].hooks[0].command.includes('/test/path/bmad-hook.js'));
+    assert.equal(result.hooks.Notification[0].matcher, '');
+    assert.equal(result.hooks.Notification[0].hooks[0].type, 'command');
+    assert.ok(result.hooks.Notification[0].hooks[0].command.includes('/test/path/bmad-hook.js'));
+    // SessionStart — 'resume' (type + command validation)
     assert.equal(result.hooks.SessionStart[0].matcher, 'resume');
     assert.equal(result.hooks.SessionStart[0].hooks[0].type, 'command');
     assert.ok(result.hooks.SessionStart[0].hooks[0].command.includes('/test/path/bmad-hook.js'));

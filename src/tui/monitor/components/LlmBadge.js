@@ -1,6 +1,6 @@
 // LlmBadge.js — 4-state LLM badge: active, permission, waiting, inactive
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Box, Text } from 'ink';
 import { formatElapsed } from '../monitor-utils.js';
 
@@ -14,6 +14,13 @@ const LLM_BADGE_CONFIG = {
 };
 
 function LlmBadge({ state, workflow, startedAt, contextLabel }) {
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    if (state === 'inactive') return;
+    const id = setInterval(() => setTick(t => t + 1), 1000);
+    return () => clearInterval(id);
+  }, [state]);
+
   const cfg = LLM_BADGE_CONFIG[state] || LLM_BADGE_CONFIG.inactive;
   const elapsed = formatElapsed(startedAt);
   const suffix = [workflow, elapsed].filter(Boolean).join(' ');

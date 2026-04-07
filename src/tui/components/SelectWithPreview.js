@@ -1,6 +1,6 @@
 // SelectWithPreview.js — Custom select with try-before-you-buy (onHighlight callback)
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Box, Text, useInput } from 'ink';
 
 const e = React.createElement;
@@ -8,6 +8,12 @@ const e = React.createElement;
 export function SelectWithPreview({ options, defaultValue, onChange, onHighlight, isActive }) {
   const defaultIndex = Math.max(0, options.findIndex(o => o.value === defaultValue));
   const [index, setIndex] = useState(defaultIndex);
+
+  useEffect(() => {
+    if (onHighlight && options[defaultIndex]) {
+      onHighlight(options[defaultIndex].value);
+    }
+  }, []);
 
   useInput((input, key) => {
     if (key.upArrow) {

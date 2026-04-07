@@ -15,7 +15,6 @@ const STORY_PRIORITY = { SPRINT_STATUS: 1, STORY_FILE: 2, CANDIDATE: 3 };
 const STORY_FILE_REGEX = /\/(\d+-\d+-[a-zA-Z][\w-]*)\.md$/;
 const SKILL_REGEX = /^\s*\/?((?:bmad|gds|wds)-[\w-]+)/;
 const LEGACY_COMMAND_REGEX = /^\s*\/?(bmad(?::[\w-]+)+)/;
-const ALIVE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 const STEP_REGEX = /\/steps(-[a-z])?\/step-(?:[a-z]-)?(\d+)[a-z]?-(.+)\.md$/;
 
 function normalize(p) {
@@ -134,6 +133,8 @@ const hookEvent = payload.hook_event_name;
 
 if (hookEvent === 'UserPromptSubmit') {
   handleUserPrompt();
+} else if (hookEvent === 'PreToolUse') {
+  handlePreToolUse();
 } else if (hookEvent === 'PostToolUse') {
   const toolName = payload.tool_name;
   if (toolName === 'Read') {
@@ -153,6 +154,14 @@ if (hookEvent === 'UserPromptSubmit') {
   handleNotification();
 } else if (hookEvent === 'PermissionRequest') {
   handlePermissionRequest();
+} else if (hookEvent === 'PermissionDenied') {
+  handlePermissionDenied();
+} else if (hookEvent === 'PostToolUseFailure') {
+  handlePostToolUseFailure();
+} else if (hookEvent === 'SubagentStart') {
+  handleSubagentStart();
+} else if (hookEvent === 'SubagentStop') {
+  handleSubagentStop();
 } else if (hookEvent === 'SessionStart') {
   // no-op — alive already touched
 } else if (hookEvent === 'SessionEnd') {
@@ -163,48 +172,53 @@ process.exit(0);
 
 // ─── 7. handleUserPrompt (intent signal) ─────────────────────────────────────
 function handleUserPrompt() {
-  const prompt = payload.prompt;
-  if (!prompt) return;
-
-  let skillName, workflowName;
-  const match = prompt.match(SKILL_REGEX);
-  if (match) {
-    skillName = match[1];
-    workflowName = skillName.slice(skillName.indexOf('-') + 1);
-  } else {
-    // Legacy .claude/commands/ format: /bmad:bmm:workflows:create-story
-    const legacyMatch = prompt.match(LEGACY_COMMAND_REGEX);
-    if (!legacyMatch) return;
-    skillName = legacyMatch[1];
-    const parts = skillName.split(':');
-    workflowName = parts[parts.length - 1];
-  }
-
   const status = readStatus(sessionId);
-
-  // Preserve started_at if same skill; reset on skill change
-  if (status.skill !== skillName) {
-    status.started_at = new Date().toISOString();
-    status.step = { current: null, current_name: null, next: null, next_name: null, total: null, track: null };
-    status.story = null;
-    status.story_priority = null;
-    status.active_skill = null;
-    status.last_read = null;
-    status.last_write = null;
-    status.last_write_op = null;
-    status.document_name = null;
-    status.reads = [];
-    status.writes = [];
-    status.commands = [];
-  }
-
   const now = new Date().toISOString();
+
+  // Always mark active on any prompt submission
   status.llm_state = 'active';
   status.llm_state_since = now;
+  status.subagent_type = null;
   status.error_type = null;
   status.session_id = sessionId;
-  status.skill = skillName;
-  status.workflow = workflowName;
+
+  // Skill detection — only update skill fields when prompt matches
+  const prompt = payload.prompt;
+  if (prompt) {
+    let skillName, workflowName;
+    const match = prompt.match(SKILL_REGEX);
+    if (match) {
+      skillName = match[1];
+      workflowName = skillName.slice(skillName.indexOf('-') + 1);
+    } else {
+      const legacyMatch = prompt.match(LEGACY_COMMAND_REGEX);
+      if (legacyMatch) {
+        skillName = legacyMatch[1];
+        const parts = skillName.split(':');
+        workflowName = parts[parts.length - 1];
+      }
+    }
+
+    if (skillName) {
+      // Preserve started_at if same skill; reset on skill change
+      if (status.skill !== skillName) {
+        status.started_at = now;
+        status.step = { current: null, current_name: null, next: null, next_name: null, total: null, track: null };
+        status.story = null;
+        status.story_priority = null;
+        status.active_skill = null;
+        status.last_read = null;
+        status.last_write = null;
+        status.last_write_op = null;
+        status.document_name = null;
+        status.reads = [];
+        status.writes = [];
+        status.commands = [];
+      }
+      status.skill = skillName;
+      status.workflow = workflowName;
+    }
+  }
 
   writeStatus(sessionId, status);
 }
@@ -242,6 +256,7 @@ function handleRead() {
   }
   status.llm_state = 'active';
   status.llm_state_since = now;
+  status.subagent_type = null;
   status.session_id = sessionId;
 
   if (!inProject) {
@@ -418,6 +433,7 @@ function handleWrite() {
   }
   status.llm_state = 'active';
   status.llm_state_since = now;
+  status.subagent_type = null;
   status.session_id = sessionId;
 
   if (!inProject) {
@@ -509,6 +525,7 @@ function handleEdit() {
   }
   status.llm_state = 'active';
   status.llm_state_since = now;
+  status.subagent_type = null;
   status.session_id = sessionId;
 
   if (!inProject) {
@@ -569,6 +586,20 @@ function handleBash() {
 
   status.llm_state = 'active';
   status.llm_state_since = now;
+  status.subagent_type = null;
+  status.session_id = sessionId;
+  writeStatus(sessionId, status);
+}
+
+// ─── 11b. handlePreToolUse (clear permission on tool start) ─────────────────
+function handlePreToolUse() {
+  const status = readStatus(sessionId);
+  status.error_type = null;
+  const now = new Date().toISOString();
+
+  status.llm_state = 'active';
+  status.llm_state_since = now;
+  status.subagent_type = null;
   status.session_id = sessionId;
   writeStatus(sessionId, status);
 }
@@ -581,19 +612,21 @@ function handleStop() {
 
   status.llm_state = 'waiting';
   status.llm_state_since = now;
+  status.subagent_type = null;
   status.session_id = sessionId;
   writeStatus(sessionId, status);
 }
 
 // ─── 13. handleNotification (permission state) ──────────────────────────────
 function handleNotification() {
-  if (!payload.notification || payload.notification.type !== 'permission') return;
+  if (payload.notification_type !== 'permission_prompt') return;
 
   const status = readStatus(sessionId);
   const now = new Date().toISOString();
 
   status.llm_state = 'permission';
   status.llm_state_since = now;
+  status.subagent_type = null;
   status.error_type = null;
   status.session_id = sessionId;
   writeStatus(sessionId, status);
@@ -606,6 +639,7 @@ function handlePermissionRequest() {
 
   status.llm_state = 'permission';
   status.llm_state_since = now;
+  status.subagent_type = null;
   status.error_type = null;
   status.session_id = sessionId;
   writeStatus(sessionId, status);
@@ -618,6 +652,7 @@ function handleStopFailure() {
 
   status.llm_state = 'error';
   status.error_type = payload.error_type ?? 'unknown';
+  status.subagent_type = null;
   status.llm_state_since = now;
   status.session_id = sessionId;
   writeStatus(sessionId, status);
@@ -628,6 +663,55 @@ function handleSessionEnd() {
   if (!isSafeId(sessionId)) return;
   try { fs.unlinkSync(path.join(CACHE_DIR, '.alive-' + sessionId)); } catch {}
   try { fs.unlinkSync(path.join(CACHE_DIR, 'status-' + sessionId + '.json')); } catch {}
+}
+
+
+// ─── 17. handleSubagentStart (subagent lifecycle) ──────────────────────────
+function handleSubagentStart() {
+  const status = readStatus(sessionId);
+  const now = new Date().toISOString();
+  status.llm_state = 'active:subagent';
+  status.subagent_type = payload.agent_type ?? 'unknown';
+  status.error_type = null;
+  status.llm_state_since = now;
+  status.session_id = sessionId;
+  writeStatus(sessionId, status);
+}
+
+// ─── 18. handleSubagentStop (subagent lifecycle) ───────────────────────────
+function handleSubagentStop() {
+  const status = readStatus(sessionId);
+  const now = new Date().toISOString();
+  status.llm_state = 'active';
+  status.subagent_type = null;
+  status.error_type = null;
+  status.llm_state_since = now;
+  status.session_id = sessionId;
+  writeStatus(sessionId, status);
+}
+
+// ─── 19. handlePostToolUseFailure (tool failure) ───────────────────────────
+function handlePostToolUseFailure() {
+  const status = readStatus(sessionId);
+  const now = new Date().toISOString();
+  status.llm_state = 'active';
+  status.subagent_type = null;
+  status.error_type = null;
+  status.llm_state_since = now;
+  status.session_id = sessionId;
+  writeStatus(sessionId, status);
+}
+
+// ─── 20. handlePermissionDenied (auto-mode denied) ─────────────────────────
+function handlePermissionDenied() {
+  const status = readStatus(sessionId);
+  const now = new Date().toISOString();
+  status.llm_state = 'active';
+  status.subagent_type = null;
+  status.error_type = null;
+  status.llm_state_since = now;
+  status.session_id = sessionId;
+  writeStatus(sessionId, status);
 }
 
 // ─── Document name + step enrichment helper ─────────────────────────────────
@@ -740,13 +824,14 @@ function readStatus(sid) {
     last_read: null, last_write: null, last_write_op: null, document_name: null,
     started_at: null, updated_at: null,
     llm_state: null, llm_state_since: null,
-    error_type: null,
+    subagent_type: null, error_type: null,
     reads: [], writes: [], commands: []
   };
   try {
     const fp = path.join(CACHE_DIR, 'status-' + sid + '.json');
     const raw = fs.readFileSync(fp, 'utf8');
     const status = JSON.parse(raw);
+    status.subagent_type = status.subagent_type ?? null;
     status.error_type = status.error_type ?? null;
     return status;
   } catch (e) {
@@ -774,6 +859,7 @@ function readStatus(sid) {
       updated_at: null,
       llm_state: null,
       llm_state_since: null,
+      subagent_type: null,
       error_type: null,
       reads: [],
       writes: [],

@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { Box, Text } from 'ink';
-import { SAMPLE_VALUES, SEPARATOR_MAP, resolvePreviewColor, toInkColor } from '../preview-utils.js';
+import { getSampleValue, SEPARATOR_MAP, resolvePreviewColor, toInkColor } from '../preview-utils.js';
 
 const e = React.createElement;
 
@@ -13,7 +13,7 @@ function renderLine(line, separator, lineIndex) {
   }
   const segments = [label];
   for (const widgetId of line.widgets) {
-    const value = SAMPLE_VALUES[widgetId];
+    const value = getSampleValue(widgetId, line.colorModes);
     if (!value) continue;
     const color = resolvePreviewColor(widgetId, line.colorModes);
     if (segments.length > 1) segments.push(e(Text, { key: `sep-${widgetId}` }, separator));

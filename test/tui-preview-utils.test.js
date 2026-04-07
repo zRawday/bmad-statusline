@@ -10,10 +10,10 @@ import {
 
 describe('preview-utils', () => {
   describe('SAMPLE_VALUES', () => {
-    test('has all 9 widget keys', () => {
+    test('has all 11 widget keys', () => {
       const expectedKeys = [
-        'bmad-project', 'bmad-workflow', 'bmad-activeskill', 'bmad-nextstep',
-        'bmad-progressstep', 'bmad-story', 'bmad-timer',
+        'bmad-llmstate', 'bmad-project', 'bmad-workflow', 'bmad-activeskill', 'bmad-nextstep',
+        'bmad-progressstep', 'bmad-story', 'bmad-docname', 'bmad-timer',
         'bmad-fileread', 'bmad-filewrite',
       ];
       for (const key of expectedKeys) {
@@ -22,8 +22,8 @@ describe('preview-utils', () => {
       }
     });
 
-    test('has exactly 10 keys', () => {
-      assert.equal(Object.keys(SAMPLE_VALUES).length, 10);
+    test('has exactly 11 keys', () => {
+      assert.equal(Object.keys(SAMPLE_VALUES).length, 11);
     });
   });
 

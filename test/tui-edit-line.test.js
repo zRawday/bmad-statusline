@@ -58,6 +58,7 @@ describe('EditLineScreen', () => {
   test('h key toggles visibility — hide a visible widget', async () => {
     let updatedCfg = null;
     const props = makeScreenProps({
+      editingLine: 1,
       updateConfig: (mutator) => {
         const cfg = structuredClone(props.config);
         mutator(cfg);
@@ -66,13 +67,13 @@ describe('EditLineScreen', () => {
     });
     const { stdin } = render(e(EditLineScreen, props));
     await delay(50);
-    // First widget (bmad-project) is visible — press h to hide
+    // First widget in widgetOrder is bmad-llmstate, visible on line 1 — press h to hide
     stdin.write('h');
     await delay(50);
     assert.ok(updatedCfg, 'updateConfig was called');
-    assert.ok(!updatedCfg.lines[0].widgets.includes('bmad-project'), 'widget removed from line');
+    assert.ok(!updatedCfg.lines[1].widgets.includes('bmad-llmstate'), 'widget removed from line');
     // colorModes should be preserved
-    assert.ok(updatedCfg.lines[0].colorModes['bmad-project'], 'colorModes preserved on hide');
+    assert.ok(updatedCfg.lines[1].colorModes['bmad-llmstate'], 'colorModes preserved on hide');
   });
 
   test('h key toggles visibility — show a hidden widget', async () => {
@@ -88,8 +89,8 @@ describe('EditLineScreen', () => {
     });
     const { stdin } = render(e(EditLineScreen, props));
     await delay(50);
-    // Navigate down to a hidden widget (nextstep at index 6)
-    for (let i = 0; i < 6; i++) {
+    // Navigate down to a hidden widget (nextstep at index 7: llmstate=0..nextstep=7)
+    for (let i = 0; i < 7; i++) {
       stdin.write('\x1B[B');
       await delay(20);
     }
@@ -123,11 +124,13 @@ describe('EditLineScreen', () => {
     });
     const { stdin } = render(e(EditLineScreen, props));
     await delay(50);
-    // First widget (bmad-project) is visible with fixedColor cyan
+    // First widget is bmad-llmstate (color locked) — navigate to bmad-project (index 1)
+    stdin.write('\x1B[B');
+    await delay(20);
     stdin.write('\x1B[C'); // right arrow
     await delay(50);
     assert.ok(updatedCfg, 'updateConfig was called');
-    // Should have cycled to next color after cyan
+    // Should have cycled bmad-project color
     assert.notEqual(updatedCfg.lines[0].colorModes['bmad-project'].fixedColor, 'cyan');
   });
 
@@ -157,6 +160,59 @@ describe('EditLineScreen', () => {
     await delay(50);
     // Should be in grab mode
     assert.ok(lastFrame().includes('Drop'), 'grab mode entered');
+  });
+
+  test('m key toggles displayMode on story widget', async () => {
+    let updatedCfg = null;
+    const config = createDefaultConfig();
+    const props = makeScreenProps({
+      config,
+      updateConfig: (mutator) => {
+        const cfg = structuredClone(config);
+        mutator(cfg);
+        updatedCfg = cfg;
+      },
+    });
+    const { stdin } = render(e(EditLineScreen, props));
+    await delay(50);
+    // Navigate down to story widget (index 4: llmstate=0, project=1, workflow=2, activeskill=3, story=4)
+    for (let i = 0; i < 4; i++) {
+      stdin.write('\x1B[B');
+      await delay(20);
+    }
+    stdin.write('m');
+    await delay(50);
+    assert.ok(updatedCfg, 'updateConfig was called');
+    assert.equal(updatedCfg.lines[0].colorModes['bmad-story'].displayMode, 'compact', 'should toggle to compact');
+  });
+
+  test('m key on non-story widget does nothing', async () => {
+    let updatedCfg = null;
+    const props = makeScreenProps({
+      updateConfig: (mutator) => {
+        const cfg = structuredClone(props.config);
+        mutator(cfg);
+        updatedCfg = cfg;
+      },
+    });
+    const { stdin } = render(e(EditLineScreen, props));
+    await delay(50);
+    // Cursor is on project (index 0) — m should do nothing
+    stdin.write('m');
+    await delay(50);
+    assert.equal(updatedCfg, null, 'updateConfig should NOT be called for non-story widget');
+  });
+
+  test('shows displayMode hint on story widget', () => {
+    const { lastFrame } = render(e(EditLineScreen, makeScreenProps()));
+    const frame = lastFrame();
+    assert.ok(frame.includes('(full)'), 'should show (full) hint for story widget');
+  });
+
+  test('shows Mode shortcut label', () => {
+    const { lastFrame } = render(e(EditLineScreen, makeScreenProps()));
+    const frame = lastFrame();
+    assert.ok(frame.includes('Mode'), 'should show Mode shortcut');
   });
 
   test('hidden widget status uses brightBlack color', () => {

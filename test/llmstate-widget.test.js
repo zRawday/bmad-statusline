@@ -106,7 +106,7 @@ describe('LLM State widget — reader output', () => {
     assert.ok(plain.includes('PERMISSION '), 'should have trailing space after label');
   });
 
-  it('renders EN ATTENTE with brightBlue bg and white text', () => {
+  it('renders WAITING with brightBlue bg and white text', () => {
     writeConfig();
     writeStatus('test1', {
       session_id: 'test1',
@@ -114,12 +114,12 @@ describe('LLM State widget — reader output', () => {
       updated_at: new Date().toISOString(),
     });
     const output = runReader();
-    assert.ok(output.includes('EN ATTENTE'), `should contain EN ATTENTE, got: ${JSON.stringify(output)}`);
+    assert.ok(output.includes('WAITING'), `should contain WAITING, got: ${JSON.stringify(output)}`);
     assert.ok(output.includes(BG.brightBlue), 'should contain brightBlue background');
     assert.ok(output.includes(FG.white), 'should contain white foreground');
   });
 
-  it('renders Actif in green without bold', () => {
+  it('renders ACTIVE in green without bold', () => {
     writeConfig();
     writeStatus('test1', {
       session_id: 'test1',
@@ -127,12 +127,12 @@ describe('LLM State widget — reader output', () => {
       updated_at: new Date().toISOString(),
     });
     const output = runReader();
-    assert.ok(output.includes('Actif'), `should contain Actif, got: ${JSON.stringify(output)}`);
+    assert.ok(output.includes('ACTIVE'), `should contain ACTIVE, got: ${JSON.stringify(output)}`);
     assert.ok(!output.includes(BOLD), 'should NOT contain BOLD escape');
     assert.ok(output.includes(COLOR.green), 'should contain green color');
   });
 
-  it('renders Inactif in grey without bold for explicit inactive', () => {
+  it('renders INACTIVE in grey without bold for explicit inactive', () => {
     writeConfig();
     writeStatus('test1', {
       session_id: 'test1',
@@ -140,22 +140,22 @@ describe('LLM State widget — reader output', () => {
       updated_at: new Date().toISOString(),
     });
     const output = runReader();
-    assert.ok(output.includes('Inactif'), `should contain Inactif, got: ${JSON.stringify(output)}`);
+    assert.ok(output.includes('INACTIVE'), `should contain INACTIVE, got: ${JSON.stringify(output)}`);
     assert.ok(!output.includes(BOLD), 'should NOT contain BOLD escape');
     assert.ok(output.includes(COLOR.brightBlack), 'should contain grey color');
   });
 
-  it('renders Inactif when llm_state is missing', () => {
+  it('renders INACTIVE when llm_state is missing', () => {
     writeConfig();
     writeStatus('test1', {
       session_id: 'test1',
       updated_at: new Date().toISOString(),
     });
     const output = runReader();
-    assert.ok(output.includes('Inactif'), `should fallback to Inactif, got: ${JSON.stringify(output)}`);
+    assert.ok(output.includes('INACTIVE'), `should fallback to INACTIVE, got: ${JSON.stringify(output)}`);
   });
 
-  it('renders Inactif when session is stale (>5 min)', () => {
+  it('renders INACTIVE when session is stale (>5 min)', () => {
     writeConfig();
     const staleTime = new Date(Date.now() - 6 * 60 * 1000).toISOString();
     writeStatus('test1', {
@@ -164,7 +164,7 @@ describe('LLM State widget — reader output', () => {
       updated_at: staleTime,
     });
     const output = runReader();
-    assert.ok(output.includes('Inactif'), `stale session should show Inactif, got: ${JSON.stringify(output)}`);
+    assert.ok(output.includes('INACTIVE'), `stale session should show INACTIVE, got: ${JSON.stringify(output)}`);
     assert.ok(!output.includes('PERMISSION'), 'should NOT show PERMISSION for stale session');
   });
 
@@ -184,6 +184,6 @@ describe('LLM State widget — reader output', () => {
     const output = runReader();
     // Strip ANSI to check spacing
     const plain = output.replace(/\x1b\[[0-9;]*m/g, '');
-    assert.ok(plain.includes('\u2B24  Actif'), `should have 2 spaces between circle and label, got: ${JSON.stringify(plain)}`);
+    assert.ok(plain.includes('\u2B24  ACTIVE'), `should have 2 spaces between circle and label, got: ${JSON.stringify(plain)}`);
   });
 });

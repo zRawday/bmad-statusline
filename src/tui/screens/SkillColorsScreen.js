@@ -4,15 +4,10 @@ import React, { useState } from 'react';
 import { Box, Text, useInput } from 'ink';
 import { ScreenLayout } from '../components/ScreenLayout.js';
 import { SKILL_MODULES, getDefaultSkillColor } from '../skill-catalog.js';
+import { ANSI_COLORS } from '../widget-registry.js';
 import { toInkColor } from '../preview-utils.js';
 
 const e = React.createElement;
-
-const ANSI_COLORS = [
-  'red', 'green', 'yellow', 'blue', 'magenta', 'cyan', 'white',
-  'brightRed', 'brightGreen', 'brightYellow', 'brightBlue',
-  'brightMagenta', 'brightCyan', 'brightWhite', 'brightBlack',
-];
 
 const MODULE_SHORTCUTS = [
   { key: '\u2191\u2193', label: 'Navigate' },

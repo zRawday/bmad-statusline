@@ -291,16 +291,16 @@ describe('reader color output', () => {
     fs.copyFileSync(FIXTURE_CONFIG_PATH, path.join(configDir, 'config.json'));
     writeStatus('line2', { project: 'Toulou' });
     const result = execReaderWithConfig('line 1', 'line2', configDir);
-    assert.ok(result.includes('Inactif'), 'line 1 should render llmstate');
+    assert.ok(result.includes('INACTIVE'), 'line 1 should render llmstate');
     fs.rmSync(configDir, { recursive: true, force: true });
   });
 
-  it('line 2: llmstate-only line renders llm state (AC #2)', () => {
+  it('line 2: empty line returns empty string (AC #2)', () => {
     const configDir = fs.mkdtempSync(path.join(os.tmpdir(), 'bmad-cfg-'));
     fs.copyFileSync(FIXTURE_CONFIG_PATH, path.join(configDir, 'config.json'));
     writeStatus('line2b', { project: 'Toulou' });
     const result = execReaderWithConfig('line 2', 'line2b', configDir);
-    assert.ok(result.includes('Inactif'), 'line 2 should render llmstate');
+    assert.equal(result, '', 'line 2 is empty in default config');
     fs.rmSync(configDir, { recursive: true, force: true });
   });
 

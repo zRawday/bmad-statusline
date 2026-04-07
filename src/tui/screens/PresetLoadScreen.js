@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { Box, Text, useInput } from 'ink';
 import { ScreenLayout } from '../components/ScreenLayout.js';
-import { getIndividualWidgets } from '../widget-registry.js';
+import { getPresetSlotData } from '../preview-utils.js';
 
 const e = React.createElement;
 
@@ -12,19 +12,6 @@ const SHORTCUTS = [
   { key: 'Enter', label: 'Load' },
   { key: 'Esc', label: 'Back' },
 ];
-
-function getPresetSlotData(preset) {
-  if (!preset || !preset.lines) return { isEmpty: true, name: null, lineSummaries: [] };
-  const allWidgets = getIndividualWidgets();
-  const lineSummaries = preset.lines.map(line => {
-    const names = (line.widgets || []).map(id => {
-      const w = allWidgets.find(wd => wd.id === id);
-      return w ? w.name : id;
-    });
-    return names;
-  });
-  return { isEmpty: false, name: preset.name, lineSummaries };
-}
 
 function renderSlot(slotIndex, slotData, isCursor) {
   const prefix = isCursor ? '> ' : '  ';

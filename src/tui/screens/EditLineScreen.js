@@ -3,16 +3,10 @@
 import React, { useState } from 'react';
 import { Box, Text, useInput } from 'ink';
 import { ScreenLayout } from '../components/ScreenLayout.js';
-import { getIndividualWidgets } from '../widget-registry.js';
+import { getIndividualWidgets, ANSI_COLORS } from '../widget-registry.js';
 import { toInkColor } from '../preview-utils.js';
 
 const e = React.createElement;
-
-const ANSI_COLORS = [
-  'red', 'green', 'yellow', 'blue', 'magenta', 'cyan', 'white',
-  'brightRed', 'brightGreen', 'brightYellow', 'brightBlue',
-  'brightMagenta', 'brightCyan', 'brightWhite', 'brightBlack',
-];
 
 const RAINBOW_COLORS = ['red', 'yellow', 'green', 'cyan', 'blue', 'magenta', 'white'];
 
@@ -21,6 +15,7 @@ const NAVIGATE_SHORTCUTS = [
   { key: 'h', label: 'Hide/Show' },
   { key: 'g', label: 'Grab' },
   { key: '\u2190\u2192', label: 'Color' },
+  { key: 'm', label: 'Mode' },
   { key: 'Enter', label: 'Edit skills' },
   { key: 'Esc', label: 'Back' },
 ];
@@ -32,6 +27,7 @@ const GRAB_SHORTCUTS = [
 ];
 
 function getColorOptions(widgetId) {
+  if (widgetId === 'bmad-llmstate') return [];
   if (widgetId === 'bmad-workflow' || widgetId === 'bmad-project' || widgetId === 'bmad-activeskill') return ['dynamic', ...ANSI_COLORS];
   return ANSI_COLORS;
 }
@@ -55,6 +51,9 @@ export function EditLineScreen({ config, updateConfig, previewOverride, setPrevi
   const [grabOrder, setGrabOrder] = useState(null);
 
   const allWidgets = getIndividualWidgets();
+  if (editingLine == null || !config.lines[editingLine]) {
+    return e(ScreenLayout, { screenName: 'Edit Line', screenColor: 'green', config, previewOverride, shortcuts: [] });
+  }
   const line = config.lines[editingLine];
   const widgetOrder = grabOrder || line.widgetOrder;
   const widgetList = widgetOrder.map(id => allWidgets.find(w => w.id === id)).filter(Boolean);
@@ -152,10 +151,23 @@ export function EditLineScreen({ config, updateConfig, previewOverride, setPrevi
     } else if (input === 'g') {
       setGrabOrder([...line.widgetOrder]);
       setGrabMode(true);
+    } else if (input === 'm') {
+      const widget = widgetList[cursorIndex];
+      if (!widget || widget.id !== 'bmad-story') return;
+      if (!line.widgets.includes(widget.id)) return;
+      updateConfig(cfg => {
+        const ln = cfg.lines[editingLine];
+        if (!ln.colorModes[widget.id]) {
+          ln.colorModes[widget.id] = { mode: 'fixed', fixedColor: 'magenta' };
+        }
+        const cm = ln.colorModes[widget.id];
+        cm.displayMode = cm.displayMode === 'compact' ? 'full' : 'compact';
+      });
     } else if (key.leftArrow || key.rightArrow) {
       const widget = widgetList[cursorIndex];
       if (!widget || !line.widgets.includes(widget.id)) return;
       const options = getColorOptions(widget.id);
+      if (options.length === 0) return;
       const current = getCurrentColorValue(line.colorModes, widget);
       const idx = options.indexOf(current);
       const nextIdx = key.rightArrow
@@ -163,9 +175,12 @@ export function EditLineScreen({ config, updateConfig, previewOverride, setPrevi
         : (idx - 1 + options.length) % options.length;
       const nextColor = options[nextIdx];
       updateConfig(cfg => {
-        cfg.lines[editingLine].colorModes[widget.id] = nextColor === 'dynamic'
+        const prev = cfg.lines[editingLine].colorModes[widget.id];
+        const base = nextColor === 'dynamic'
           ? { mode: 'dynamic' }
           : { mode: 'fixed', fixedColor: nextColor };
+        if (prev?.displayMode) base.displayMode = prev.displayMode;
+        cfg.lines[editingLine].colorModes[widget.id] = base;
       });
     }
   }, { isActive });
@@ -196,17 +211,25 @@ export function EditLineScreen({ config, updateConfig, previewOverride, setPrevi
             `${statusIcon} ${isVisible ? 'visible' : 'hidden'}`));
         }
 
+        // Display mode hint for story widget
+        const storyMode = isVisible && widget.id === 'bmad-story'
+          ? (line.colorModes[widget.id]?.displayMode || 'full')
+          : null;
+        const modeLen = storyMode ? 4 + storyMode.length : 0; // "  (full)" or "  (compact)"
+
         // Compute padding so hints align vertically
         const statusLen = isVisible ? 9 : 8; // "■ visible" or "□ hidden"
-        const colorLen = isVisible ? 2 + colorName.length : 0; // "  {color}"
+        const colorDisplay = widget.id === 'bmad-llmstate' ? '(auto)' : colorName;
+        const colorLen = isVisible ? 2 + colorDisplay.length : 0; // "  {color}"
         const grabLen = isGrabbed ? 3 : 0; // "  ↕"
-        const hintPad = ' '.repeat(Math.max(2, 26 - statusLen - colorLen - grabLen));
+        const hintPad = ' '.repeat(Math.max(2, 26 - statusLen - colorLen - modeLen - grabLen));
 
         return e(Text, { key: widget.id, bold: isGrabbed },
           prefix,
           e(Text, null, widget.name.padEnd(16)),
           ...statusParts,
-          isVisible ? e(Text, { dimColor: true }, `  ${colorName}`) : null,
+          isVisible ? e(Text, { dimColor: true }, `  ${widget.id === 'bmad-llmstate' ? '(auto)' : colorName}`) : null,
+          storyMode ? e(Text, { dimColor: true }, `  (${storyMode})`) : null,
           isGrabbed ? e(Text, { dimColor: true }, '  \u2195') : null,
           widget.hint ? e(Text, { dimColor: true }, `${hintPad}${widget.hint}`) : null,
         );

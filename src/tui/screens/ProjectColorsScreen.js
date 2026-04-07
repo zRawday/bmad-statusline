@@ -6,22 +6,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { ScreenLayout } from '../components/ScreenLayout.js';
+import { ANSI_COLORS } from '../widget-registry.js';
+import { hashProjectColor } from '../../defaults.js';
 import { toInkColor } from '../preview-utils.js';
 
 const e = React.createElement;
 
 const CACHE_DIR = process.env.BMAD_CACHE_DIR || path.join(os.homedir(), '.cache', 'bmad-status');
-
-const ANSI_COLORS = [
-  'red', 'green', 'yellow', 'blue', 'magenta', 'cyan', 'white',
-  'brightRed', 'brightGreen', 'brightYellow', 'brightBlue',
-  'brightMagenta', 'brightCyan', 'brightWhite', 'brightBlack',
-];
-
-const PROJECT_COLOR_PALETTE = [
-  'red', 'green', 'yellow', 'blue', 'magenta', 'cyan',
-  'brightRed', 'brightGreen', 'brightYellow', 'brightBlue', 'brightMagenta', 'brightCyan',
-];
 
 const SHORTCUTS = [
   { key: '\u2191\u2193', label: 'Navigate' },
@@ -30,14 +21,7 @@ const SHORTCUTS = [
   { key: 'Esc', label: 'Back' },
 ];
 
-function hashProjectColor(name) {
-  if (!name) return null;
-  let h = 0;
-  for (let i = 0; i < name.length; i++) {
-    h = ((h << 5) - h + name.charCodeAt(i)) | 0;
-  }
-  return PROJECT_COLOR_PALETTE[Math.abs(h) % PROJECT_COLOR_PALETTE.length];
-}
+// hashProjectColor imported from defaults.js
 
 function detectProjects() {
   try {
