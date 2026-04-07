@@ -1,4 +1,7 @@
 node_modules/
 *.bak
 .DS_Store
-.claude/
+.claude/settings.local.json
+.claude/worktrees/
+_bmad/**/config.user.yaml
+_bmad/**/config.yaml
