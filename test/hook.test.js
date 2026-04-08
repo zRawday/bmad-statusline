@@ -2478,6 +2478,56 @@ describe('hook — 8-signal passive detection', () => {
     assert.equal(status.subagent_type, null);
   });
 
+  // ─── 8.6: handlePostToolUseFailure — interrupted state on is_interrupt ────
+
+  it('8.6 AC#1: PostToolUseFailure with is_interrupt=true sets interrupted', () => {
+    seedStatus('interrupt1', {
+      session_id: 'interrupt1', project: 'TestProject',
+      llm_state: 'active', llm_state_since: '2026-01-01T00:00:00.000Z'
+    });
+    execHook({
+      session_id: 'interrupt1', cwd: tmpDir,
+      hook_event_name: 'PostToolUseFailure',
+      tool_name: 'Bash',
+      is_interrupt: true
+    });
+    const status = readStatusFile('interrupt1');
+    assert.equal(status.llm_state, 'interrupted');
+    assert.equal(status.subagent_type, null);
+    assert.equal(status.error_type, null);
+    assert.notEqual(status.llm_state_since, '2026-01-01T00:00:00.000Z');
+  });
+
+  it('8.6 AC#2: PostToolUseFailure without is_interrupt keeps active', () => {
+    seedStatus('noint1', {
+      session_id: 'noint1', project: 'TestProject',
+      llm_state: 'active', llm_state_since: '2026-01-01T00:00:00.000Z'
+    });
+    execHook({
+      session_id: 'noint1', cwd: tmpDir,
+      hook_event_name: 'PostToolUseFailure',
+      tool_name: 'Bash'
+    });
+    const status = readStatusFile('noint1');
+    assert.equal(status.llm_state, 'active');
+  });
+
+  it('8.6 AC#1: PostToolUseFailure with is_interrupt=true clears subagent_type', () => {
+    seedStatus('interrupt-sub', {
+      session_id: 'interrupt-sub', project: 'TestProject',
+      llm_state: 'active:subagent', subagent_type: 'Explore',
+      llm_state_since: '2026-01-01T00:00:00.000Z'
+    });
+    execHook({
+      session_id: 'interrupt-sub', cwd: tmpDir,
+      hook_event_name: 'PostToolUseFailure',
+      is_interrupt: true
+    });
+    const status = readStatusFile('interrupt-sub');
+    assert.equal(status.llm_state, 'interrupted');
+    assert.equal(status.subagent_type, null);
+  });
+
   // ─── Deferred fixes: _outputFolders independent of project ────────────────
 
   it('_outputFolders computed on resumed session with project already set', () => {

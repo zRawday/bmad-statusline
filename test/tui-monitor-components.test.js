@@ -176,6 +176,14 @@ describe('LlmBadge', () => {
     assert.ok(frame.includes('SUBAGENT'));
     unmount();
   });
+
+  test('INTERRUPTED state renders ⬤ and INTERRUPTED with yellow background', () => {
+    const { lastFrame, unmount } = render(e(LlmBadge, { state: 'interrupted', workflow: 'dev-story', startedAt: new Date().toISOString() }));
+    const frame = lastFrame();
+    assert.ok(frame.includes('\u2B24'));
+    assert.ok(frame.includes('INTERRUPTED'));
+    unmount();
+  });
 });
 
 // --- SessionTabs state icon tests ---
@@ -204,6 +212,18 @@ describe('SessionTabs state icons', () => {
 
   test('active:subagent session shows cyan ⬤ icon in tabs', () => {
     const groups = new Map([['proj', [makeSession('active:subagent')]]]);
+    const { lastFrame, unmount } = render(e(SessionTabs, {
+      groups, activeProject: 'proj', activeSessionIndex: 0,
+      config: {}, mode: 'single-project',
+    }));
+    const frame = lastFrame();
+    assert.ok(frame.includes('\u2B24'));
+    assert.ok(frame.includes('dev-story'));
+    unmount();
+  });
+
+  test('interrupted session shows yellow ⬤ icon in tabs', () => {
+    const groups = new Map([['proj', [makeSession('interrupted')]]]);
     const { lastFrame, unmount } = render(e(SessionTabs, {
       groups, activeProject: 'proj', activeSessionIndex: 0,
       config: {}, mode: 'single-project',

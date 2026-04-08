@@ -8,9 +8,10 @@ const e = React.createElement;
 
 const STATE_ICONS = {
   active:            { icon: '\u2B24', color: 'green' },
-  permission:        { icon: '\u2B24', color: 'yellow' },
+  permission:        { icon: '\u2B24', color: 'yellowBright' },
   waiting:           { icon: '\u2B24', color: 'blueBright' },
   error:             { icon: '\u2B24', color: 'red' },
+  interrupted:       { icon: '\u2B24', color: 'yellow' },
   inactive:          { icon: '\u2B24', color: 'grey' },
   'active:subagent': { icon: '\u2B24', color: 'cyan' },
 };

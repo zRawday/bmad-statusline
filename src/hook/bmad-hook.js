@@ -690,11 +690,11 @@ function handleSubagentStop() {
   writeStatus(sessionId, status);
 }
 
-// ─── 19. handlePostToolUseFailure (tool failure) ───────────────────────────
+// ─── 19. handlePostToolUseFailure (tool failure / user interrupt) ──────────
 function handlePostToolUseFailure() {
   const status = readStatus(sessionId);
   const now = new Date().toISOString();
-  status.llm_state = 'active';
+  status.llm_state = payload.is_interrupt === true ? 'interrupted' : 'active';
   status.subagent_type = null;
   status.error_type = null;
   status.llm_state_since = now;

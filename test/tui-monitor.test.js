@@ -480,6 +480,23 @@ describe('worstState', () => {
     ];
     assert.equal(worstState(sessions), 'waiting');
   });
+
+  test('[active, interrupted] → interrupted', () => {
+    const sessions = [
+      { llm_state: 'active', updated_at: new Date().toISOString() },
+      { llm_state: 'interrupted', updated_at: new Date().toISOString() },
+    ];
+    assert.equal(worstState(sessions), 'interrupted');
+  });
+
+  test('[interrupted, waiting] → interrupted (same priority, first-encountered wins)', () => {
+    const sessions = [
+      { llm_state: 'interrupted', updated_at: new Date().toISOString() },
+      { llm_state: 'waiting', updated_at: new Date().toISOString() },
+    ];
+    // Both priority 2 — first-encountered wins with > comparison
+    assert.equal(worstState(sessions), 'interrupted');
+  });
 });
 
 // --- resolveSessionColor tests ---

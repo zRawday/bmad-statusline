@@ -17,6 +17,7 @@ const COLOR = {
   brightBlack: '\x1b[90m',
 };
 const BG = {
+  yellow: '\x1b[43m',
   brightRed: '\x1b[101m',
   brightYellow: '\x1b[103m',
   brightBlue: '\x1b[104m',
@@ -200,6 +201,20 @@ describe('LLM State widget — reader output', () => {
     assert.ok(output.includes('ERROR'), `should contain ERROR, got: ${JSON.stringify(output)}`);
     assert.ok(output.includes(BG.brightRed), 'should contain brightRed background');
     assert.ok(output.includes(FG.white), 'should contain white foreground');
+    assert.ok(output.includes('\u2B24'), 'should contain filled circle');
+  });
+
+  it('renders INTERRUPTED with yellow bg and black text', () => {
+    writeConfig();
+    writeStatus('test1', {
+      session_id: 'test1',
+      llm_state: 'interrupted',
+      updated_at: new Date().toISOString(),
+    });
+    const output = runReader();
+    assert.ok(output.includes('INTERRUPTED'), `should contain INTERRUPTED, got: ${JSON.stringify(output)}`);
+    assert.ok(output.includes(BG.yellow), 'should contain yellow background');
+    assert.ok(output.includes(FG.black), 'should contain black foreground');
     assert.ok(output.includes('\u2B24'), 'should contain filled circle');
   });
 

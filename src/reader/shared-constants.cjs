@@ -22,6 +22,7 @@ const LLM_STATE_PRIORITY = {
   inactive: 0,
   active: 1,
   'active:subagent': 1,
+  interrupted: 2,
   waiting: 2,
   error: 3,
   permission: 3,
