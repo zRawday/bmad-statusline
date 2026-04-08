@@ -5,7 +5,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import React from 'react';
+import React, { act } from 'react';
+globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 import { Text } from 'ink';
 import { render } from 'ink-testing-library';
 import {
@@ -20,8 +21,6 @@ import { renderBashSection } from '../src/tui/monitor/components/BashSection.js'
 import ScrollableViewport from '../src/tui/monitor/components/ScrollableViewport.js';
 
 const e = React.createElement;
-const delay = (ms) => new Promise(r => setTimeout(r, ms));
-
 // --- pollSessions unit tests ---
 
 describe('pollSessions', () => {
@@ -162,9 +161,7 @@ describe('MonitorScreen', () => {
         isActive: true,
         paths: { cachePath: tmpDir },
       }));
-      await delay(50);
-      stdin.write('\x1B');
-      await delay(50);
+      await act(async () => { stdin.write('\x1B'); });
       assert.ok(goBackCalled);
       unmount();
     } finally {
@@ -188,7 +185,7 @@ describe('MonitorScreen', () => {
         isActive: true,
         paths: { cachePath: tmpDir },
       }));
-      await delay(50);
+      await act(async () => {});
       const frame = lastFrame();
       assert.ok(frame.includes('1 session'));
       assert.ok(!frame.includes('No active BMAD session'));
@@ -570,13 +567,12 @@ describe('MonitorScreen — tab navigation', () => {
         isActive: true,
         paths: { cachePath: tmpDir },
       }));
-      await delay(50);
+      await act(async () => {});
       const frame1 = lastFrame();
       assert.ok(frame1.includes('2 sessions'));
 
       // Navigate right
-      stdin.write('\x1B[C'); // right arrow
-      await delay(50);
+      await act(async () => { stdin.write('\x1B[C'); }); // right arrow
       const frame2 = lastFrame();
       assert.ok(frame2.includes('MONITOR'));
 
@@ -600,13 +596,12 @@ describe('MonitorScreen — tab navigation', () => {
         isActive: true,
         paths: { cachePath: tmpDir },
       }));
-      await delay(50);
+      await act(async () => {});
       const frame1 = lastFrame();
       assert.ok(frame1.includes('2 sessions'));
 
       // Navigate right to second session
-      stdin.write('\x1B[C'); // right arrow
-      await delay(50);
+      await act(async () => { stdin.write('\x1B[C'); }); // right arrow
       const frame2 = lastFrame();
       assert.ok(frame2.includes('MONITOR'));
 
@@ -629,7 +624,7 @@ describe('MonitorScreen — tab navigation', () => {
         isActive: true,
         paths: { cachePath: tmpDir },
       }));
-      await delay(50);
+      await act(async () => {});
       const frame = lastFrame();
       assert.ok(frame.includes('1 session'));
       assert.ok(frame.includes('ACTIVE'));
@@ -653,9 +648,8 @@ describe('MonitorScreen — tab navigation', () => {
         isActive: true,
         paths: { cachePath: tmpDir },
       }));
-      await delay(50);
-      stdin.write('r');
-      await delay(50);
+      await act(async () => {});
+      await act(async () => { stdin.write('r'); });
       const frame = lastFrame();
       assert.ok(frame.includes('grab'), 'reorder navigate shortcuts should show grab');
       assert.ok(frame.includes('MONITOR'), 'header should remain visible');
@@ -679,9 +673,8 @@ describe('MonitorScreen — tab navigation', () => {
         isActive: true,
         paths: { cachePath: tmpDir },
       }));
-      await delay(50);
-      stdin.write('R');
-      await delay(50);
+      await act(async () => {});
+      await act(async () => { stdin.write('R'); });
       const frame = lastFrame();
       assert.ok(frame.includes('grab'), 'reorder navigate shortcuts should show grab');
       assert.ok(frame.includes('MONITOR'), 'header should remain visible');
@@ -716,7 +709,10 @@ describe('MonitorScreen — toggles', () => {
     try {
       createSessionFixtures(tmpDir, [
         { id: 's1', skill: 'bmad-dev', project: 'alpha', workflow: 'dev-story', llm_state: 'active',
-          writes: [{ path: 'src/a.js', in_project: true, op: 'edit', is_new: false, at: '2026-04-04T14:23:07.000Z', agent_id: null, old_string: 'old', new_string: 'new' }] },
+          writes: [
+            { path: 'src/a.js', in_project: true, op: 'edit', is_new: false, at: '2026-04-04T14:23:07.000Z', agent_id: null, old_string: 'old', new_string: 'new' },
+            { path: 'src/b.js', in_project: true, op: 'edit', is_new: false, at: '2026-04-04T14:24:00.000Z', agent_id: 'sub-1', old_string: 'x', new_string: 'y' },
+          ] },
       ]);
       const { lastFrame, stdin, unmount } = render(e(MonitorScreen, {
         config: {},
@@ -725,16 +721,14 @@ describe('MonitorScreen — toggles', () => {
         isActive: true,
         paths: { cachePath: tmpDir, outputFolder: tmpDir },
       }));
-      await delay(50);
+      await act(async () => {});
       // Enter detail mode
-      stdin.write('d');
-      await delay(50);
+      await act(async () => { stdin.write('d'); });
       assert.ok(lastFrame().includes('❯'));
-      // f toggle works in detail mode — checkbox reflects state
-      assert.ok(lastFrame().includes('[x]'), 'default showSubAgents checked');
-      stdin.write('f');
-      await delay(50);
-      assert.ok(lastFrame().includes('[ ]'), 'showSubAgents unchecked after toggle');
+      // f toggle works in detail mode — ON/OFF reflects state
+      assert.ok(lastFrame().includes('ON'), 'default showSubAgents ON');
+      await act(async () => { stdin.write('f'); });
+      assert.ok(lastFrame().includes('OFF'), 'showSubAgents OFF after toggle');
       unmount();
     } finally {
       fs.rmSync(tmpDir, { recursive: true, force: true });
@@ -745,7 +739,11 @@ describe('MonitorScreen — toggles', () => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'bmad-shortcuts-normal-'));
     try {
       createSessionFixtures(tmpDir, [
-        { id: 's1', skill: 'bmad-dev', project: 'alpha', workflow: 'dev-story', llm_state: 'active' },
+        { id: 's1', skill: 'bmad-dev', project: 'alpha', workflow: 'dev-story', llm_state: 'active',
+          writes: [
+            { path: 'src/a.js', in_project: true, op: 'edit', is_new: false, at: '2026-04-04T14:00:00.000Z', agent_id: null, old_string: 'a', new_string: 'b' },
+            { path: 'src/b.js', in_project: true, op: 'edit', is_new: false, at: '2026-04-04T14:01:00.000Z', agent_id: 'sub-1', old_string: 'c', new_string: 'd' },
+          ] },
       ]);
       const { lastFrame, unmount } = render(e(MonitorScreen, {
         config: {},
@@ -754,12 +752,12 @@ describe('MonitorScreen — toggles', () => {
         isActive: true,
         paths: { cachePath: tmpDir, outputFolder: tmpDir },
       }));
-      await delay(50);
+      await act(async () => {});
       const frame = lastFrame();
       assert.ok(frame.includes('detail'));
       assert.ok(frame.includes('timeline'));
       assert.ok(frame.includes('export'));
-      assert.ok(frame.includes('agents'));
+      assert.ok(frame.includes('Subagents'));
       assert.ok(frame.includes('home'));
       unmount();
     } finally {
@@ -781,9 +779,8 @@ describe('MonitorScreen — toggles', () => {
         isActive: true,
         paths: { cachePath: tmpDir, outputFolder: tmpDir },
       }));
-      await delay(50);
-      stdin.write('d');
-      await delay(50);
+      await act(async () => {});
+      await act(async () => { stdin.write('d'); });
       const frame = lastFrame();
       assert.ok(frame.includes('navigate'));
       assert.ok(frame.includes('open'));
@@ -805,9 +802,7 @@ describe('MonitorScreen — toggles', () => {
         isActive: true,
         paths: { cachePath: tmpDir, outputFolder: tmpDir },
       }));
-      await delay(50);
-      stdin.write('\x1B');
-      await delay(50);
+      await act(async () => { stdin.write('\x1B'); });
       assert.ok(goBackCalled);
       unmount();
     } finally {
@@ -836,31 +831,37 @@ describe('MonitorScreen — toggles', () => {
         goBack: () => {},
         isActive: true,
         paths: { cachePath: tmpDir, outputFolder: tmpDir },
+        pollInterval: 10,
       }));
-      await delay(50);
-      // Default: checkbox checked, both files visible
+      await act(async () => { await new Promise(r => setTimeout(r, 50)); });
+
+      // Enable bash section first (default is OFF)
+      await act(async () => { stdin.write('b'); });
+      await act(async () => {});
+
+      // Default: subagents ON, both files and commands visible
       let frame = lastFrame();
-      assert.ok(frame.includes('[x]'), 'default showSubAgents checked');
+      assert.ok(frame.includes('Subagents'), 'Subagents shortcut visible');
       assert.ok(frame.includes('main.js'));
       assert.ok(frame.includes('agent.js'));
       assert.ok(frame.includes('$ npm test'));
       assert.ok(frame.includes('$ git status'));
 
-      // Toggle to solo mode
-      stdin.write('f');
-      await delay(50);
+      // Toggle subagents to solo mode
+      await act(async () => { stdin.write('f'); });
+      await act(async () => {});
       frame = lastFrame();
-      assert.ok(frame.includes('[ ]'), 'toggle unchecks showSubAgents');
+      assert.ok(frame.includes('OFF'), 'toggle sets showSubAgents OFF');
       assert.ok(frame.includes('main.js'), 'main.js (no agent) still visible');
       assert.ok(!frame.includes('agent.js'), 'agent.js (sub-agent) hidden');
       assert.ok(frame.includes('$ npm test'), 'npm test (no agent) still visible');
       assert.ok(!frame.includes('$ git status'), 'git status (sub-agent) hidden');
 
       // Toggle back
-      stdin.write('f');
-      await delay(50);
+      await act(async () => { stdin.write('f'); });
+      await act(async () => {});
       frame = lastFrame();
-      assert.ok(frame.includes('[x]'));
+      assert.ok(frame.includes('ON'));
       assert.ok(frame.includes('agent.js'), 'agent.js visible again');
       unmount();
     } finally {
@@ -1032,14 +1033,14 @@ describe('MonitorScreen — scroll offset clamping', () => {
         goBack: () => {},
         isActive: true,
         paths: { cachePath: tmpDir, outputFolder: tmpDir },
+        pollInterval: 50,
       }));
-      await delay(50);
-
       // Scroll down multiple times to get to the bottom
-      for (let i = 0; i < 25; i++) {
-        stdin.write('\x1B[B'); // down arrow
-      }
-      await delay(50);
+      await act(async () => {
+        for (let i = 0; i < 25; i++) {
+          stdin.write('\x1B[B'); // down arrow
+        }
+      });
 
       // Now drastically reduce the items
       const fewWrites = manyWrites.slice(0, 3);
@@ -1051,7 +1052,8 @@ describe('MonitorScreen — scroll offset clamping', () => {
         llm_state: 'active',
         writes: fewWrites,
       }));
-      await delay(2000); // Wait for poll
+      // Wait for short poll interval to pick up the change
+      await new Promise(r => setTimeout(r, 100));
 
       // Should not crash and content should be visible
       const frame = lastFrame();

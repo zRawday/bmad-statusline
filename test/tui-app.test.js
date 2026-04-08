@@ -2,7 +2,8 @@
 
 import { describe, test, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import React from 'react';
+import React, { act } from 'react';
+globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 import { render } from 'ink-testing-library';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -12,9 +13,6 @@ import { App } from '../src/tui/app.js';
 import { createDefaultConfig } from '../src/tui/widget-registry.js';
 
 const e = React.createElement;
-
-const CI_FACTOR = process.env.CI ? 3 : 1;
-function delay(ms) { return new Promise(r => setTimeout(r, ms * CI_FACTOR)); }
 
 let tmpDirs = [];
 function makeTmpDir() {
@@ -114,12 +112,9 @@ describe('HomeScreen v2', () => {
       onQuit: () => {},
       isActive: true,
     }));
-    await delay(50);
     // First option is Monitor, arrow down to Edit widget line 1
-    stdin.write('\x1B[B');
-    await delay(20);
-    stdin.write('\r');
-    await delay(50);
+    await act(async () => { stdin.write('\x1B[B'); });
+    await act(async () => { stdin.write('\r'); });
     assert.equal(navigatedTo, 'editLine');
     assert.deepStrictEqual(navContext, { editingLine: 0 });
   });
@@ -134,14 +129,11 @@ describe('HomeScreen v2', () => {
       onQuit: () => {},
       isActive: true,
     }));
-    await delay(50);
     // Navigate down to Reset (6 arrow-downs: Monitor→edit1→2→3→reorder→separator→reset, seps skipped)
     for (let i = 0; i < 6; i++) {
-      stdin.write('\x1B[B');
-      await delay(20);
+      await act(async () => { stdin.write('\x1B[B'); });
     }
-    stdin.write('\r');
-    await delay(50);
+    await act(async () => { stdin.write('\r'); });
     assert.ok(resetCalled);
   });
 });
@@ -154,7 +146,6 @@ describe('App v2 — state model', () => {
       ccstatuslineConfig: path.join(tmpDir, 'nonexistent.json'),
     };
     const { lastFrame, unmount } = render(e(App, { paths }));
-    await delay(100);
     const frame = lastFrame();
     assert.ok(frame.includes('Edit widget line 1'), 'v2 menu option');
     assert.ok(frame.includes('Preview'), 'preview displayed');
@@ -168,7 +159,6 @@ describe('App v2 — state model', () => {
     fs.writeFileSync(path.join(internalDir, 'config.json'), '{ invalid json !!!', 'utf8');
     const paths = { internalConfig: path.join(internalDir, 'config.json'), ccstatuslineConfig: path.join(tmpDir, 'nonexistent.json') };
     const { lastFrame, unmount } = render(e(App, { paths }));
-    await delay(100);
     const frame = lastFrame();
     assert.ok(frame.includes('Edit widget line 1'), 'shows Home with defaults');
     assert.ok(frame.includes('Preview'), 'preview displayed');
@@ -179,7 +169,6 @@ describe('App v2 — state model', () => {
     const config = createDefaultConfig();
     const paths = makePathsWithConfig(config);
     const { lastFrame, unmount } = render(e(App, { paths }));
-    await delay(100);
     // Verify config was written correctly by checking internal config file
     const written = JSON.parse(fs.readFileSync(paths.internalConfig, 'utf8'));
     assert.ok(Array.isArray(written.lines), 'lines is array');
@@ -193,21 +182,19 @@ describe('App v2 — state model', () => {
     const config = createDefaultConfig();
     const paths = makePathsWithConfig(config);
     const { stdin, lastFrame, unmount } = render(e(App, { paths }));
-    await delay(100);
 
     // Navigate to separator (5 downs: Monitor→editLine1→2→3→reorder→separator, seps skipped)
     for (let i = 0; i < 5; i++) {
-      stdin.write('\x1B[B');
-      await delay(20);
+      await act(async () => { stdin.write('\x1B[B'); });
     }
-    stdin.write('\r');
-    await delay(100);
+    await act(async () => { stdin.write('\r'); });
 
     // Select 'large' separator (down 1 from 'modere' default, enter)
-    stdin.write('\x1B[B');
-    await delay(20);
-    stdin.write('\r');
-    await delay(500); // debounced write needs 300ms+
+    await act(async () => { stdin.write('\x1B[B'); });
+    await act(async () => { stdin.write('\r'); });
+
+    // Wait for debounced config write (300ms debounce in app.js)
+    await new Promise(r => setTimeout(r, 400));
 
     // Separator auto-returns to home after selection
     // Verify change was written
@@ -216,11 +203,12 @@ describe('App v2 — state model', () => {
 
     // Select Reset (6 downs: Monitor→editLine1→2→3→reorder→separator→reset, seps skipped)
     for (let i = 0; i < 6; i++) {
-      stdin.write('\x1B[B');
-      await delay(20);
+      await act(async () => { stdin.write('\x1B[B'); });
     }
-    stdin.write('\r');
-    await delay(100);
+    await act(async () => { stdin.write('\r'); });
+
+    // Wait for debounced config write
+    await new Promise(r => setTimeout(r, 400));
 
     // Verify reset restored original
     const afterReset = JSON.parse(fs.readFileSync(paths.internalConfig, 'utf8'));
@@ -232,23 +220,19 @@ describe('App v2 — state model', () => {
     const config = createDefaultConfig();
     const paths = makePathsWithConfig(config);
     const { stdin, lastFrame, unmount } = render(e(App, { paths }));
-    await delay(100);
 
     // Navigate to separator (5 downs: Monitor → Edit1 → Edit2 → Edit3 → Reorder → Separator)
     for (let i = 0; i < 5; i++) {
-      stdin.write('\x1B[B');
-      await delay(20);
+      await act(async () => { stdin.write('\x1B[B'); });
     }
-    stdin.write('\r');
-    await delay(100);
+    await act(async () => { stdin.write('\r'); });
 
     // Should show Separator Style screen name label
     const sepFrame = lastFrame();
     assert.ok(sepFrame.includes('Separator Style'), 'navigated to separator');
 
     // Go back
-    stdin.write('\x1B');
-    await delay(100);
+    await act(async () => { stdin.write('\x1B'); });
 
     // Should be back at Home
     const homeFrame = lastFrame();

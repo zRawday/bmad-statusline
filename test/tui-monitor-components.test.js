@@ -21,13 +21,14 @@ describe('ScrollableViewport', () => {
       e(Text, { key: '1' }, 'Line B'),
       e(Text, { key: '2' }, 'Line C'),
     ];
-    const { lastFrame } = render(e(ScrollableViewport, { items, height: 5, scrollOffset: 0 }));
+    const { lastFrame, unmount } = render(e(ScrollableViewport, { items, height: 5, scrollOffset: 0 }));
     const frame = lastFrame();
     assert.ok(frame.includes('Line A'));
     assert.ok(frame.includes('Line B'));
     assert.ok(frame.includes('Line C'));
     assert.ok(!frame.includes('▲'));
     assert.ok(!frame.includes('▼'));
+    unmount();
   });
 
   test('scrollOffset > 0 — shows ▲ indicator with correct count', () => {
@@ -38,13 +39,14 @@ describe('ScrollableViewport', () => {
       e(Text, { key: '3' }, 'Line D'),
       e(Text, { key: '4' }, 'Line E'),
     ];
-    const { lastFrame } = render(e(ScrollableViewport, { items, height: 5, scrollOffset: 2 }));
+    const { lastFrame, unmount } = render(e(ScrollableViewport, { items, height: 5, scrollOffset: 2 }));
     const frame = lastFrame();
     assert.ok(frame.includes('▲ 2 more'));
     assert.ok(!frame.includes('▼'));
     assert.ok(frame.includes('Line C'));
     assert.ok(frame.includes('Line D'));
     assert.ok(frame.includes('Line E'));
+    unmount();
   });
 
   test('items extend below viewport — shows ▼ indicator with correct count', () => {
@@ -55,13 +57,14 @@ describe('ScrollableViewport', () => {
       e(Text, { key: '3' }, 'Line D'),
       e(Text, { key: '4' }, 'Line E'),
     ];
-    const { lastFrame } = render(e(ScrollableViewport, { items, height: 3, scrollOffset: 0 }));
+    const { lastFrame, unmount } = render(e(ScrollableViewport, { items, height: 3, scrollOffset: 0 }));
     const frame = lastFrame();
     assert.ok(frame.includes('Line A'));
     assert.ok(frame.includes('Line B'));
     assert.ok(frame.includes('Line C'));
     assert.ok(!frame.includes('▲'));
     assert.ok(frame.includes('▼ 2 more'));
+    unmount();
   });
 
   test('scrollOffset > 0 AND items below — both indicators shown', () => {
@@ -72,19 +75,21 @@ describe('ScrollableViewport', () => {
       e(Text, { key: '3' }, 'Line D'),
       e(Text, { key: '4' }, 'Line E'),
     ];
-    const { lastFrame } = render(e(ScrollableViewport, { items, height: 2, scrollOffset: 1 }));
+    const { lastFrame, unmount } = render(e(ScrollableViewport, { items, height: 2, scrollOffset: 1 }));
     const frame = lastFrame();
     assert.ok(frame.includes('▲ 1 more'));
     assert.ok(frame.includes('▼ 2 more'));
     assert.ok(frame.includes('Line B'));
     assert.ok(frame.includes('Line C'));
+    unmount();
   });
 
   test('empty items array — renders without crash, no indicators', () => {
-    const { lastFrame } = render(e(ScrollableViewport, { items: [], height: 5, scrollOffset: 0 }));
+    const { lastFrame, unmount } = render(e(ScrollableViewport, { items: [], height: 5, scrollOffset: 0 }));
     const frame = lastFrame();
     assert.ok(!frame.includes('▲'));
     assert.ok(!frame.includes('▼'));
+    unmount();
   });
 
   test('height = 0 — all items hidden, ▼ indicator shows total count', () => {
@@ -93,13 +98,14 @@ describe('ScrollableViewport', () => {
       e(Text, { key: '1' }, 'Line B'),
       e(Text, { key: '2' }, 'Line C'),
     ];
-    const { lastFrame } = render(e(ScrollableViewport, { items, height: 0, scrollOffset: 0 }));
+    const { lastFrame, unmount } = render(e(ScrollableViewport, { items, height: 0, scrollOffset: 0 }));
     const frame = lastFrame();
     assert.ok(!frame.includes('▲'));
     assert.ok(frame.includes('▼ 3 more'));
     assert.ok(!frame.includes('Line A'));
     assert.ok(!frame.includes('Line B'));
     assert.ok(!frame.includes('Line C'));
+    unmount();
   });
 });
 
@@ -107,60 +113,68 @@ describe('ScrollableViewport', () => {
 
 describe('LlmBadge', () => {
   test('ACTIVE state renders ⬤ and ACTIVE with green color', () => {
-    const { lastFrame } = render(e(LlmBadge, { state: 'active', workflow: 'dev-story', startedAt: new Date().toISOString() }));
+    const { lastFrame, unmount } = render(e(LlmBadge, { state: 'active', workflow: 'dev-story', startedAt: new Date().toISOString() }));
     const frame = lastFrame();
     assert.ok(frame.includes('\u2B24'));
     assert.ok(frame.includes('ACTIVE'));
+    unmount();
   });
 
   test('PERMISSION state renders ⬤ and PERMISSION with yellow color', () => {
-    const { lastFrame } = render(e(LlmBadge, { state: 'permission', workflow: 'dev-story', startedAt: new Date().toISOString() }));
+    const { lastFrame, unmount } = render(e(LlmBadge, { state: 'permission', workflow: 'dev-story', startedAt: new Date().toISOString() }));
     const frame = lastFrame();
     assert.ok(frame.includes('\u2B24'));
     assert.ok(frame.includes('PERMISSION'));
+    unmount();
   });
 
   test('WAITING state renders ⬤ and WAITING', () => {
-    const { lastFrame } = render(e(LlmBadge, { state: 'waiting', workflow: 'dev-story', startedAt: new Date().toISOString() }));
+    const { lastFrame, unmount } = render(e(LlmBadge, { state: 'waiting', workflow: 'dev-story', startedAt: new Date().toISOString() }));
     const frame = lastFrame();
     assert.ok(frame.includes('\u2B24'));
     assert.ok(frame.includes('WAITING'));
+    unmount();
   });
 
   test('INACTIVE state renders ⬤ and INACTIVE with dim styling', () => {
-    const { lastFrame } = render(e(LlmBadge, { state: 'inactive', workflow: 'dev-story', startedAt: new Date().toISOString() }));
+    const { lastFrame, unmount } = render(e(LlmBadge, { state: 'inactive', workflow: 'dev-story', startedAt: new Date().toISOString() }));
     const frame = lastFrame();
     assert.ok(frame.includes('\u2B24'));
     assert.ok(frame.includes('INACTIVE'));
+    unmount();
   });
 
   test('workflow name and elapsed timer displayed', () => {
     const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
-    const { lastFrame } = render(e(LlmBadge, { state: 'active', workflow: 'code-review', startedAt: fiveMinAgo }));
+    const { lastFrame, unmount } = render(e(LlmBadge, { state: 'active', workflow: 'code-review', startedAt: fiveMinAgo }));
     const frame = lastFrame();
     assert.ok(frame.includes('code-review'));
     assert.ok(frame.includes('5m'));
+    unmount();
   });
 
   test('badge handles missing startedAt gracefully (no timer, no crash)', () => {
-    const { lastFrame } = render(e(LlmBadge, { state: 'active', workflow: 'dev-story', startedAt: null }));
+    const { lastFrame, unmount } = render(e(LlmBadge, { state: 'active', workflow: 'dev-story', startedAt: null }));
     const frame = lastFrame();
     assert.ok(frame.includes('ACTIVE'));
     assert.ok(frame.includes('dev-story'));
+    unmount();
   });
 
   test('ERROR state renders ⬤ and ERROR with red background', () => {
-    const { lastFrame } = render(e(LlmBadge, { state: 'error', workflow: 'dev-story', startedAt: new Date().toISOString() }));
+    const { lastFrame, unmount } = render(e(LlmBadge, { state: 'error', workflow: 'dev-story', startedAt: new Date().toISOString() }));
     const frame = lastFrame();
     assert.ok(frame.includes('\u2B24'));
     assert.ok(frame.includes('ERROR'));
+    unmount();
   });
 
   test('SUBAGENT state renders ⬤ and SUBAGENT in cyan', () => {
-    const { lastFrame } = render(e(LlmBadge, { state: 'active:subagent', workflow: 'dev-story', startedAt: new Date().toISOString() }));
+    const { lastFrame, unmount } = render(e(LlmBadge, { state: 'active:subagent', workflow: 'dev-story', startedAt: new Date().toISOString() }));
     const frame = lastFrame();
     assert.ok(frame.includes('\u2B24'));
     assert.ok(frame.includes('SUBAGENT'));
+    unmount();
   });
 });
 
@@ -178,24 +192,26 @@ describe('SessionTabs state icons', () => {
 
   test('error session shows red ⬤ icon in tabs', () => {
     const groups = new Map([['proj', [makeSession('error')]]]);
-    const { lastFrame } = render(e(SessionTabs, {
+    const { lastFrame, unmount } = render(e(SessionTabs, {
       groups, activeProject: 'proj', activeSessionIndex: 0,
       config: {}, mode: 'single-project',
     }));
     const frame = lastFrame();
     assert.ok(frame.includes('\u2B24'));
     assert.ok(frame.includes('dev-story'));
+    unmount();
   });
 
   test('active:subagent session shows cyan ⬤ icon in tabs', () => {
     const groups = new Map([['proj', [makeSession('active:subagent')]]]);
-    const { lastFrame } = render(e(SessionTabs, {
+    const { lastFrame, unmount } = render(e(SessionTabs, {
       groups, activeProject: 'proj', activeSessionIndex: 0,
       config: {}, mode: 'single-project',
     }));
     const frame = lastFrame();
     assert.ok(frame.includes('\u2B24'));
     assert.ok(frame.includes('dev-story'));
+    unmount();
   });
 });
 

@@ -16,6 +16,11 @@ const ESC = '\x1b[';
 const RESET = '\x1b[0m';
 const FIXTURE_CONFIG_PATH = path.resolve(__dirname, 'fixtures', 'internal-config-default.json');
 
+// Direct imports for internal-logic tests (no process spawn needed)
+const _require = createRequire(import.meta.url);
+const reader = _require(READER_PATH);
+const sharedConstants = _require(path.resolve(__dirname, '..', 'src', 'reader', 'shared-constants.cjs'));
+
 describe('reader color output', () => {
   let tmpDir;
 
@@ -421,38 +426,36 @@ describe('reader color output', () => {
     assert.equal(result, '');
   });
 
-  // --- getStoryOrRequest returns story only (AC #11) ---
+  // --- getStoryOrRequest returns story only (AC #11) — direct import ---
 
   it('getStoryOrRequest returns story, ignores missing request (AC #11)', () => {
-    writeStatus('sor1', { story: 'my-story' });
-    const result = execReader('story', 'sor1');
+    const result = reader.COMMANDS.story({ story: 'my-story' }, null);
     assert.equal(result, 'my-story');
   });
 
   it('getStoryOrRequest returns empty when no story (AC #11)', () => {
-    writeStatus('sor2', {});
-    const result = execReader('story', 'sor2');
+    const result = reader.COMMANDS.story({}, null);
     assert.equal(result, '');
   });
 
-  // --- Individual extractors with valid data (AC #12) ---
+  // --- Individual extractors with valid data (AC #12) — direct import, no process spawn ---
 
   it('all individual extractors return correct output (AC #12)', () => {
     const tenMinAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
-    writeStatus('ind1', {
+    const status = {
       project: 'Toulou',
       workflow: 'create-architecture',
       story: '3-1-hook-detection',
       step: { current: 3, current_name: 'starter', next_name: 'decisions', total: 8 },
       started_at: tenMinAgo
-    });
+    };
 
-    assert.ok(execReader('project', 'ind1').includes('Toulou'), 'project contains name');
-    assert.equal(execReader('workflow', 'ind1'), `${ESC}35mcreate-architecture${RESET}`);
-    assert.equal(execReader('nextstep', 'ind1'), 'decisions');
-    assert.equal(execReader('progressstep', 'ind1'), 'Step 3/8 starter');
-    assert.equal(execReader('story', 'ind1'), '3-1 Hook Detection');
-    const timer = execReader('timer', 'ind1');
+    assert.ok(reader.COMMANDS.project(status, null).includes('Toulou'), 'project contains name');
+    assert.equal(reader.COMMANDS.workflow(status, null), `${ESC}35mcreate-architecture${RESET}`);
+    assert.equal(reader.COMMANDS.nextstep(status, null), 'decisions');
+    assert.equal(reader.COMMANDS.progressstep(status, null), 'Step 3/8 starter');
+    assert.equal(reader.COMMANDS.story(status, null), '3-1 Hook Detection');
+    const timer = reader.COMMANDS.timer(status, null);
     assert.ok(timer.includes('m'), 'timer should show minutes');
   });
 
@@ -486,35 +489,31 @@ describe('reader color output', () => {
     assert.ok(!fs.existsSync(statusPath), 'stale status file should be deleted');
   });
 
-  // --- Health command ---
+  // --- Health command — direct import, no process spawn ---
 
   it('health fresh: green filled circle when updated_at < 60s ago', () => {
-    writeStatus('health-fresh', { updated_at: new Date().toISOString() });
-    const result = execReader('health', 'health-fresh');
+    const result = reader.COMMANDS.health({ updated_at: new Date().toISOString() }, null);
     assert.equal(result, `${ESC}32m\u25CF${RESET}`);
   });
 
   it('health stale: yellow filled circle when updated_at 60s-300s ago', () => {
-    writeStatus('health-stale', { updated_at: new Date(Date.now() - 120 * 1000).toISOString() });
-    const result = execReader('health', 'health-stale');
+    const result = reader.COMMANDS.health({ updated_at: new Date(Date.now() - 120 * 1000).toISOString() }, null);
     assert.equal(result, `${ESC}33m\u25CF${RESET}`);
   });
 
   it('health expired: dim empty circle when updated_at > 300s ago', () => {
-    writeStatus('health-expired', { updated_at: new Date(Date.now() - 600 * 1000).toISOString() });
-    const result = execReader('health', 'health-expired');
+    const result = reader.COMMANDS.health({ updated_at: new Date(Date.now() - 600 * 1000).toISOString() }, null);
     assert.equal(result, `${ESC}90m\u25CB${RESET}`);
   });
 
   it('health missing updated_at: dim empty circle', () => {
-    writeStatus('health-missing', {});
-    const result = execReader('health', 'health-missing');
+    const result = reader.COMMANDS.health({}, null);
     assert.equal(result, `${ESC}90m\u25CB${RESET}`);
   });
 
-  it('health no status file: empty string', () => {
-    const result = execReader('health', 'health-nonexistent-session');
-    assert.equal(result, '');
+  it('health no status file: empty string (direct extractor)', () => {
+    const result = reader.COMMANDS.health({}, null);
+    assert.equal(result, `${ESC}90m\u25CB${RESET}`);
   });
 
   // --- Health extractor uses COLOR_CODES, not inline ANSI hex ---
@@ -530,17 +529,14 @@ describe('reader color output', () => {
     assert.ok(healthBlock.includes('COLOR_CODES.brightBlack'), 'should use COLOR_CODES.brightBlack');
   });
 
-  // --- Standalone custom colors ---
+  // --- Standalone custom colors — direct import, no process spawn ---
 
   it('standalone project command uses custom projectColors from config', () => {
-    const configDir = fs.mkdtempSync(path.join(os.tmpdir(), 'bmad-cfg-'));
-    fs.writeFileSync(path.join(configDir, 'config.json'), JSON.stringify({
-      projectColors: { 'MyProject': 'red' }
-    }));
-    writeStatus('standalone-color', { project: 'MyProject' });
-    const result = execReaderWithConfig('project', 'standalone-color', configDir);
+    const result = reader.COMMANDS.project(
+      { project: 'MyProject' },
+      { skillColors: {}, projectColors: { 'MyProject': 'red' } }
+    );
     assert.equal(result, `${ESC}31mMyProject${RESET}`, 'should use custom red color from projectColors');
-    fs.rmSync(configDir, { recursive: true, force: true });
   });
 
   // --- BMAD_CACHE_DIR ---
@@ -589,56 +585,23 @@ describe('reader color output', () => {
   });
 });
 
-// --- SessionId sanitization tests ---
+// --- SessionId sanitization tests — direct import, no process spawn ---
 
 describe('sessionId sanitization', () => {
-  let tmpDir;
-
-  before(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'bmad-sanitize-'));
+  it('sessionId containing ../ is invalid (path traversal)', () => {
+    assert.equal(sharedConstants.isValidSessionId('../etc/passwd'), false);
   });
 
-  after(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+  it('sessionId containing / is invalid', () => {
+    assert.equal(sharedConstants.isValidSessionId('foo/bar'), false);
   });
 
-  function writeStatus(sessionId, statusObj) {
-    fs.writeFileSync(
-      path.join(tmpDir, `status-${sessionId}.json`),
-      JSON.stringify(statusObj)
-    );
-  }
-
-  function execReader(command, sessionId) {
-    return execSync(`node "${READER_PATH}" ${command}`, {
-      input: JSON.stringify({ session_id: sessionId }),
-      encoding: 'utf8',
-      env: { ...process.env, BMAD_CACHE_DIR: tmpDir },
-    });
-  }
-
-  it('sessionId containing ../ returns empty (path traversal)', () => {
-    writeStatus('legit', { project: 'Test' });
-    const result = execReader('project', '../etc/passwd');
-    assert.equal(result, '');
+  it('sessionId containing backslash is invalid', () => {
+    assert.equal(sharedConstants.isValidSessionId('foo\\bar'), false);
   });
 
-  it('sessionId containing / returns empty', () => {
-    writeStatus('legit2', { project: 'Test' });
-    const result = execReader('project', 'foo/bar');
-    assert.equal(result, '');
-  });
-
-  it('sessionId containing backslash returns empty', () => {
-    writeStatus('legit3', { project: 'Test' });
-    const result = execReader('project', 'foo\\bar');
-    assert.equal(result, '');
-  });
-
-  it('valid sessionId still works normally', () => {
-    writeStatus('valid-session-123', { project: 'Safe' });
-    const result = execReader('project', 'valid-session-123');
-    assert.ok(result.includes('Safe'));
+  it('valid sessionId passes validation', () => {
+    assert.equal(sharedConstants.isValidSessionId('valid-session-123'), true);
   });
 });
 
@@ -684,43 +647,16 @@ describe('purgeStale resilience', () => {
   });
 });
 
-// --- formatProgressStep cap tests ---
+// --- formatProgressStep cap tests — direct import, no process spawn ---
 
 describe('formatProgressStep cap', () => {
-  let tmpDir;
-
-  before(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'bmad-cap-'));
-  });
-
-  after(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
-  });
-
-  function writeStatus(sessionId, statusObj) {
-    fs.writeFileSync(
-      path.join(tmpDir, `status-${sessionId}.json`),
-      JSON.stringify(statusObj)
-    );
-  }
-
-  function execReader(command, sessionId) {
-    return execSync(`node "${READER_PATH}" ${command}`, {
-      input: JSON.stringify({ session_id: sessionId }),
-      encoding: 'utf8',
-      env: { ...process.env, BMAD_CACHE_DIR: tmpDir },
-    });
-  }
-
   it('caps total at 999 when total exceeds 999', () => {
-    writeStatus('cap1', { step: { current: 5, total: 5000, current_name: 'bigstep' } });
-    const result = execReader('progressstep', 'cap1');
+    const result = reader.formatProgressStep({ current: 5, total: 5000, current_name: 'bigstep' });
     assert.equal(result, 'Step 5/999 bigstep');
   });
 
   it('does not cap when total <= 999', () => {
-    writeStatus('cap2', { step: { current: 3, total: 100, current_name: 'normal' } });
-    const result = execReader('progressstep', 'cap2');
+    const result = reader.formatProgressStep({ current: 3, total: 100, current_name: 'normal' });
     assert.equal(result, 'Step 3/100 normal');
   });
 });

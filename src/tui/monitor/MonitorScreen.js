@@ -14,7 +14,7 @@ import { renderBashSection } from './components/BashSection.js';
 
 const e = React.createElement;
 
-function useSessionPolling(cachePath) {
+function useSessionPolling(cachePath, pollInterval = 1500) {
   const [sessions, setSessions] = useState([]);
   const lastJson = useRef('');
   useEffect(() => {
@@ -28,9 +28,9 @@ function useSessionPolling(cachePath) {
       }
     }
     poll();
-    const id = setInterval(poll, 1500);
+    const id = setInterval(poll, pollInterval);
     return () => clearInterval(id);
-  }, [cachePath]);
+  }, [cachePath, pollInterval]);
   return sessions;
 }
 
@@ -81,8 +81,8 @@ function getShortcuts(navMode, detailMode, toggleState, reorderMode, reorderGrab
   return shortcuts;
 }
 
-export function MonitorScreen({ config, navigate, goBack, isActive, paths }) {
-  const sessions = useSessionPolling(paths.cachePath);
+export function MonitorScreen({ config, navigate, goBack, isActive, paths, pollInterval }) {
+  const sessions = useSessionPolling(paths.cachePath, pollInterval);
   const { stdout } = useStdout();
   const [scrollOffset, setScrollOffset] = useState(0);
   const [activeProjectIndex, setActiveProjectIndex] = useState(0);

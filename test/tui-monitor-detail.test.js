@@ -5,7 +5,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import React from 'react';
+import React, { act } from 'react';
+globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 import { render } from 'ink-testing-library';
 import {
   findFirstSelectable, findNextSelectable, formatTime,
@@ -15,7 +16,6 @@ import { MonitorDetailScreen } from '../src/tui/monitor/MonitorDetailScreen.js';
 import { MonitorScreen } from '../src/tui/monitor/MonitorScreen.js';
 
 const e = React.createElement;
-const delay = (ms) => new Promise(r => setTimeout(r, ms));
 
 // --- findFirstSelectable tests ---
 
@@ -118,7 +118,7 @@ describe('formatTime', () => {
 // --- MonitorDetailScreen tests ---
 
 describe('MonitorDetailScreen — edit detail', () => {
-  test('renders title FILE DETAIL — EDITED and file path', () => {
+  test('renders title FILE DETAIL — EDITED and file path', async () => {
     const item = { text: 'a.js', selectable: true, type: 'file', data: { path: 'src/a.js', op: 'edit' } };
     const entries = [
       { path: 'src/a.js', op: 'edit', at: '2026-04-04T14:23:07.000Z', agent_id: null, old_string: 'old line', new_string: 'new line' },
@@ -126,13 +126,14 @@ describe('MonitorDetailScreen — edit detail', () => {
     const { lastFrame, unmount } = render(e(MonitorDetailScreen, {
       item, entries, onBack: () => {}, isActive: true,
     }));
+    await act(async () => {});
     const frame = lastFrame();
     assert.ok(frame.includes('FILE DETAIL — EDITED'));
     assert.ok(frame.includes('src/a.js'));
     unmount();
   });
 
-  test('renders - old lines in red and + new lines in green', () => {
+  test('renders - old lines in red and + new lines in green', async () => {
     const item = { text: 'a.js', selectable: true, type: 'file', data: { path: 'src/a.js', op: 'edit' } };
     const entries = [
       { path: 'src/a.js', op: 'edit', at: '2026-04-04T14:23:07.000Z', agent_id: null, old_string: 'old value', new_string: 'new value' },
@@ -140,13 +141,14 @@ describe('MonitorDetailScreen — edit detail', () => {
     const { lastFrame, unmount } = render(e(MonitorDetailScreen, {
       item, entries, onBack: () => {}, isActive: true,
     }));
+    await act(async () => {});
     const frame = lastFrame();
     assert.ok(frame.includes('- old value'));
     assert.ok(frame.includes('+ new value'));
     unmount();
   });
 
-  test('write op renders (file created) instead of diff', () => {
+  test('write op renders (file created) instead of diff', async () => {
     const item = { text: 'b.js', selectable: true, type: 'file', data: { path: 'src/b.js', op: 'write' } };
     const entries = [
       { path: 'src/b.js', op: 'write', at: '2026-04-04T14:25:33.000Z', agent_id: null },
@@ -154,6 +156,7 @@ describe('MonitorDetailScreen — edit detail', () => {
     const { lastFrame, unmount } = render(e(MonitorDetailScreen, {
       item, entries, onBack: () => {}, isActive: true,
     }));
+    await act(async () => {});
     const frame = lastFrame();
     assert.ok(frame.includes('(file created)'));
     unmount();
@@ -161,7 +164,7 @@ describe('MonitorDetailScreen — edit detail', () => {
 });
 
 describe('MonitorDetailScreen — read detail', () => {
-  test('renders title FILE DETAIL — READ and timestamps', () => {
+  test('renders title FILE DETAIL — READ and timestamps', async () => {
     const item = { text: 'c.js', selectable: true, type: 'file', data: { path: 'src/c.js' } };
     const entries = [
       { path: 'src/c.js', at: '2026-04-04T14:23:07.000Z', agent_id: null },
@@ -170,6 +173,7 @@ describe('MonitorDetailScreen — read detail', () => {
     const { lastFrame, unmount } = render(e(MonitorDetailScreen, {
       item, entries, onBack: () => {}, isActive: true,
     }));
+    await act(async () => {});
     const frame = lastFrame();
     assert.ok(frame.includes('FILE DETAIL — READ'));
     assert.ok(frame.includes('src/c.js'));
@@ -178,7 +182,7 @@ describe('MonitorDetailScreen — read detail', () => {
 });
 
 describe('MonitorDetailScreen — bash detail', () => {
-  test('renders title COMMAND DETAIL and command text', () => {
+  test('renders title COMMAND DETAIL and command text', async () => {
     const item = { text: 'npm test', selectable: true, type: 'command', data: { cmd: 'npm test', entries: [] } };
     const entries = [
       { cmd: 'npm test', at: '2026-04-04T14:23:07.000Z', agent_id: null },
@@ -186,6 +190,7 @@ describe('MonitorDetailScreen — bash detail', () => {
     const { lastFrame, unmount } = render(e(MonitorDetailScreen, {
       item, entries, onBack: () => {}, isActive: true,
     }));
+    await act(async () => {});
     const frame = lastFrame();
     assert.ok(frame.includes('COMMAND DETAIL'));
     assert.ok(frame.includes('npm test'));
@@ -194,7 +199,7 @@ describe('MonitorDetailScreen — bash detail', () => {
 });
 
 describe('MonitorDetailScreen — sub-agent indicator', () => {
-  test('read entries with agent_id show fork indicator', () => {
+  test('read entries with agent_id show fork indicator', async () => {
     const item = { text: 'c.js', selectable: true, type: 'file', data: { path: 'src/c.js' } };
     const entries = [
       { path: 'src/c.js', at: '2026-04-04T14:23:07.000Z', agent_id: 'sub-1' },
@@ -202,12 +207,13 @@ describe('MonitorDetailScreen — sub-agent indicator', () => {
     const { lastFrame, unmount } = render(e(MonitorDetailScreen, {
       item, entries, onBack: () => {}, isActive: true,
     }));
+    await act(async () => {});
     const frame = lastFrame();
     assert.ok(frame.includes('\u{1F500}'));
     unmount();
   });
 
-  test('bash entries with agent_id show fork indicator', () => {
+  test('bash entries with agent_id show fork indicator', async () => {
     const item = { text: 'git status', selectable: true, type: 'command', data: { cmd: 'git status', entries: [] } };
     const entries = [
       { cmd: 'git status', at: '2026-04-04T14:23:07.000Z', agent_id: 'sub-1' },
@@ -215,6 +221,7 @@ describe('MonitorDetailScreen — sub-agent indicator', () => {
     const { lastFrame, unmount } = render(e(MonitorDetailScreen, {
       item, entries, onBack: () => {}, isActive: true,
     }));
+    await act(async () => {});
     const frame = lastFrame();
     assert.ok(frame.includes('\u{1F500}'));
     unmount();
@@ -231,9 +238,8 @@ describe('MonitorDetailScreen — Esc key', () => {
     const { stdin, unmount } = render(e(MonitorDetailScreen, {
       item, entries, onBack: () => { backCalled = true; }, isActive: true,
     }));
-    await delay(50);
-    stdin.write('\x1B');
-    await delay(50);
+    await act(async () => {});
+    await act(async () => { stdin.write('\x1B'); });
     assert.ok(backCalled);
     unmount();
   });
@@ -273,9 +279,8 @@ describe('MonitorScreen — detail mode', () => {
         isActive: true,
         paths: { cachePath: tmpDir },
       }));
-      await delay(50);
-      stdin.write('d');
-      await delay(50);
+      await act(async () => {});
+      await act(async () => { stdin.write('d'); });
       const frame = lastFrame();
       assert.ok(frame.includes('❯'));
       unmount();
@@ -295,12 +300,10 @@ describe('MonitorScreen — detail mode', () => {
         isActive: true,
         paths: { cachePath: tmpDir },
       }));
-      await delay(50);
-      stdin.write('d');
-      await delay(50);
+      await act(async () => {});
+      await act(async () => { stdin.write('d'); });
       assert.ok(lastFrame().includes('❯'));
-      stdin.write('\x1B');
-      await delay(50);
+      await act(async () => { stdin.write('\x1B'); });
       assert.ok(!lastFrame().includes('❯'));
       unmount();
     } finally {
@@ -453,7 +456,7 @@ describe('writeCsvExport', () => {
 // --- Chronology rendering tests ---
 
 describe('MonitorDetailScreen — chronology', () => {
-  test('renders CHRONOLOGY title and color-coded entries', () => {
+  test('renders CHRONOLOGY title and color-coded entries', async () => {
     const item = { type: 'chronology', text: 'timeline', selectable: false, data: null };
     const entries = [
       { at: '2026-04-04T14:23:07.000Z', type: 'READ', path: 'src/a.js', cmd: null, agent_id: null, is_new: false, op: null, old_string: null, new_string: null },
@@ -464,6 +467,7 @@ describe('MonitorDetailScreen — chronology', () => {
     const { lastFrame, unmount } = render(e(MonitorDetailScreen, {
       item, entries, onBack: () => {}, isActive: true,
     }));
+    await act(async () => {});
     const frame = lastFrame();
     assert.ok(frame.includes('CHRONOLOGY'));
     assert.ok(frame.includes('src/a.js'));
@@ -472,7 +476,7 @@ describe('MonitorDetailScreen — chronology', () => {
     unmount();
   });
 
-  test('shows * on is_new entries and fork on agent_id entries', () => {
+  test('shows * on is_new entries and fork on agent_id entries', async () => {
     const item = { type: 'chronology', text: 'timeline', selectable: false, data: null };
     const entries = [
       { at: '2026-04-04T14:23:07.000Z', type: 'WRITE', path: 'src/new.js', cmd: null, agent_id: null, is_new: true, op: 'write', old_string: null, new_string: null },
@@ -481,6 +485,7 @@ describe('MonitorDetailScreen — chronology', () => {
     const { lastFrame, unmount } = render(e(MonitorDetailScreen, {
       item, entries, onBack: () => {}, isActive: true,
     }));
+    await act(async () => {});
     const frame = lastFrame();
     assert.ok(frame.includes('*'));
     assert.ok(frame.includes('\u{1F500}'));
@@ -498,14 +503,13 @@ describe('MonitorDetailScreen — chronology', () => {
       item, entries, onBack: () => {}, isActive: true,
       sortMode: 'chrono', onToggleSort: () => { sortToggled = true; },
     }));
-    await delay(50);
-    stdin.write('s');
-    await delay(50);
+    await act(async () => {});
+    await act(async () => { stdin.write('s'); });
     assert.ok(sortToggled, 'onToggleSort should be called');
     unmount();
   });
 
-  test('alpha sortMode prop renders entries in alphabetical order', () => {
+  test('alpha sortMode prop renders entries in alphabetical order', async () => {
     const item = { type: 'chronology', text: 'timeline', selectable: false, data: null };
     const entries = [
       { at: '2026-04-04T14:23:07.000Z', type: 'READ', path: 'z-file.js', cmd: null, agent_id: null, is_new: false, op: null, old_string: null, new_string: null },
@@ -515,6 +519,7 @@ describe('MonitorDetailScreen — chronology', () => {
       item, entries, onBack: () => {}, isActive: true,
       sortMode: 'alpha',
     }));
+    await act(async () => {});
     const frame = lastFrame();
     const aPos = frame.indexOf('a-file.js');
     const zPos = frame.indexOf('z-file.js');
@@ -532,14 +537,13 @@ describe('MonitorDetailScreen — chronology', () => {
       item, entries, onBack: () => {}, isActive: true,
       timeFormat: 'absolute', onToggleTime: () => { timeToggled = true; },
     }));
-    await delay(50);
-    stdin.write('t');
-    await delay(50);
+    await act(async () => {});
+    await act(async () => { stdin.write('t'); });
     assert.ok(timeToggled, 'onToggleTime should be called');
     unmount();
   });
 
-  test('relative timeFormat prop renders relative timestamps', () => {
+  test('relative timeFormat prop renders relative timestamps', async () => {
     const item = { type: 'chronology', text: 'timeline', selectable: false, data: null };
     const entries = [
       { at: new Date(Date.now() - 120000).toISOString(), type: 'READ', path: 'src/a.js', cmd: null, agent_id: null, is_new: false, op: null, old_string: null, new_string: null },
@@ -548,6 +552,7 @@ describe('MonitorDetailScreen — chronology', () => {
       item, entries, onBack: () => {}, isActive: true,
       timeFormat: 'relative',
     }));
+    await act(async () => {});
     const frame = lastFrame();
     assert.ok(frame.includes('ago'));
     unmount();
@@ -567,9 +572,8 @@ describe('ExportPrompt', async () => {
       onCancel: () => {},
       isActive: true,
     }));
-    await delay(50);
-    stdin.write('l');
-    await delay(50);
+    await act(async () => {});
+    await act(async () => { stdin.write('l'); });
     assert.equal(selected, 'light');
     unmount();
   });
@@ -581,9 +585,8 @@ describe('ExportPrompt', async () => {
       onCancel: () => {},
       isActive: true,
     }));
-    await delay(50);
-    stdin.write('f');
-    await delay(50);
+    await act(async () => {});
+    await act(async () => { stdin.write('f'); });
     assert.equal(selected, 'full');
     unmount();
   });
@@ -595,9 +598,8 @@ describe('ExportPrompt', async () => {
       onCancel: () => { cancelled = true; },
       isActive: true,
     }));
-    await delay(50);
-    stdin.write('\x1B');
-    await delay(50);
+    await act(async () => {});
+    await act(async () => { stdin.write('\x1B'); });
     assert.ok(cancelled);
     unmount();
   });
@@ -637,9 +639,8 @@ describe('MonitorScreen — chronology and export', () => {
         isActive: true,
         paths: { cachePath: tmpDir, outputFolder: tmpDir },
       }));
-      await delay(50);
-      stdin.write('c');
-      await delay(50);
+      await act(async () => {});
+      await act(async () => { stdin.write('c'); });
       const frame = lastFrame();
       assert.ok(frame.includes('CHRONOLOGY'));
       unmount();
@@ -659,9 +660,8 @@ describe('MonitorScreen — chronology and export', () => {
         isActive: true,
         paths: { cachePath: tmpDir, outputFolder: tmpDir },
       }));
-      await delay(50);
-      stdin.write('e');
-      await delay(50);
+      await act(async () => {});
+      await act(async () => { stdin.write('e'); });
       const frame = lastFrame();
       assert.ok(frame.includes('Export:'));
       assert.ok(frame.includes('light'));
@@ -683,13 +683,11 @@ describe('MonitorScreen — chronology and export', () => {
         isActive: true,
         paths: { cachePath: tmpDir, outputFolder: tmpDir },
       }));
-      await delay(50);
-      stdin.write('e');
-      await delay(50);
+      await act(async () => {});
+      await act(async () => { stdin.write('e'); });
       let frame = lastFrame();
       assert.ok(frame.includes('Export:'));
-      stdin.write('\x1B');
-      await delay(50);
+      await act(async () => { stdin.write('\x1B'); });
       frame = lastFrame();
       assert.ok(!frame.includes('Export:'));
       assert.ok(!frame.includes('Exported:'));
@@ -714,17 +712,14 @@ describe('MonitorScreen — chronology and export', () => {
         isActive: true,
         paths: { cachePath: tmpDir, outputFolder: tmpDir },
       }));
-      await delay(50);
-      stdin.write('e');
-      await delay(50);
-      stdin.write('l');
-      await delay(50);
+      await act(async () => {});
+      await act(async () => { stdin.write('e'); });
+      await act(async () => { stdin.write('l'); });
       let frame = lastFrame();
       assert.ok(frame.includes('Exported:'));
       assert.ok(frame.includes('monitor-light-'));
       // Any key dismisses
-      stdin.write('x');
-      await delay(50);
+      await act(async () => { stdin.write('x'); });
       frame = lastFrame();
       assert.ok(!frame.includes('Exported:'));
       unmount();
