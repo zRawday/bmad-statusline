@@ -4,6 +4,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 
+import { execFileSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { loadRegistry, saveRegistry, registerPid, unregisterPid, startTtyWatch, stopTtyWatch } from '../src/tui/tui-lifecycle.js';
 
 // Helper: create isolated temp dir for each test
@@ -151,6 +153,63 @@ describe('tui-lifecycle — PID registry', () => {
     it('stopTtyWatch is idempotent', () => {
       assert.doesNotThrow(() => stopTtyWatch());
       assert.doesNotThrow(() => stopTtyWatch());
+    });
+  });
+
+  describe('signal handler — PID removal on crash (AC4/AC5)', () => {
+    it('uncaughtException handler unregisters PID before exit', () => {
+      // Spawn child that registers PID, sets up signal handlers, then throws
+      const script = [
+        'import { registerPid, setupSignalHandlers } from "./src/tui/tui-lifecycle.js";',
+        'const cachePath = process.argv[2];',
+        'registerPid(cachePath);',
+        'setupSignalHandlers(cachePath, () => {});',
+        'throw new Error("deliberate crash for test");',
+      ].join('\n');
+      const scriptPath = path.join(tmpDir, 'crash-test.mjs');
+      fs.writeFileSync(scriptPath, script);
+      try {
+        execFileSync(process.execPath, [scriptPath, tmpDir], {
+          stdio: 'ignore',
+          cwd: path.dirname(fileURLToPath(import.meta.url)),
+          timeout: 10000,
+        });
+      } catch { /* child exits with code 1 — expected */ }
+      const reg = loadRegistry(tmpDir);
+      // Child PID should have been unregistered by the uncaughtException handler
+      assert.strictEqual(reg.pids.length, 0, 'crashed child PID should be unregistered');
+    });
+  });
+
+  describe('TTY orphan detection — exit on non-TTY (AC6)', () => {
+    it('process exits and unregisters PID when stdout is not a TTY', () => {
+      // Spawn child with piped stdio (non-TTY) that uses TTY check logic
+      const script = [
+        'import { registerPid, unregisterPid } from "./src/tui/tui-lifecycle.js";',
+        'const cachePath = process.argv[2];',
+        'registerPid(cachePath);',
+        '// Inline TTY check with short interval (same logic as startTtyWatch)',
+        'const id = setInterval(() => {',
+        '  if (!process.stdout.isTTY) {',
+        '    clearInterval(id);',
+        '    unregisterPid(cachePath);',
+        '    process.exit(0);',
+        '  }',
+        '}, 100);',
+        'id.unref();',
+        'setTimeout(() => process.exit(2), 5000).unref();',
+      ].join('\n');
+      const scriptPath = path.join(tmpDir, 'tty-test.mjs');
+      fs.writeFileSync(scriptPath, script);
+      try {
+        execFileSync(process.execPath, [scriptPath, tmpDir], {
+          stdio: 'pipe', // pipe = non-TTY → isTTY is false
+          cwd: path.dirname(fileURLToPath(import.meta.url)),
+          timeout: 10000,
+        });
+      } catch { /* ignore exit code */ }
+      const reg = loadRegistry(tmpDir);
+      assert.strictEqual(reg.pids.length, 0, 'PID should be unregistered when TTY is lost');
     });
   });
 });

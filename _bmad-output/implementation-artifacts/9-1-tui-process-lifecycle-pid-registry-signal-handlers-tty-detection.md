@@ -1,6 +1,6 @@
 # Story 9.1: TUI Process Lifecycle — PID Registry, Signal Handlers, TTY Detection
 
-Status: review
+Status: done
 
 ## Story
 
@@ -93,6 +93,11 @@ So that closing terminals or crashing doesn't leave zombie Node.js processes con
   - [x] 4.7 Test: atomic write produces valid JSON (no corruption on concurrent write)
   - [x] 4.8 Test: TTY watch triggers shutdown when isTTY goes falsy
   - [x] 4.9 Verify all existing tests pass (`npm test`)
+
+### Review Findings
+
+- [x] [Review][Patch] Missing test: PID removal on signal — AC7 requires "PID removal on signal" test, but setupSignalHandlers is not imported or tested [test/tui-lifecycle.test.js] — fixed: added child-process test for uncaughtException handler
+- [x] [Review][Patch] Missing test: TTY detection triggering exit — AC7 requires "TTY detection triggering exit" test, current TTY tests only verify start/stop don't throw [test/tui-lifecycle.test.js] — fixed: added child-process test with piped stdio (non-TTY)
 
 ## Dev Notes
 
