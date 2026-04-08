@@ -1,6 +1,6 @@
 # Story 8.6: Hook — Interrupted State Detection & Permission-to-Active Transition Fix
 
-Status: review
+Status: done
 
 ## Story
 
