@@ -10,13 +10,28 @@ so that the feedback loop stays fast and tests remain useful as a pre-commit saf
 
 ## Context
 
-The test suite currently takes 25-40 seconds on Windows for a small app (9.5k lines of test code, 23 files). Root cause analysis identified three compounding issues:
+The test suite currently takes 25-40 seconds on Windows for a small app (9.5k lines of test code, 23 files). Root cause analysis identified four compounding issues:
 
-1. **207 `await delay(50-2000)` calls** across 10 TUI test files — ~13s of pure sleep
-2. **Sequential file execution** — `node --test` runs all 23 files one after another
-3. **20 `execSync` process spawns** in hook/reader/cli tests — ~1-3s of process creation overhead on Windows
+1. **CRITICAL — Zombie processes:** Tests that render components with `setInterval` (LlmBadge, MonitorScreen) but never call `unmount()` leave timers running, which keeps the Node.js event loop alive indefinitely. The test process **never exits**. Multiple `npm test` invocations by dev agents accumulate 30+ orphaned node.exe processes.
+2. **207 `await delay(50-2000)` calls** across 10 TUI test files — ~13s of pure sleep
+3. **Sequential file execution** — `node --test` runs all 23 files one after another
+4. **20 `execSync` process spawns** in hook/reader/cli tests — ~1-3s of process creation overhead on Windows
 
 ## Acceptance Criteria
+
+### AC0: Fix Zombie Processes — Missing unmount() Calls (CRITICAL — Do First)
+
+**Given** any test that renders a component containing `setInterval` (LlmBadge, MonitorScreen)
+**When** the test completes its assertions
+**Then** `unmount()` is called to trigger React cleanup and clear all intervals
+**And** no test process hangs after all tests in the file have run
+**And** `node --test test/tui-monitor-components.test.js` exits cleanly within 5 seconds
+
+**Root cause:** `tui-monitor-components.test.js` LlmBadge tests (lines 108-164) destructure only `{ lastFrame }` from `render()` — never `{ unmount }`. The `LlmBadge` component runs `setInterval(() => setTick(t => t + 1), 1000)` for any state !== 'inactive'. Without `unmount()`, the cleanup `return () => clearInterval(id)` never fires, the interval holds the event loop, and the process hangs forever.
+
+**Affected files to audit for missing unmount():**
+- `test/tui-monitor-components.test.js` — 8 LlmBadge tests (confirmed missing)
+- All other test files that render components with timers — audit each `render()` call
 
 ### AC1: Replace `delay()` with `React.act()` in TUI Tests
 
@@ -59,6 +74,13 @@ The test suite currently takes 25-40 seconds on Windows for a small app (9.5k li
 **And** total wall-clock time is under 10 seconds on a standard dev machine (stretch goal: under 5s)
 
 ## Tasks / Subtasks
+
+- [ ] Task 0: Fix zombie processes — missing unmount() (AC: 0) **DO FIRST**
+  - [ ] In `tui-monitor-components.test.js`, add `unmount()` to all LlmBadge tests (lines 108-164) — destructure `{ lastFrame, unmount }` and call `unmount()` after assertions
+  - [ ] Audit ALL test files for `render()` calls where `unmount` is never destructured — fix each one
+  - [ ] Verify: `node --test test/tui-monitor-components.test.js` exits cleanly
+  - [ ] Verify: `node --test test/tui-monitor.test.js` exits cleanly
+  - [ ] Consider adding a `--test-timeout=30000` to package.json test script as a safety net against future hangs
 
 - [ ] Task 1: Enable concurrency in package.json (AC: 3)
   - [ ] Change test script to add `--test-concurrency=4`
