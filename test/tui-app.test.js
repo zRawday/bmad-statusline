@@ -194,7 +194,7 @@ describe('App v2 — state model', () => {
     await act(async () => { stdin.write('\r'); });
 
     // Wait for debounced config write (300ms debounce in app.js)
-    await new Promise(r => setTimeout(r, 400));
+    await act(async () => { await new Promise(r => setTimeout(r, 400)); });
 
     // Separator auto-returns to home after selection
     // Verify change was written
@@ -208,7 +208,7 @@ describe('App v2 — state model', () => {
     await act(async () => { stdin.write('\r'); });
 
     // Wait for debounced config write
-    await new Promise(r => setTimeout(r, 400));
+    await act(async () => { await new Promise(r => setTimeout(r, 400)); });
 
     // Verify reset restored original
     const afterReset = JSON.parse(fs.readFileSync(paths.internalConfig, 'utf8'));

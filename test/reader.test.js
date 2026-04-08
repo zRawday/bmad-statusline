@@ -511,7 +511,7 @@ describe('reader color output', () => {
     assert.equal(result, `${ESC}90m\u25CB${RESET}`);
   });
 
-  it('health no status file: empty string (direct extractor)', () => {
+  it('health empty status object: dim empty circle (direct extractor)', () => {
     const result = reader.COMMANDS.health({}, null);
     assert.equal(result, `${ESC}90m\u25CB${RESET}`);
   });

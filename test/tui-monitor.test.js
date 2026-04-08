@@ -122,6 +122,7 @@ describe('MonitorScreen', () => {
         goBack: () => {},
         isActive: true,
         paths: { cachePath: tmpDir },
+        pollInterval: 10,
       }));
       const frame = lastFrame();
       assert.ok(frame.includes('MONITOR'));
@@ -140,6 +141,7 @@ describe('MonitorScreen', () => {
         goBack: () => {},
         isActive: true,
         paths: { cachePath: tmpDir },
+        pollInterval: 10,
       }));
       const frame = lastFrame();
       assert.ok(frame.includes('No active BMAD session'));
@@ -160,6 +162,7 @@ describe('MonitorScreen', () => {
         goBack,
         isActive: true,
         paths: { cachePath: tmpDir },
+        pollInterval: 10,
       }));
       await act(async () => { stdin.write('\x1B'); });
       assert.ok(goBackCalled);
@@ -184,6 +187,7 @@ describe('MonitorScreen', () => {
         goBack: () => {},
         isActive: true,
         paths: { cachePath: tmpDir },
+        pollInterval: 10,
       }));
       await act(async () => {});
       const frame = lastFrame();
@@ -566,6 +570,7 @@ describe('MonitorScreen — tab navigation', () => {
         goBack: () => {},
         isActive: true,
         paths: { cachePath: tmpDir },
+        pollInterval: 10,
       }));
       await act(async () => {});
       const frame1 = lastFrame();
@@ -595,6 +600,7 @@ describe('MonitorScreen — tab navigation', () => {
         goBack: () => {},
         isActive: true,
         paths: { cachePath: tmpDir },
+        pollInterval: 10,
       }));
       await act(async () => {});
       const frame1 = lastFrame();
@@ -623,6 +629,7 @@ describe('MonitorScreen — tab navigation', () => {
         goBack: () => {},
         isActive: true,
         paths: { cachePath: tmpDir },
+        pollInterval: 10,
       }));
       await act(async () => {});
       const frame = lastFrame();
@@ -647,6 +654,7 @@ describe('MonitorScreen — tab navigation', () => {
         goBack: () => {},
         isActive: true,
         paths: { cachePath: tmpDir },
+        pollInterval: 10,
       }));
       await act(async () => {});
       await act(async () => { stdin.write('r'); });
@@ -672,6 +680,7 @@ describe('MonitorScreen — tab navigation', () => {
         goBack: () => {},
         isActive: true,
         paths: { cachePath: tmpDir },
+        pollInterval: 10,
       }));
       await act(async () => {});
       await act(async () => { stdin.write('R'); });
@@ -720,6 +729,7 @@ describe('MonitorScreen — toggles', () => {
         goBack: () => {},
         isActive: true,
         paths: { cachePath: tmpDir, outputFolder: tmpDir },
+        pollInterval: 10,
       }));
       await act(async () => {});
       // Enter detail mode
@@ -751,6 +761,7 @@ describe('MonitorScreen — toggles', () => {
         goBack: () => {},
         isActive: true,
         paths: { cachePath: tmpDir, outputFolder: tmpDir },
+        pollInterval: 10,
       }));
       await act(async () => {});
       const frame = lastFrame();
@@ -778,6 +789,7 @@ describe('MonitorScreen — toggles', () => {
         goBack: () => {},
         isActive: true,
         paths: { cachePath: tmpDir, outputFolder: tmpDir },
+        pollInterval: 10,
       }));
       await act(async () => {});
       await act(async () => { stdin.write('d'); });
@@ -801,6 +813,7 @@ describe('MonitorScreen — toggles', () => {
         goBack: () => { goBackCalled = true; },
         isActive: true,
         paths: { cachePath: tmpDir, outputFolder: tmpDir },
+        pollInterval: 10,
       }));
       await act(async () => { stdin.write('\x1B'); });
       assert.ok(goBackCalled);
@@ -1053,7 +1066,7 @@ describe('MonitorScreen — scroll offset clamping', () => {
         writes: fewWrites,
       }));
       // Wait for short poll interval to pick up the change
-      await new Promise(r => setTimeout(r, 100));
+      await act(async () => { await new Promise(r => setTimeout(r, 100)); });
 
       // Should not crash and content should be visible
       const frame = lastFrame();

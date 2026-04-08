@@ -278,6 +278,7 @@ describe('MonitorScreen — detail mode', () => {
         goBack: () => {},
         isActive: true,
         paths: { cachePath: tmpDir },
+        pollInterval: 10,
       }));
       await act(async () => {});
       await act(async () => { stdin.write('d'); });
@@ -299,6 +300,7 @@ describe('MonitorScreen — detail mode', () => {
         goBack: () => {},
         isActive: true,
         paths: { cachePath: tmpDir },
+        pollInterval: 10,
       }));
       await act(async () => {});
       await act(async () => { stdin.write('d'); });
@@ -638,6 +640,7 @@ describe('MonitorScreen — chronology and export', () => {
         goBack: () => {},
         isActive: true,
         paths: { cachePath: tmpDir, outputFolder: tmpDir },
+        pollInterval: 10,
       }));
       await act(async () => {});
       await act(async () => { stdin.write('c'); });
@@ -659,6 +662,7 @@ describe('MonitorScreen — chronology and export', () => {
         goBack: () => {},
         isActive: true,
         paths: { cachePath: tmpDir, outputFolder: tmpDir },
+        pollInterval: 10,
       }));
       await act(async () => {});
       await act(async () => { stdin.write('e'); });
@@ -682,6 +686,7 @@ describe('MonitorScreen — chronology and export', () => {
         goBack: () => {},
         isActive: true,
         paths: { cachePath: tmpDir, outputFolder: tmpDir },
+        pollInterval: 10,
       }));
       await act(async () => {});
       await act(async () => { stdin.write('e'); });
@@ -711,6 +716,7 @@ describe('MonitorScreen — chronology and export', () => {
         goBack: () => {},
         isActive: true,
         paths: { cachePath: tmpDir, outputFolder: tmpDir },
+        pollInterval: 10,
       }));
       await act(async () => {});
       await act(async () => { stdin.write('e'); });

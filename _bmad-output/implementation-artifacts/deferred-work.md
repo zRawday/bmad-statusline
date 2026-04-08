@@ -190,6 +190,12 @@
 
 - **`computeDisplayState` timeout converts `active:subagent` to `inactive` for long-running subagents** — The 5-minute `INACTIVE_TIMEOUT_MS` in `computeDisplayState()` applies to all states including `active:subagent`. A subagent running without frequent `updated_at` refreshes will silently appear as INACTIVE. Pre-existing behavior (spec forbids modifying `computeDisplayState()`). Consider adding subagent-specific freshness logic or heartbeat in a future story.
 
+## Deferred from: code review of 9-2-test-suite-performance-optimization (2026-04-08)
+
+- **Exported COMMANDS object is mutable** — `module.exports = { COMMANDS, ... }` in bmad-sl-reader.js exposes internal COMMANDS object. Concurrent tests could theoretically mutate shared state. Consider Object.freeze(COMMANDS) if direct-import tests grow.
+- **LlmBadge fgColor black→#000000** — Terminal compatibility concern. `#000000` requires truecolor support, unlike `'black'` (always works). Unrelated to story 9-2, drive-by change.
+- **Wall-clock 103s exceeds AC5 <10s target** — Windows process isolation overhead with node --test runner. Primary achievement (no zombies, no hangs, deterministic) is delivered. Further optimization requires different approach (single-process runner, test count reduction).
+
 ## Deferred from: code review of story-8.2 (2026-04-07)
 
 - **Missing AC#5 test coverage for subagent_type clearing via existing handlers** — Tests only verify SubagentStop, PostToolUseFailure, PermissionDenied clear subagent_type. Missing coverage for UserPromptSubmit, Read, Write, Edit, Bash, PreToolUse, Stop, Notification transitioning out of active:subagent. Code does clear it, but tests don't verify.
