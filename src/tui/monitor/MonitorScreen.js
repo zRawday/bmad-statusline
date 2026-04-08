@@ -397,29 +397,36 @@ export function MonitorScreen({ config, navigate, goBack, isActive, paths, pollI
       ))
     : items;
 
+  // Badge props — computed outside render to keep JSX clean
+  const badgeProps = currentSession ? {
+    state: computeDisplayState(currentSession),
+    workflow: currentSession.workflow || currentSession.skill,
+    startedAt: currentSession.started_at,
+    contextLabel: STORY_WORKFLOWS.includes(currentSession.workflow) && currentSession.story
+      ? formatStoryTitle(currentSession.story)
+      : !STORY_WORKFLOWS.includes(currentSession.workflow) && currentSession.document_name
+        ? currentSession.document_name
+        : '',
+  } : { state: 'inactive', workflow: '', startedAt: '', contextLabel: '' };
+
   return e(Box, { flexDirection: 'column', height: rows },
     // Sticky top: title + session count
     e(Text, { bold: true, color: 'cyan' }, 'MONITOR',
       activeProject && projectKeys.length === 1 ? e(Text, { color: resolveProjectColor(activeProject, config) }, `  ${activeProject}  `) : '  ',
       e(Text, { dimColor: true }, `${sessions.length} session${sessions.length !== 1 ? 's' : ''}`)),
     e(Text, null, ' '),
-    // Tabs
-    showTabs ? e(SessionTabs, {
-      groups: orderedGroups, activeProject, activeSessionIndex: clampedSessionIndex, config, mode,
-      reorderTarget: reorderMode, reorderCursor, reorderGrabbed,
-    }) : null,
-    showTabs ? e(Text, null, ' ') : null,
-    // Badge for current session
-    currentSession ? e(LlmBadge, {
-      state: computeDisplayState(currentSession),
-      workflow: currentSession.workflow || currentSession.skill,
-      startedAt: currentSession.started_at,
-      contextLabel: STORY_WORKFLOWS.includes(currentSession.workflow) && currentSession.story
-        ? formatStoryTitle(currentSession.story)
-        : !STORY_WORKFLOWS.includes(currentSession.workflow) && currentSession.document_name
-          ? currentSession.document_name
-          : '',
-    }) : null,
+    // Tabs — stable wrapper Box avoids yoga insertChild on root (prevents x-offset bug)
+    e(Box, { flexDirection: 'column', display: showTabs ? 'flex' : 'none' },
+      e(SessionTabs, {
+        groups: orderedGroups, activeProject, activeSessionIndex: clampedSessionIndex, config, mode,
+        reorderTarget: reorderMode, reorderCursor, reorderGrabbed,
+      }),
+      e(Text, null, ' '),
+    ),
+    // Badge — stable wrapper Box (same pattern)
+    e(Box, { display: currentSession ? 'flex' : 'none' },
+      e(LlmBadge, badgeProps),
+    ),
     e(Text, null, ' '),
     // Content — hidden during reorder
     reorderMode
