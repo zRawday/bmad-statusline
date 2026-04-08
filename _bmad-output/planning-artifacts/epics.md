@@ -2223,7 +2223,13 @@ So that **the Monitor is practical for long-running use**.
 Le hook évolue pour capturer les signaux directs de Claude Code (PermissionRequest, Stop, StopFailure, SessionEnd, SubagentStart/Stop, PostToolUseFailure, PermissionDenied) au lieu de les inférer par timeout. Le reader et le monitor s'adaptent pour afficher les nouveaux états.
 
 **Architecture:** Rev.5 — extends hook dispatch table and LLM state machine
-**Stories:** 8.1–8.5 (see sprint-status.yaml and story files in implementation-artifacts/)
+**Stories:** 8.1–8.6 (see sprint-status.yaml and story files in implementation-artifacts/)
+
+### Story 8.6: Hook — Interrupted State Detection & Permission-to-Active Transition Fix
+
+As a **developer monitoring Claude Code sessions**,
+I want **the status line to show "interrupted" when I cancel or deny an action, and to return to "active" as soon as I accept a permission**,
+So that **the Monitor and reader accurately reflect user-initiated interruptions and permission acceptance instead of showing stale states**.
 
 _Note: Epic 8 stories were created directly from conversation-driven specifications. Full acceptance criteria are in individual story files._
 
