@@ -4,9 +4,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { getDefaultSkillColor } from '../skill-catalog.js';
 import { toInkColor } from '../preview-utils.js';
-import { ALIVE_MAX_AGE_MS, INACTIVE_TIMEOUT_MS, STORY_WORKFLOWS, PROJECT_COLOR_PALETTE, hashProjectColor, computeDisplayState, formatTimer as formatElapsed, formatStoryName, LLM_STATE_PRIORITY } from '../../defaults.js';
+import { ALIVE_MAX_AGE_MS, STORY_WORKFLOWS, PROJECT_COLOR_PALETTE, hashProjectColor, computeDisplayState, formatTimer as formatElapsed, formatStoryName, LLM_STATE_PRIORITY } from '../../defaults.js';
 
-export { ALIVE_MAX_AGE_MS, INACTIVE_TIMEOUT_MS, STORY_WORKFLOWS, computeDisplayState, formatElapsed, formatStoryName as formatStoryTitle };
+export { ALIVE_MAX_AGE_MS, STORY_WORKFLOWS, computeDisplayState, formatElapsed, formatStoryName as formatStoryTitle };
 
 export const MONITOR_STALE_MS = 2 * 60 * 1000; // 2 minutes
 export const MONITOR_IDLE_WINDOW_MS = 4 * 60 * 60 * 1000; // 4 hours — keep idle sessions visible
@@ -70,7 +70,7 @@ export function groupSessionsByProject(sessions) {
 }
 
 export function worstState(sessions) {
-  let worst = 'inactive';
+  let worst = 'active';
   for (const s of sessions) {
     const state = computeDisplayState(s);
     if ((LLM_STATE_PRIORITY[state] || 0) > (LLM_STATE_PRIORITY[worst] || 0)) worst = state;

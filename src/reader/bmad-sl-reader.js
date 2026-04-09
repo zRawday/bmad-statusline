@@ -13,7 +13,7 @@ const STALE_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes
 
 // --- Shared constants ---
 
-const { ALIVE_MAX_AGE_MS, INACTIVE_TIMEOUT_MS, PROJECT_COLOR_PALETTE, SEPARATOR_VALUES: READER_SEPARATORS, isValidSessionId, hashProjectColor, computeDisplayState: computeLlmDisplayState, formatTimer, formatStoryName } = require('./shared-constants.cjs');
+const { ALIVE_MAX_AGE_MS, PROJECT_COLOR_PALETTE, SEPARATOR_VALUES: READER_SEPARATORS, isValidSessionId, hashProjectColor, computeDisplayState: computeLlmDisplayState, formatTimer, formatStoryName } = require('./shared-constants.cjs');
 
 // --- Color maps ---
 
@@ -36,13 +36,11 @@ const LLM_STATES = {
   error:             { bg: '\x1b[101m', fg: '\x1b[97m', label: 'ERROR' },
   interrupted:       { bg: '\x1b[43m',  fg: '\x1b[30m', label: 'INTERRUPTED' },
   active:            { color: '\x1b[32m',  label: 'ACTIVE' },
-  'active:subagent': { color: '\x1b[36m',  label: 'SUBAGENT' },
-  inactive:          { color: '\x1b[90m',  label: 'INACTIVE' },
 };
 
 function formatLlmState(status) {
   const state = computeLlmDisplayState(status);
-  const cfg = LLM_STATES[state] || LLM_STATES.inactive;
+  const cfg = LLM_STATES[state] || LLM_STATES.active;
   if (cfg.bg) {
     return `${cfg.bg}${cfg.fg} \u2B24  ${cfg.label} ${RESET}`;
   }

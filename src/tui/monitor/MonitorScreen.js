@@ -407,7 +407,7 @@ export function MonitorScreen({ config, navigate, goBack, isActive, paths, pollI
       : !STORY_WORKFLOWS.includes(currentSession.workflow) && currentSession.document_name
         ? currentSession.document_name
         : '',
-  } : { state: 'inactive', workflow: '', startedAt: '', contextLabel: '' };
+  } : { state: 'waiting', workflow: '', startedAt: '', contextLabel: '' };
 
   return e(Box, { flexDirection: 'column', height: rows },
     // Sticky top: title + session count

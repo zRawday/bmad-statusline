@@ -1,6 +1,6 @@
 # Story 8.7: LLM State Simplification — 5-State Model
 
-Status: ready-for-dev
+Status: review
 
 ## Story
 
@@ -84,56 +84,56 @@ So that **state detection is simpler, more stable, and every displayed state map
 
 ## Tasks / Subtasks
 
-- [ ] Task 1: Update `shared-constants.cjs` (AC: 2, 3, 9)
-  - [ ] 1.1 Remove `INACTIVE_TIMEOUT_MS` constant and its export
-  - [ ] 1.2 Update `LLM_STATE_PRIORITY` to 5 entries: `active: 0`, `waiting: 1`, `interrupted: 1`, `error: 2`, `permission: 2`
-  - [ ] 1.3 Simplify `computeDisplayState()` to `return status.llm_state || 'waiting'`
+- [x] Task 1: Update `shared-constants.cjs` (AC: 2, 3, 9)
+  - [x] 1.1 Remove `INACTIVE_TIMEOUT_MS` constant and its export
+  - [x] 1.2 Update `LLM_STATE_PRIORITY` to 5 entries: `active: 0`, `waiting: 1`, `interrupted: 1`, `error: 2`, `permission: 2`
+  - [x] 1.3 Simplify `computeDisplayState()` to `return status.llm_state || 'waiting'`
 
-- [ ] Task 2: Update hook `bmad-hook.js` (AC: 1, 4)
-  - [ ] 2.1 In `handleSubagentStart()` (line 673): change `status.llm_state = 'active:subagent'` → `status.llm_state = 'active'`
-  - [ ] 2.2 Remove or no-op the `Notification` dispatch branch (line 153-154) and `handleNotification()` function (lines 620-633)
+- [x] Task 2: Update hook `bmad-hook.js` (AC: 1, 4)
+  - [x] 2.1 In `handleSubagentStart()` (line 673): change `status.llm_state = 'active:subagent'` → `status.llm_state = 'active'`
+  - [x] 2.2 Remove or no-op the `Notification` dispatch branch (line 153-154) and `handleNotification()` function (lines 620-633)
 
-- [ ] Task 3: Update `defaults.js` (AC: 5)
-  - [ ] 3.1 Remove the `Notification` entry from the hooks object in `getHookConfig()` (line 57-59)
+- [x] Task 3: Update `defaults.js` (AC: 5)
+  - [x] 3.1 Remove the `Notification` entry from the hooks object in `getHookConfig()` (line 57-59)
 
-- [ ] Task 4: Update reader `bmad-sl-reader.js` (AC: 6)
-  - [ ] 4.1 Remove `'active:subagent'` and `inactive` entries from `LLM_STATES` (lines 39-40)
-  - [ ] 4.2 Change fallback in `formatLlmState()` from `LLM_STATES.inactive` to `LLM_STATES.active` (line 45)
-  - [ ] 4.3 Remove `INACTIVE_TIMEOUT_MS` from the require destructure (line 16)
+- [x] Task 4: Update reader `bmad-sl-reader.js` (AC: 6)
+  - [x] 4.1 Remove `'active:subagent'` and `inactive` entries from `LLM_STATES` (lines 39-40)
+  - [x] 4.2 Change fallback in `formatLlmState()` from `LLM_STATES.inactive` to `LLM_STATES.active` (line 45)
+  - [x] 4.3 Remove `INACTIVE_TIMEOUT_MS` from the require destructure (line 16)
 
-- [ ] Task 5: Update `LlmBadge.js` (AC: 7)
-  - [ ] 5.1 Remove `inactive` and `'active:subagent'` from `LLM_BADGE_CONFIG` (lines 15-16)
-  - [ ] 5.2 Change fallback from `LLM_BADGE_CONFIG.inactive` to `LLM_BADGE_CONFIG.active` (line 27)
-  - [ ] 5.3 Remove the `if (state === 'inactive') return;` guard in `useEffect` (line 22) — timer always ticks
-  - [ ] 5.4 Update file header comment to reflect 5-state model
+- [x] Task 5: Update `LlmBadge.js` (AC: 7)
+  - [x] 5.1 Remove `inactive` and `'active:subagent'` from `LLM_BADGE_CONFIG` (lines 15-16)
+  - [x] 5.2 Change fallback from `LLM_BADGE_CONFIG.inactive` to `LLM_BADGE_CONFIG.active` (line 27)
+  - [x] 5.3 Remove the `if (state === 'inactive') return;` guard in `useEffect` (line 22) — timer always ticks
+  - [x] 5.4 Update file header comment to reflect 5-state model
 
-- [ ] Task 6: Update `SessionTabs.js` (AC: 8)
-  - [ ] 6.1 Remove `inactive` and `'active:subagent'` from `STATE_ICONS` (lines 15-16)
-  - [ ] 6.2 Change fallbacks from `STATE_ICONS.inactive` to `STATE_ICONS.active` (lines 37, 61)
+- [x] Task 6: Update `SessionTabs.js` (AC: 8)
+  - [x] 6.1 Remove `inactive` and `'active:subagent'` from `STATE_ICONS` (lines 15-16)
+  - [x] 6.2 Change fallbacks from `STATE_ICONS.inactive` to `STATE_ICONS.active` (lines 37, 61)
 
-- [ ] Task 7: Update `monitor-utils.js` (AC: 10)
-  - [ ] 7.1 Change `worstState()` initial value from `'inactive'` to `'active'` (line 73)
-  - [ ] 7.2 Remove `INACTIVE_TIMEOUT_MS` from imports and re-exports (lines 7, 9)
+- [x] Task 7: Update `monitor-utils.js` (AC: 10)
+  - [x] 7.1 Change `worstState()` initial value from `'inactive'` to `'active'` (line 73)
+  - [x] 7.2 Remove `INACTIVE_TIMEOUT_MS` from imports and re-exports (lines 7, 9)
 
-- [ ] Task 8: Update `MonitorScreen.js` (AC: 11)
-  - [ ] 8.1 Change fallback state from `'inactive'` to `'waiting'` (line 410)
+- [x] Task 8: Update `MonitorScreen.js` (AC: 11)
+  - [x] 8.1 Change fallback state from `'inactive'` to `'waiting'` (line 410)
 
-- [ ] Task 9: Update installer to stop registering Notification matcher (AC: 5)
-  - [ ] 9.1 Search `src/install.js` and related installer code for Notification registration logic — remove if present
-  - [ ] 9.2 Verify the installer generates config WITHOUT the Notification key
+- [x] Task 9: Update installer to stop registering Notification matcher (AC: 5)
+  - [x] 9.1 Search `src/install.js` and related installer code for Notification registration logic — remove if present
+  - [x] 9.2 Verify the installer generates config WITHOUT the Notification key
 
-- [ ] Task 10: Update tests (AC: 12)
-  - [ ] 10.1 `test/hook.test.js`: Remove/update tests 7.1 (handleNotification sets permission), handleNotification ignores non-permission, handleNotification ignores missing field (lines 1714-1770)
-  - [ ] 10.2 `test/hook.test.js`: Update test 8.2 AC#1 — SubagentStart now sets `active` not `active:subagent` (lines 2339-2380)
-  - [ ] 10.3 `test/hook.test.js`: Update all `active:subagent` assertions to `active` (lines 2350, 2366, 2380, 2389, 2436-2469, 2518)
-  - [ ] 10.4 `test/hook.test.js`: Update AC#10 state transition flow — remove Notification step (line 1976-1977)
-  - [ ] 10.5 `test/hook.test.js`: Update 8.1 AC#4 error_type cleared on Notification test (line 2312-2314) — remove or replace
-  - [ ] 10.6 `test/defaults.test.js`: Remove Notification from expected hook events (lines 44, 59, 96-102)
-  - [ ] 10.7 `test/install.test.js`: Remove all Notification assertions (~12 occurrences, lines 290-588)
-  - [ ] 10.8 `test/llmstate-widget.test.js`: Remove INACTIVE test (line 138-148) and SUBAGENT test (line 221-232)
-  - [ ] 10.9 `test/tui-monitor-components.test.js`: Remove inactive LlmBadge test (line 140), active:subagent LlmBadge test (line 173), active:subagent SessionTabs test (line 213)
-  - [ ] 10.10 `test/tui-monitor.test.js`: Update computeDisplayState tests — remove stale→inactive test (line 403), missing→inactive test (line 419); update worstState inactive tests (line 452-456)
-  - [ ] 10.11 Run `npm test` — all tests pass, 0 failures
+- [x] Task 10: Update tests (AC: 12)
+  - [x] 10.1 `test/hook.test.js`: Remove/update tests 7.1 (handleNotification sets permission), handleNotification ignores non-permission, handleNotification ignores missing field (lines 1714-1770)
+  - [x] 10.2 `test/hook.test.js`: Update test 8.2 AC#1 — SubagentStart now sets `active` not `active:subagent` (lines 2339-2380)
+  - [x] 10.3 `test/hook.test.js`: Update all `active:subagent` assertions to `active` (lines 2350, 2366, 2380, 2389, 2436-2469, 2518)
+  - [x] 10.4 `test/hook.test.js`: Update AC#10 state transition flow — remove Notification step (line 1976-1977)
+  - [x] 10.5 `test/hook.test.js`: Update 8.1 AC#4 error_type cleared on Notification test (line 2312-2314) — remove or replace
+  - [x] 10.6 `test/defaults.test.js`: Remove Notification from expected hook events (lines 44, 59, 96-102)
+  - [x] 10.7 `test/install.test.js`: Remove all Notification assertions (~12 occurrences, lines 290-588)
+  - [x] 10.8 `test/llmstate-widget.test.js`: Remove INACTIVE test (line 138-148) and SUBAGENT test (line 221-232)
+  - [x] 10.9 `test/tui-monitor-components.test.js`: Remove inactive LlmBadge test (line 140), active:subagent LlmBadge test (line 173), active:subagent SessionTabs test (line 213)
+  - [x] 10.10 `test/tui-monitor.test.js`: Update computeDisplayState tests — remove stale→inactive test (line 403), missing→inactive test (line 419); update worstState inactive tests (line 452-456)
+  - [x] 10.11 Run `npm test` — all story-related tests pass (1 pre-existing failure in tui-edit-line unrelated to this story)
 
 ## Dev Notes
 
@@ -228,8 +228,42 @@ Semantic grouping preserved:
 
 ### Agent Model Used
 
+Claude Opus 4.6 (1M context)
+
 ### Debug Log References
 
 ### Completion Notes List
 
+- Reduced LLM state machine from 7 states to 5: `active`, `permission`, `waiting`, `interrupted`, `error`
+- Removed `active:subagent` state — SubagentStart now sets `active`; `subagent_type` metadata field preserved
+- Removed `inactive` state and `INACTIVE_TIMEOUT_MS` — `computeDisplayState()` simplified to `status.llm_state || 'waiting'`
+- Removed `Notification` handler from hook dispatch and `handleNotification()` function — `PermissionRequest` is canonical
+- Removed `Notification` from `getHookConfig()` in defaults.js (12 event types, 15 matchers)
+- Removed `INACTIVE_TIMEOUT_MS` from shared-constants exports, defaults.js re-exports, reader imports, monitor-utils imports
+- Updated all fallbacks: reader→`active`, LlmBadge→`active`, SessionTabs→`active`, MonitorScreen→`waiting`, worstState→`active`
+- Updated `LLM_STATE_PRIORITY` to 3-tier: 0=active, 1=waiting/interrupted, 2=error/permission
+- LlmBadge timer now always ticks (removed `inactive` guard)
+- All tests updated: removed Notification, inactive, active:subagent assertions; added 5-state model tests
+- 1 pre-existing test failure in tui-edit-line.test.js unrelated to this story (from uncommitted EditLineScreen.js changes)
+
 ### File List
+
+- src/reader/shared-constants.cjs (modified)
+- src/hook/bmad-hook.js (modified)
+- src/defaults.js (modified)
+- src/reader/bmad-sl-reader.js (modified)
+- src/tui/monitor/components/LlmBadge.js (modified)
+- src/tui/monitor/components/SessionTabs.js (modified)
+- src/tui/monitor/monitor-utils.js (modified)
+- src/tui/monitor/MonitorScreen.js (modified)
+- test/hook.test.js (modified)
+- test/defaults.test.js (modified)
+- test/install.test.js (modified)
+- test/llmstate-widget.test.js (modified)
+- test/tui-monitor-components.test.js (modified)
+- test/tui-monitor.test.js (modified)
+- test/reader.test.js (modified)
+
+### Change Log
+
+- 2026-04-09: Story 8.7 implemented — LLM state machine reduced from 7 to 5 states (active, permission, waiting, interrupted, error). Removed `inactive`, `active:subagent` states and `Notification` handler.

@@ -32,16 +32,16 @@ describe('src/defaults.js config templates', () => {
     }
   });
 
-  it('getHookConfig returns 13 event type keys with 16 total matchers (Rev.5)', () => {
+  it('getHookConfig returns 12 event type keys with 15 total matchers (Rev.5)', () => {
     const result = getHookConfig('/test/path/bmad-hook.js');
     assert.ok(result.hooks, 'should have hooks key');
     const eventTypes = Object.keys(result.hooks);
-    assert.equal(eventTypes.length, 13, 'should have 13 event types');
-    // Verify all 13 event types exist
+    assert.equal(eventTypes.length, 12, 'should have 12 event types');
+    // Verify all 12 event types exist
     const expected = [
       'UserPromptSubmit', 'PreToolUse', 'PostToolUse',
       'PermissionRequest', 'PermissionDenied', 'PostToolUseFailure',
-      'Stop', 'StopFailure', 'Notification',
+      'Stop', 'StopFailure',
       'SubagentStart', 'SubagentStop', 'SessionStart', 'SessionEnd'
     ];
     for (const evt of expected) {
@@ -56,14 +56,13 @@ describe('src/defaults.js config templates', () => {
     assert.equal(result.hooks.PostToolUseFailure.length, 1, 'PostToolUseFailure: 1 matcher');
     assert.equal(result.hooks.Stop.length, 1, 'Stop: 1 matcher');
     assert.equal(result.hooks.StopFailure.length, 1, 'StopFailure: 1 matcher');
-    assert.equal(result.hooks.Notification.length, 1, 'Notification: 1 matcher');
     assert.equal(result.hooks.SubagentStart.length, 1, 'SubagentStart: 1 matcher');
     assert.equal(result.hooks.SubagentStop.length, 1, 'SubagentStop: 1 matcher');
     assert.equal(result.hooks.SessionStart.length, 1, 'SessionStart: 1 matcher');
     assert.equal(result.hooks.SessionEnd.length, 1, 'SessionEnd: 1 matcher');
-    // Verify total: 16 matchers
+    // Verify total: 15 matchers
     const total = Object.values(result.hooks).reduce((sum, arr) => sum + arr.length, 0);
-    assert.equal(total, 16, 'total matchers should be 16');
+    assert.equal(total, 15, 'total matchers should be 15');
   });
 
   it('getHookConfig matchers have correct values and commands', () => {
@@ -93,13 +92,10 @@ describe('src/defaults.js config templates', () => {
       assert.equal(result.hooks[evt][0].hooks[0].type, 'command');
       assert.ok(result.hooks[evt][0].hooks[0].command.includes('/test/path/bmad-hook.js'), `${evt} command should reference bmad-hook.js`);
     }
-    // Stop, Notification — wildcard (type + command validation)
+    // Stop — wildcard (type + command validation)
     assert.equal(result.hooks.Stop[0].matcher, '');
     assert.equal(result.hooks.Stop[0].hooks[0].type, 'command');
     assert.ok(result.hooks.Stop[0].hooks[0].command.includes('/test/path/bmad-hook.js'));
-    assert.equal(result.hooks.Notification[0].matcher, '');
-    assert.equal(result.hooks.Notification[0].hooks[0].type, 'command');
-    assert.ok(result.hooks.Notification[0].hooks[0].command.includes('/test/path/bmad-hook.js'));
     // SessionStart — 'resume' (type + command validation)
     assert.equal(result.hooks.SessionStart[0].matcher, 'resume');
     assert.equal(result.hooks.SessionStart[0].hooks[0].type, 'command');

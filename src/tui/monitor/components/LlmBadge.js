@@ -1,4 +1,4 @@
-// LlmBadge.js — 7-state LLM badge: active, permission, waiting, error, interrupted, inactive, active:subagent
+// LlmBadge.js — 5-state LLM badge: active, permission, waiting, error, interrupted
 
 import React, { useState, useEffect } from 'react';
 import { Box, Text } from 'ink';
@@ -12,19 +12,16 @@ const LLM_BADGE_CONFIG = {
   waiting:           { bgColor: 'blueBright',   fgColor: 'white', icon: '\u2B24', label: 'WAITING' },
   error:             { bgColor: 'redBright',    fgColor: 'white', icon: '\u2B24', label: 'ERROR' },
   interrupted:       { bgColor: 'yellow',       fgColor: '#000000', icon: '\u2B24', label: 'INTERRUPTED' },
-  inactive:          { color: 'grey',                             icon: '\u2B24', label: 'INACTIVE' },
-  'active:subagent': { color: 'cyan',                             icon: '\u2B24', label: 'SUBAGENT' },
 };
 
 function LlmBadge({ state, workflow, startedAt, contextLabel }) {
   const [, setTick] = useState(0);
   useEffect(() => {
-    if (state === 'inactive') return;
     const id = setInterval(() => setTick(t => t + 1), 1000);
     return () => clearInterval(id);
   }, [state]);
 
-  const cfg = LLM_BADGE_CONFIG[state] || LLM_BADGE_CONFIG.inactive;
+  const cfg = LLM_BADGE_CONFIG[state] || LLM_BADGE_CONFIG.active;
   const elapsed = formatElapsed(startedAt);
   const suffix = [workflow, elapsed].filter(Boolean).join(' ');
 

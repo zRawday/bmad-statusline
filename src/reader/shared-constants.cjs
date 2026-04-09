@@ -4,7 +4,6 @@
 // CJS runtime (reader, hook) and ESM modules (via createRequire bridge in defaults.js).
 
 const ALIVE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
-const INACTIVE_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
 const STORY_WORKFLOWS = ['create-story', 'dev-story', 'code-review'];
 
 const PROJECT_COLOR_PALETTE = [
@@ -19,13 +18,11 @@ const SEPARATOR_VALUES = {
 };
 
 const LLM_STATE_PRIORITY = {
-  inactive: 0,
-  active: 1,
-  'active:subagent': 1,
-  interrupted: 2,
-  waiting: 2,
-  error: 3,
-  permission: 3,
+  active: 0,
+  waiting: 1,
+  interrupted: 1,
+  error: 2,
+  permission: 2,
 };
 
 function isValidSessionId(id) {
@@ -42,11 +39,7 @@ function hashProjectColor(name) {
 }
 
 function computeDisplayState(status) {
-  if (status.updated_at) {
-    const age = Date.now() - new Date(status.updated_at).getTime();
-    if (isNaN(age) || age > INACTIVE_TIMEOUT_MS) return 'inactive';
-  }
-  return status.llm_state || 'inactive';
+  return status.llm_state || 'waiting';
 }
 
 function formatTimer(startedAt) {
@@ -74,7 +67,6 @@ function formatStoryName(slug, displayMode) {
 
 module.exports = {
   ALIVE_MAX_AGE_MS,
-  INACTIVE_TIMEOUT_MS,
   STORY_WORKFLOWS,
   PROJECT_COLOR_PALETTE,
   SEPARATOR_VALUES,

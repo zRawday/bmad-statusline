@@ -150,8 +150,6 @@ if (hookEvent === 'UserPromptSubmit') {
   handleStop();
 } else if (hookEvent === 'StopFailure') {
   handleStopFailure();
-} else if (hookEvent === 'Notification') {
-  handleNotification();
 } else if (hookEvent === 'PermissionRequest') {
   handlePermissionRequest();
 } else if (hookEvent === 'PermissionDenied') {
@@ -617,22 +615,7 @@ function handleStop() {
   writeStatus(sessionId, status);
 }
 
-// ─── 13. handleNotification (permission state) ──────────────────────────────
-function handleNotification() {
-  if (payload.notification_type !== 'permission_prompt') return;
-
-  const status = readStatus(sessionId);
-  const now = new Date().toISOString();
-
-  status.llm_state = 'permission';
-  status.llm_state_since = now;
-  status.subagent_type = null;
-  status.error_type = null;
-  status.session_id = sessionId;
-  writeStatus(sessionId, status);
-}
-
-// ─── 14. handlePermissionRequest (direct permission signal) ─────────────────
+// ─── 13. handlePermissionRequest (direct permission signal) ─────────────────
 function handlePermissionRequest() {
   const status = readStatus(sessionId);
   const now = new Date().toISOString();
@@ -670,7 +653,7 @@ function handleSessionEnd() {
 function handleSubagentStart() {
   const status = readStatus(sessionId);
   const now = new Date().toISOString();
-  status.llm_state = 'active:subagent';
+  status.llm_state = 'active';
   status.subagent_type = payload.agent_type ?? 'unknown';
   status.error_type = null;
   status.llm_state_since = now;

@@ -1652,15 +1652,6 @@ describe('hook — 8-signal passive detection', () => {
     };
   }
 
-  function makeNotificationPayload(sessionId) {
-    return {
-      session_id: sessionId,
-      cwd: tmpDir,
-      hook_event_name: 'Notification',
-      notification_type: 'permission_prompt'
-    };
-  }
-
   it('7.1 AC#1: handleBash appends to commands[]', () => {
     seedStatus('bash1', {
       session_id: 'bash1',
@@ -1709,62 +1700,6 @@ describe('hook — 8-signal passive detection', () => {
     assert.equal(status.llm_state, 'waiting');
     assert.ok(status.llm_state_since, 'llm_state_since should be set');
     assert.notEqual(status.llm_state_since, '2026-01-01T00:00:00.000Z');
-  });
-
-  // ─── 7.1: handleNotification — llm_state permission ───────────────────────
-
-  it('7.1 AC#3: handleNotification sets llm_state permission', () => {
-    seedStatus('notif1', {
-      session_id: 'notif1',
-      project: 'TestProject',
-      skill: 'bmad-dev-story',
-      workflow: 'dev-story',
-      llm_state: 'active',
-      llm_state_since: '2026-01-01T00:00:00.000Z'
-    });
-    execHook(makeNotificationPayload('notif1'));
-    const status = readStatusFile('notif1');
-    assert.equal(status.llm_state, 'permission');
-    assert.ok(status.llm_state_since);
-  });
-
-  it('handleNotification ignores non-permission notification types', () => {
-    seedStatus('notif-skip', {
-      session_id: 'notif-skip',
-      project: 'TestProject',
-      skill: 'bmad-dev-story',
-      workflow: 'dev-story',
-      llm_state: 'active',
-      llm_state_since: '2026-01-01T00:00:00.000Z'
-    });
-    // notification_type is not 'permission_prompt'
-    execHook({
-      session_id: 'notif-skip',
-      cwd: tmpDir,
-      hook_event_name: 'Notification',
-      notification_type: 'idle_prompt'
-    });
-    const status = readStatusFile('notif-skip');
-    assert.equal(status.llm_state, 'active', 'llm_state should remain active');
-    assert.equal(status.llm_state_since, '2026-01-01T00:00:00.000Z', 'llm_state_since should be unchanged');
-  });
-
-  it('handleNotification ignores payload without notification_type field', () => {
-    seedStatus('notif-none', {
-      session_id: 'notif-none',
-      project: 'TestProject',
-      skill: 'bmad-dev-story',
-      workflow: 'dev-story',
-      llm_state: 'active',
-      llm_state_since: '2026-01-01T00:00:00.000Z'
-    });
-    execHook({
-      session_id: 'notif-none',
-      cwd: tmpDir,
-      hook_event_name: 'Notification'
-    });
-    const status = readStatusFile('notif-none');
-    assert.equal(status.llm_state, 'active', 'llm_state should remain active');
   });
 
   // ─── handlePreToolUse — clears permission on tool start ───────────────────
@@ -1973,8 +1908,8 @@ describe('hook — 8-signal passive detection', () => {
     status = readStatusFile(sid);
     assert.equal(status.llm_state, 'waiting');
 
-    // Notification → permission
-    execHook(makeNotificationPayload(sid));
+    // PermissionRequest → permission
+    execHook(makePermissionRequestPayload(sid));
     status = readStatusFile(sid);
     assert.equal(status.llm_state, 'permission');
 
@@ -2309,14 +2244,6 @@ describe('hook — 8-signal passive detection', () => {
     assert.equal(readStatusFile('et-bash').error_type, null);
   });
 
-  it('8.1 AC#4: error_type cleared on Notification', () => {
-    seedStatus('et-notif', { session_id: 'et-notif', project: 'TestProject', llm_state: 'error', error_type: 'rate_limit' });
-    execHook(makeNotificationPayload('et-notif'));
-    const status = readStatusFile('et-notif');
-    assert.equal(status.error_type, null);
-    assert.equal(status.llm_state, 'permission');
-  });
-
   it('8.1 AC#4: error_type cleared on PermissionRequest', () => {
     seedStatus('et-perm', { session_id: 'et-perm', project: 'TestProject', llm_state: 'error', error_type: 'billing_error' });
     execHook(makePermissionRequestPayload('et-perm'));
@@ -2334,9 +2261,9 @@ describe('hook — 8-signal passive detection', () => {
     assert.equal(status.error_type, null, 'error_type should default to null');
   });
 
-  // ─── 8.2: handleSubagentStart — llm_state active:subagent ─────────────────
+  // ─── 8.2: handleSubagentStart — llm_state active ──────────────────────────
 
-  it('8.2 AC#1: handleSubagentStart sets active:subagent and subagent_type', () => {
+  it('8.2 AC#1: handleSubagentStart sets active and subagent_type', () => {
     seedStatus('sub-start1', {
       session_id: 'sub-start1', project: 'TestProject',
       skill: 'bmad-dev-story', workflow: 'dev-story',
@@ -2347,7 +2274,7 @@ describe('hook — 8-signal passive detection', () => {
       hook_event_name: 'SubagentStart', agent_type: 'Explore'
     });
     const status = readStatusFile('sub-start1');
-    assert.equal(status.llm_state, 'active:subagent');
+    assert.equal(status.llm_state, 'active');
     assert.equal(status.subagent_type, 'Explore');
     assert.ok(status.llm_state_since);
     assert.notEqual(status.llm_state_since, '2026-01-01T00:00:00.000Z');
@@ -2363,7 +2290,7 @@ describe('hook — 8-signal passive detection', () => {
       hook_event_name: 'SubagentStart', agent_type: 'Plan'
     });
     const status = readStatusFile('sub-start2');
-    assert.equal(status.llm_state, 'active:subagent');
+    assert.equal(status.llm_state, 'active');
     assert.equal(status.subagent_type, 'Plan');
   });
 
@@ -2377,7 +2304,7 @@ describe('hook — 8-signal passive detection', () => {
       hook_event_name: 'SubagentStart', agent_type: 'general-purpose'
     });
     const status = readStatusFile('sub-start3');
-    assert.equal(status.llm_state, 'active:subagent');
+    assert.equal(status.llm_state, 'active');
     assert.equal(status.subagent_type, 'general-purpose');
   });
 
@@ -2386,7 +2313,7 @@ describe('hook — 8-signal passive detection', () => {
   it('8.2 AC#2: handleSubagentStop sets active and clears subagent_type', () => {
     seedStatus('sub-stop1', {
       session_id: 'sub-stop1', project: 'TestProject',
-      llm_state: 'active:subagent', subagent_type: 'Explore',
+      llm_state: 'active', subagent_type: 'Explore',
       llm_state_since: '2026-01-01T00:00:00.000Z'
     });
     execHook({
@@ -2433,10 +2360,10 @@ describe('hook — 8-signal passive detection', () => {
 
   // ─── 8.2 AC#5: subagent_type clearing on transitions ─────────────────────
 
-  it('8.2 AC#5: SubagentStop clears subagent_type from active:subagent', () => {
+  it('8.2 AC#5: SubagentStop clears subagent_type from active', () => {
     seedStatus('clear-stop', {
       session_id: 'clear-stop', project: 'TestProject',
-      llm_state: 'active:subagent', subagent_type: 'Explore',
+      llm_state: 'active', subagent_type: 'Explore',
       llm_state_since: '2026-01-01T00:00:00.000Z'
     });
     execHook({
@@ -2448,10 +2375,10 @@ describe('hook — 8-signal passive detection', () => {
     assert.equal(status.subagent_type, null);
   });
 
-  it('8.2 AC#5: PostToolUseFailure clears subagent_type from active:subagent', () => {
+  it('8.2 AC#5: PostToolUseFailure clears subagent_type from active', () => {
     seedStatus('clear-fail', {
       session_id: 'clear-fail', project: 'TestProject',
-      llm_state: 'active:subagent', subagent_type: 'Plan',
+      llm_state: 'active', subagent_type: 'Plan',
       llm_state_since: '2026-01-01T00:00:00.000Z'
     });
     execHook({
@@ -2463,10 +2390,10 @@ describe('hook — 8-signal passive detection', () => {
     assert.equal(status.subagent_type, null);
   });
 
-  it('8.2 AC#5: PermissionDenied clears subagent_type from active:subagent', () => {
+  it('8.2 AC#5: PermissionDenied clears subagent_type from active', () => {
     seedStatus('clear-denied', {
       session_id: 'clear-denied', project: 'TestProject',
-      llm_state: 'active:subagent', subagent_type: 'general-purpose',
+      llm_state: 'active', subagent_type: 'general-purpose',
       llm_state_since: '2026-01-01T00:00:00.000Z'
     });
     execHook({
@@ -2515,7 +2442,7 @@ describe('hook — 8-signal passive detection', () => {
   it('8.6 AC#1: PostToolUseFailure with is_interrupt=true clears subagent_type', () => {
     seedStatus('interrupt-sub', {
       session_id: 'interrupt-sub', project: 'TestProject',
-      llm_state: 'active:subagent', subagent_type: 'Explore',
+      llm_state: 'active', subagent_type: 'Explore',
       llm_state_since: '2026-01-01T00:00:00.000Z'
     });
     execHook({

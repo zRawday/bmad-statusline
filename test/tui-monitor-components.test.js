@@ -136,11 +136,11 @@ describe('LlmBadge', () => {
     unmount();
   });
 
-  test('INACTIVE state renders ⬤ and INACTIVE with dim styling', () => {
-    const { lastFrame, unmount } = render(e(LlmBadge, { state: 'inactive', workflow: 'dev-story', startedAt: new Date().toISOString() }));
+  test('unknown state falls back to ACTIVE config', () => {
+    const { lastFrame, unmount } = render(e(LlmBadge, { state: 'unknown-state', workflow: 'dev-story', startedAt: new Date().toISOString() }));
     const frame = lastFrame();
     assert.ok(frame.includes('\u2B24'));
-    assert.ok(frame.includes('INACTIVE'));
+    assert.ok(frame.includes('ACTIVE'));
     unmount();
   });
 
@@ -169,14 +169,6 @@ describe('LlmBadge', () => {
     unmount();
   });
 
-  test('SUBAGENT state renders ⬤ and SUBAGENT in cyan', () => {
-    const { lastFrame, unmount } = render(e(LlmBadge, { state: 'active:subagent', workflow: 'dev-story', startedAt: new Date().toISOString() }));
-    const frame = lastFrame();
-    assert.ok(frame.includes('\u2B24'));
-    assert.ok(frame.includes('SUBAGENT'));
-    unmount();
-  });
-
   test('INTERRUPTED state renders ⬤ and INTERRUPTED with yellow background', () => {
     const { lastFrame, unmount } = render(e(LlmBadge, { state: 'interrupted', workflow: 'dev-story', startedAt: new Date().toISOString() }));
     const frame = lastFrame();
@@ -200,18 +192,6 @@ describe('SessionTabs state icons', () => {
 
   test('error session shows red ⬤ icon in tabs', () => {
     const groups = new Map([['proj', [makeSession('error')]]]);
-    const { lastFrame, unmount } = render(e(SessionTabs, {
-      groups, activeProject: 'proj', activeSessionIndex: 0,
-      config: {}, mode: 'single-project',
-    }));
-    const frame = lastFrame();
-    assert.ok(frame.includes('\u2B24'));
-    assert.ok(frame.includes('dev-story'));
-    unmount();
-  });
-
-  test('active:subagent session shows cyan ⬤ icon in tabs', () => {
-    const groups = new Map([['proj', [makeSession('active:subagent')]]]);
     const { lastFrame, unmount } = render(e(SessionTabs, {
       groups, activeProject: 'proj', activeSessionIndex: 0,
       config: {}, mode: 'single-project',

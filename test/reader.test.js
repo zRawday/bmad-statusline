@@ -296,7 +296,7 @@ describe('reader color output', () => {
     fs.copyFileSync(FIXTURE_CONFIG_PATH, path.join(configDir, 'config.json'));
     writeStatus('line2', { project: 'Toulou' });
     const result = execReaderWithConfig('line 1', 'line2', configDir);
-    assert.ok(result.includes('INACTIVE'), 'line 1 should render llmstate');
+    assert.ok(result.includes('WAITING'), 'line 1 should render llmstate');
     fs.rmSync(configDir, { recursive: true, force: true });
   });
 

@@ -14,7 +14,7 @@ import {
   getCommandFamily, buildFileTree, renderTreeLines,
   groupSessionsByProject, computeDisplayState, worstState,
   resolveSessionColor, resolveProjectColor, formatElapsed,
-  INACTIVE_TIMEOUT_MS, MONITOR_STALE_MS, MONITOR_IDLE_WINDOW_MS,
+  MONITOR_STALE_MS, MONITOR_IDLE_WINDOW_MS,
 } from '../src/tui/monitor/monitor-utils.js';
 import { MonitorScreen } from '../src/tui/monitor/MonitorScreen.js';
 import { renderBashSection } from '../src/tui/monitor/components/BashSection.js';
@@ -400,10 +400,10 @@ describe('computeDisplayState', () => {
     assert.equal(computeDisplayState(session), 'active');
   });
 
-  test('active state with stale updated_at (>5 min) → inactive override', () => {
-    const staleDate = new Date(Date.now() - INACTIVE_TIMEOUT_MS - 1000).toISOString();
+  test('active state with stale updated_at → still active (no timeout)', () => {
+    const staleDate = new Date(Date.now() - 10 * 60 * 1000).toISOString();
     const session = { llm_state: 'active', updated_at: staleDate };
-    assert.equal(computeDisplayState(session), 'inactive');
+    assert.equal(computeDisplayState(session), 'active');
   });
 
   test('permission state → permission', () => {
@@ -416,9 +416,9 @@ describe('computeDisplayState', () => {
     assert.equal(computeDisplayState(session), 'waiting');
   });
 
-  test('missing llm_state → inactive', () => {
+  test('missing llm_state → waiting', () => {
     const session = { updated_at: new Date().toISOString() };
-    assert.equal(computeDisplayState(session), 'inactive');
+    assert.equal(computeDisplayState(session), 'waiting');
   });
 });
 
@@ -449,11 +449,9 @@ describe('worstState', () => {
     assert.equal(worstState(sessions), 'active');
   });
 
-  test('[inactive] → inactive', () => {
-    const sessions = [
-      { llm_state: 'inactive', updated_at: new Date().toISOString() },
-    ];
-    assert.equal(worstState(sessions), 'inactive');
+  test('[] → active (empty sessions default)', () => {
+    const sessions = [];
+    assert.equal(worstState(sessions), 'active');
   });
 
   test('[active, error] → error', () => {
@@ -469,16 +467,8 @@ describe('worstState', () => {
       { llm_state: 'error', updated_at: new Date().toISOString() },
       { llm_state: 'permission', updated_at: new Date().toISOString() },
     ];
-    // Both priority 3 — first-encountered wins with > comparison
+    // Both priority 2 — first-encountered wins with > comparison
     assert.equal(worstState(sessions), 'error');
-  });
-
-  test('[active:subagent, waiting] → waiting', () => {
-    const sessions = [
-      { llm_state: 'active:subagent', updated_at: new Date().toISOString() },
-      { llm_state: 'waiting', updated_at: new Date().toISOString() },
-    ];
-    assert.equal(worstState(sessions), 'waiting');
   });
 
   test('[active, interrupted] → interrupted', () => {

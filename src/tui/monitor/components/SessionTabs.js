@@ -12,8 +12,6 @@ const STATE_ICONS = {
   waiting:           { icon: '\u2B24', color: 'blueBright' },
   error:             { icon: '\u2B24', color: 'red' },
   interrupted:       { icon: '\u2B24', color: 'yellow' },
-  inactive:          { icon: '\u2B24', color: 'grey' },
-  'active:subagent': { icon: '\u2B24', color: 'cyan' },
 };
 
 function SessionTabs({ groups, activeProject, activeSessionIndex, config, mode, reorderTarget, reorderCursor, reorderGrabbed }) {
@@ -34,7 +32,7 @@ function SessionTabs({ groups, activeProject, activeSessionIndex, config, mode, 
       const storyNum = STORY_WORKFLOWS.includes(s.workflow) ? extractStoryNumber(s.story) : '';
       const label = storyNum ? `${baseLabel} ${storyNum}` : baseLabel;
       const color = resolveSessionColor(baseLabel, config);
-      const state = STATE_ICONS[computeDisplayState(s)] || STATE_ICONS.inactive;
+      const state = STATE_ICONS[computeDisplayState(s)] || STATE_ICONS.active;
       const suffix = isGrabbed ? ' \u25C2' : '';
       return e(Text, {
         key: s.sessionId || `s-${i}`,
@@ -58,7 +56,7 @@ function SessionTabs({ groups, activeProject, activeSessionIndex, config, mode, 
       const isActive = reorderingProjects ? isCursor : (pKey === activeProject);
       const color = resolveProjectColor(pKey, config);
       const pSessions = groups.get(pKey) || [];
-      const state = STATE_ICONS[worstState(pSessions)] || STATE_ICONS.inactive;
+      const state = STATE_ICONS[worstState(pSessions)] || STATE_ICONS.active;
       const suffix = isGrabbed ? ' \u25C2' : '';
       return e(Text, {
         key: pKey,

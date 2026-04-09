@@ -54,9 +54,6 @@ export function getHookConfig(hookPath) {
       StopFailure: [
         { matcher: '', hooks: [{ type: 'command', command: cmd }] }
       ],
-      Notification: [
-        { matcher: '', hooks: [{ type: 'command', command: cmd }] }
-      ],
       SubagentStart: [
         { matcher: '', hooks: [{ type: 'command', command: cmd }] }
       ],
@@ -97,7 +94,6 @@ export const WORKFLOW_PREFIX_COLORS = _wc.WORKFLOW_PREFIX_COLORS;
 
 // Shared constants bridged from CJS
 export const ALIVE_MAX_AGE_MS = _sc.ALIVE_MAX_AGE_MS;
-export const INACTIVE_TIMEOUT_MS = _sc.INACTIVE_TIMEOUT_MS;
 export const STORY_WORKFLOWS = _sc.STORY_WORKFLOWS;
 export const PROJECT_COLOR_PALETTE = _sc.PROJECT_COLOR_PALETTE;
 export const SEPARATOR_VALUES = _sc.SEPARATOR_VALUES;

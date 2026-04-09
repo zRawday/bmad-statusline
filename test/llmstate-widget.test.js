@@ -135,40 +135,26 @@ describe('LLM State widget — reader output', () => {
     assert.ok(output.includes(COLOR.green), 'should contain green color');
   });
 
-  it('renders INACTIVE in grey without bold for explicit inactive', () => {
-    writeConfig();
-    writeStatus('test1', {
-      session_id: 'test1',
-      llm_state: 'inactive',
-      updated_at: new Date().toISOString(),
-    });
-    const output = runReader();
-    assert.ok(output.includes('INACTIVE'), `should contain INACTIVE, got: ${JSON.stringify(output)}`);
-    assert.ok(!output.includes(BOLD), 'should NOT contain BOLD escape');
-    assert.ok(output.includes(COLOR.brightBlack), 'should contain grey color');
-  });
-
-  it('renders INACTIVE when llm_state is missing', () => {
+  it('renders WAITING when llm_state is missing (5-state fallback)', () => {
     writeConfig();
     writeStatus('test1', {
       session_id: 'test1',
       updated_at: new Date().toISOString(),
     });
     const output = runReader();
-    assert.ok(output.includes('INACTIVE'), `should fallback to INACTIVE, got: ${JSON.stringify(output)}`);
+    assert.ok(output.includes('WAITING'), `should fallback to WAITING, got: ${JSON.stringify(output)}`);
   });
 
-  it('renders INACTIVE when session is stale (>5 min)', () => {
+  it('renders ACTIVE for unknown state (fallback to active styling)', () => {
     writeConfig();
-    const staleTime = new Date(Date.now() - 6 * 60 * 1000).toISOString();
     writeStatus('test1', {
       session_id: 'test1',
-      llm_state: 'permission',
-      updated_at: staleTime,
+      llm_state: 'unknown-state',
+      updated_at: new Date().toISOString(),
     });
     const output = runReader();
-    assert.ok(output.includes('INACTIVE'), `stale session should show INACTIVE, got: ${JSON.stringify(output)}`);
-    assert.ok(!output.includes('PERMISSION'), 'should NOT show PERMISSION for stale session');
+    assert.ok(output.includes('ACTIVE'), `unknown state should fallback to ACTIVE, got: ${JSON.stringify(output)}`);
+    assert.ok(output.includes(COLOR.green), 'should contain green color');
   });
 
   it('renders empty when no session exists', () => {
@@ -218,16 +204,15 @@ describe('LLM State widget — reader output', () => {
     assert.ok(output.includes('\u2B24'), 'should contain filled circle');
   });
 
-  it('renders SUBAGENT in cyan without bold', () => {
+  it('renders stale session state directly (no inactive timeout)', () => {
     writeConfig();
+    const staleTime = new Date(Date.now() - 6 * 60 * 1000).toISOString();
     writeStatus('test1', {
       session_id: 'test1',
-      llm_state: 'active:subagent',
-      updated_at: new Date().toISOString(),
+      llm_state: 'permission',
+      updated_at: staleTime,
     });
     const output = runReader();
-    assert.ok(output.includes('SUBAGENT'), `should contain SUBAGENT, got: ${JSON.stringify(output)}`);
-    assert.ok(output.includes(COLOR.cyan), 'should contain cyan color');
-    assert.ok(!output.includes(BOLD), 'should NOT contain BOLD escape');
+    assert.ok(output.includes('PERMISSION'), `stale session should show stored state, got: ${JSON.stringify(output)}`);
   });
 });

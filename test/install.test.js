@@ -259,16 +259,16 @@ describe('Target 4: cache directory', () => {
 // --- Target 5: ~/.claude/settings.json hooks ---
 
 describe('Target 5: hook config injection', () => {
-  it('injects 16 matchers across 13 event types when hooks absent (Rev.5)', () => {
+  it('injects 15 matchers across 12 event types when hooks absent (Rev.5)', () => {
     const { baseDir, paths } = setup();
     try {
       copyFixture('claude-settings-empty.json', paths.claudeSettings);
       captureOutput(() => install(paths));
       const config = JSON.parse(fs.readFileSync(paths.claudeSettings, 'utf8'));
       assert.ok(config.hooks, 'hooks key should exist');
-      // 13 event types
+      // 12 event types
       const eventTypes = Object.keys(config.hooks);
-      assert.equal(eventTypes.length, 13, 'should have 13 event types');
+      assert.equal(eventTypes.length, 12, 'should have 12 event types');
       // UserPromptSubmit — regex
       assert.equal(config.hooks.UserPromptSubmit.length, 1);
       assert.equal(config.hooks.UserPromptSubmit[0].matcher, '(?:bmad|gds|wds)[:-]');
@@ -287,8 +287,6 @@ describe('Target 5: hook config injection', () => {
       // Existing event types
       assert.equal(config.hooks.Stop.length, 1);
       assert.equal(config.hooks.Stop[0].matcher, '');
-      assert.equal(config.hooks.Notification.length, 1);
-      assert.equal(config.hooks.Notification[0].matcher, '');
       assert.equal(config.hooks.SessionStart.length, 1);
       assert.equal(config.hooks.SessionStart[0].matcher, 'resume');
       // All commands reference bmad-hook.js
@@ -297,9 +295,9 @@ describe('Target 5: hook config injection', () => {
           assert.ok(entry.hooks[0].command.includes('bmad-hook.js'), `${event} command should reference bmad-hook.js`);
         }
       }
-      // Total: 16 matchers
+      // Total: 15 matchers
       const total = Object.values(config.hooks).reduce((sum, arr) => sum + arr.length, 0);
-      assert.equal(total, 16, 'total matchers should be 16');
+      assert.equal(total, 15, 'total matchers should be 15');
     } finally { teardown(baseDir); }
   });
 
@@ -317,7 +315,6 @@ describe('Target 5: hook config injection', () => {
       assert.equal(config.hooks.PostToolUse.length, 4, 'PostToolUse upgraded to 4 matchers');
       assert.equal(config.hooks.UserPromptSubmit.length, 1);
       assert.equal(config.hooks.Stop.length, 1, 'Stop added');
-      assert.equal(config.hooks.Notification.length, 1, 'Notification added');
       assert.equal(config.hooks.SessionStart.length, 1);
       // 7 new Rev.5 event types
       for (const evt of ['PermissionRequest', 'PermissionDenied', 'PostToolUseFailure', 'StopFailure', 'SubagentStart', 'SubagentStop', 'SessionEnd']) {
@@ -372,11 +369,10 @@ describe('Target 5: hook config injection', () => {
       assert.equal(config.hooks.PreToolUse.length, 1, '1 PreToolUse wildcard matcher');
       assert.equal(config.hooks.PostToolUse.length, 4, '4 PostToolUse matchers');
       assert.equal(config.hooks.Stop.length, 1, '1 Stop matcher');
-      assert.equal(config.hooks.Notification.length, 1, '1 Notification matcher');
       assert.equal(config.hooks.SessionStart.length, 1, '1 SessionStart matcher');
       // Rev.5 event types
       const total = Object.values(config.hooks).reduce((sum, arr) => sum + arr.length, 0);
-      assert.equal(total, 16, '16 total matchers');
+      assert.equal(total, 15, '15 total matchers');
     } finally { teardown(baseDir); }
   });
 
@@ -394,11 +390,10 @@ describe('Target 5: hook config injection', () => {
       assert.ok(ptuMatchers.includes('Edit'), 'Edit matcher should be added');
       assert.ok(ptuMatchers.includes('Bash'), 'Bash matcher should be added');
       assert.equal(config.hooks.PostToolUse.length, 4, 'should have 4 PostToolUse matchers');
-      // UserPromptSubmit, Stop, Notification, SessionStart added
+      // UserPromptSubmit, Stop, SessionStart added
       assert.equal(config.hooks.UserPromptSubmit.length, 1);
       assert.equal(config.hooks.UserPromptSubmit[0].matcher, '(?:bmad|gds|wds)[:-]');
       assert.equal(config.hooks.Stop.length, 1, 'Stop matcher added');
-      assert.equal(config.hooks.Notification.length, 1, 'Notification matcher added');
       assert.equal(config.hooks.SessionStart.length, 1);
       assert.equal(config.hooks.SessionStart[0].matcher, 'resume');
       // PreToolUse wildcard added
@@ -433,7 +428,6 @@ describe('Target 5: hook config injection', () => {
       assert.equal(config.hooks.UserPromptSubmit.length, 1, 'UserPromptSubmit added');
       assert.equal(config.hooks.PreToolUse.length, 1, 'PreToolUse wildcard added');
       assert.equal(config.hooks.Stop.length, 1, 'Stop added');
-      assert.equal(config.hooks.Notification.length, 1, 'Notification added');
       assert.equal(config.hooks.SessionStart.length, 1, 'SessionStart added');
       // Rev.5 event types
       for (const evt of ['PermissionRequest', 'PermissionDenied', 'PostToolUseFailure', 'StopFailure', 'SubagentStart', 'SubagentStop', 'SessionEnd']) {
@@ -458,10 +452,6 @@ describe('Target 5: hook config injection', () => {
       assert.ok(Array.isArray(config.hooks.Stop), 'Stop should be array');
       assert.equal(config.hooks.Stop.length, 1);
       assert.equal(config.hooks.Stop[0].matcher, '');
-      // Notification: new event type
-      assert.ok(Array.isArray(config.hooks.Notification), 'Notification should be array');
-      assert.equal(config.hooks.Notification.length, 1);
-      assert.equal(config.hooks.Notification[0].matcher, '');
       // UserPromptSubmit and SessionStart unchanged
       assert.equal(config.hooks.UserPromptSubmit.length, 1, 'UserPromptSubmit unchanged');
       assert.equal(config.hooks.SessionStart.length, 1, 'SessionStart unchanged');
@@ -471,9 +461,9 @@ describe('Target 5: hook config injection', () => {
         assert.equal(config.hooks[evt].length, 1, `${evt}: 1 matcher`);
         assert.equal(config.hooks[evt][0].matcher, '', `${evt} should have wildcard matcher`);
       }
-      // Total: 16 matchers after upgrade
+      // Total: 15 matchers after upgrade
       const total = Object.values(config.hooks).reduce((sum, arr) => sum + arr.length, 0);
-      assert.equal(total, 16, '16 total matchers after Phase 3 upgrade');
+      assert.equal(total, 15, '15 total matchers after Phase 3 upgrade');
     } finally { teardown(baseDir); }
   });
 
@@ -580,19 +570,18 @@ describe('idempotency', () => {
         assert.equal(allBmad.length, refBmad.length, 'BMAD widget count should not grow');
       } finally { teardown(bd2); }
 
-      // Hook matchers: no duplication after 3 runs — 16 matchers across 13 event types
+      // Hook matchers: no duplication after 3 runs — 15 matchers across 12 event types
       assert.equal(claudeConfig.hooks.UserPromptSubmit.length, 1, 'UserPromptSubmit: 1 matcher after 3 runs');
       assert.equal(claudeConfig.hooks.PreToolUse.length, 1, 'PreToolUse: 1 matcher after 3 runs');
       assert.equal(claudeConfig.hooks.PostToolUse.length, 4, 'PostToolUse: 4 matchers after 3 runs');
       assert.equal(claudeConfig.hooks.Stop.length, 1, 'Stop: 1 matcher after 3 runs');
-      assert.equal(claudeConfig.hooks.Notification.length, 1, 'Notification: 1 matcher after 3 runs');
       assert.equal(claudeConfig.hooks.SessionStart.length, 1, 'SessionStart: 1 matcher after 3 runs');
       // Rev.5 event types: no duplication
       for (const evt of ['PermissionRequest', 'PermissionDenied', 'PostToolUseFailure', 'StopFailure', 'SubagentStart', 'SubagentStop', 'SessionEnd']) {
         assert.equal(claudeConfig.hooks[evt].length, 1, `${evt}: 1 matcher after 3 runs`);
       }
       const total = Object.values(claudeConfig.hooks).reduce((sum, arr) => sum + arr.length, 0);
-      assert.equal(total, 16, '16 total matchers after 3 runs');
+      assert.equal(total, 15, '15 total matchers after 3 runs');
     } finally { teardown(baseDir); }
   });
 });
