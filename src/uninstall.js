@@ -141,7 +141,6 @@ function uninstallTarget6(paths) {
 
   try {
     if (!fs.existsSync(paths.claudeMd)) {
-      logSkipped(target, 'file not found');
       return;
     }
 
@@ -150,7 +149,6 @@ function uninstallTarget6(paths) {
     const endIdx = content.indexOf(END_MARKER);
 
     if (startIdx === -1 || endIdx === -1 || startIdx >= endIdx) {
-      logSkipped(target, 'no markers found');
       return;
     }
 
@@ -169,7 +167,6 @@ function uninstallTarget7(paths) {
   const target = '.claude/settings.local.json';
   try {
     if (!fs.existsSync(paths.settingsLocal)) {
-      logSkipped(target, 'file not found');
       return;
     }
 
@@ -177,7 +174,6 @@ function uninstallTarget7(paths) {
     const allow = config.permissions && config.permissions.allow;
 
     if (!Array.isArray(allow) || !allow.some(r => r.includes('BMAD_PROJ_DIR'))) {
-      logSkipped(target, 'no BMAD permission rules found');
       return;
     }
 

@@ -13,7 +13,7 @@ function Header() {
       e(Text, { color: 'cyan', bold: true }, '\u2726 BMAD-STATUSLINE'),
       e(Text, { dimColor: true }, '  \u2014  Claude Code status bar configurator'),
     ),
-    e(Text, { color: 'yellow' }, 'Custom BMAD widgets for ccstatusline'),
+    e(Text, { color: 'yellow' }, 'Custom BMAD widgets for ccstatusline & real-time session monitor'),
     e(Text, { dimColor: true }, 'Works with BMAD 6.2.2+'),
   );
 }

@@ -236,6 +236,7 @@ export function EditLineScreen({ config, updateConfig, previewOverride, setPrevi
           widget.hint ? e(Text, { dimColor: true }, `${hintPad}${widget.hint}`) : null,
         );
       }),
+      e(Text, { dimColor: true }, '\n⚠  Status line refreshes only when the LLM performs actions (Claude Code limitation)'),
     ),
   );
 }
