@@ -9,10 +9,13 @@ inputDocuments:
   - '_bmad-output/planning-artifacts/architecture.md (Rev.2, preserved for hook/reader/installer sections)'
   - '_bmad-output/project-context.md'
   - 'Conversation: Monitor feature specification (2026-04-04)'
-revision: 5
-revisionDate: '2026-04-07'
-revisionScope: 'TUI Process Lifecycle — PID registry for multi-instance orphan prevention, signal handlers for graceful shutdown, TTY detection for terminal-close cleanup (Pattern 28)'
+revision: 6
+revisionDate: '2026-04-09'
+revisionScope: '5-State LLM Model, Full Hook Event Expansion (15 dispatch entries), SessionEnd Resume Preservation, Interrupted/Error State Detection, Reader Testability Exports, Clean.js Age-Based Orphan Threshold, Monitor Layout Stability Fixes, EditLineScreen Conditional Mode Shortcut'
 previousRevisions:
+  - revision: 5
+    date: '2026-04-07'
+    scope: 'TUI Process Lifecycle — PID registry for multi-instance orphan prevention, signal handlers for graceful shutdown, TTY detection for terminal-close cleanup (Pattern 28)'
   - revision: 4
     date: '2026-04-04'
     scope: 'Monitor — real-time session supervision TUI, hook expansion (Bash/Stop/Notification), status file v2 (history arrays, LLM state), viewport scroll, detail/chronology pages, CSV export, tab system with project grouping'
@@ -22,12 +25,12 @@ previousRevisions:
 workflowType: 'architecture'
 project_name: 'bmad-statusline'
 user_name: 'Fred'
-date: '2026-04-04'
+date: '2026-04-09'
 ---
 
 # Architecture Decision Document
 
-_Revision 4 — Preserves all Rev.2 hook decisions and Rev.3 TUI v2 decisions. Adds Monitor feature: real-time session supervision TUI, hook expansion (Bash/Stop/Notification matchers), status file v2 (history arrays, LLM state tracking), viewport scroll pattern, detail/chronology pages, CSV export, two-level tab system with project grouping._
+_Revision 6 — All prior revision decisions preserved. Rev.6 updates: 5-state LLM model replacing 4-state+computed-inactive (active, waiting, interrupted, error, permission). Full hook event expansion to 15 dispatch entries (adds PreToolUse, StopFailure, PermissionRequest, PermissionDenied, PostToolUseFailure, SubagentStart, SubagentStop, SessionEnd; removes Notification). SessionEnd preserves status file for resume. Interrupted state via PostToolUseFailure `is_interrupt`. Error state via StopFailure. Clean.js age-based orphan threshold (7 days). Reader module.exports for testability. Monitor layout stability fixes (stable Box wrappers, ShortcutBar truncation, spacer reposition). EditLineScreen conditional 'm Mode' shortcut and display mode in name column. HomeScreen Q quit support._
 
 ## Project Context Analysis
 
@@ -39,6 +42,8 @@ _Revision 4 — Preserves all Rev.2 hook decisions and Rev.3 TUI v2 decisions. A
 
 **To (Rev.4):** All Rev.3 decisions preserved. Monitor feature adds a real-time session supervision screen to the TUI. This is a paradigm shift: the TUI evolves from a pure configurator (user modifies settings, exits) to a hybrid configurator + live dashboard (user can monitor active Claude Code sessions in real time). The hook expands from 5 matchers/3 event types to 8 matchers/5 event types. The status file schema evolves from flat scalars to arrays with full operation history. New architectural patterns: polling, viewport scroll, atomic file writes, CSV export.
 
+**To (Rev.6):** All Rev.4 and Rev.5 decisions preserved. LLM state model simplified from 4-state+computed-inactive to 5 explicit states (active, waiting, interrupted, error, permission). Hook event dispatch expanded from 8 matchers/5 event types to 15 dispatch entries covering the full Claude Code hook API (PreToolUse, PostToolUse×4, Stop, StopFailure, PermissionRequest, PermissionDenied, PostToolUseFailure, SubagentStart, SubagentStop, SessionStart, SessionEnd). Notification event removed (replaced by PermissionRequest). SessionEnd now preserves status file for session resume. Clean.js adds 7-day age threshold for orphaned status file cleanup. Reader gains module.exports for testability. Monitor layout stabilized (Box wrappers for yoga tree stability, ShortcutBar truncation, spacer reposition). EditLineScreen adds conditional 'm Mode' shortcut and display mode in name column. HomeScreen adds uppercase Q quit.
+
 **Motivation:** As users run multiple concurrent Claude Code sessions with BMAD workflows, they need visibility into what each session is doing — which files it's reading/writing, what commands it's running, and critically, whether it needs user attention (permission prompts, finished turns). The existing statusline widgets show last-file-only. The Monitor provides full session history with real-time updates.
 
 ### Rev.4 Requirements Overview
@@ -47,7 +52,7 @@ _Revision 4 — Preserves all Rev.2 hook decisions and Rev.3 TUI v2 decisions. A
 
 - **Monitor Access & Layout (FR32-33):** New "Monitor" button in HomeScreen, dedicated layout without header/preview, title "MONITOR"
 - **Tab Navigation (FR34-38):** Two-level tabs (projects → sessions), single-project flat mode, project tabs colored from `projectColors`, session sub-tabs from `skillColors`/`WORKFLOW_COLORS`, LLM state badges on all tabs, reorder project tabs (`r`) and session sub-tabs (`R`)
-- **LLM State Badge (FR39-40):** 4 states — ACTIF (green, on `UserPromptSubmit`/`PostToolUse`), PERMISSION (orange, on `Notification` permission), EN ATTENTE (yellow, on `Stop`), INACTIF (gray, >5min silence). Large colored badge with workflow name and timer
+- **LLM State Badge (FR39-40):** 5 states (Rev.6) — ACTIVE (green, on `UserPromptSubmit`/`PostToolUse`/`PreToolUse`), PERMISSION (yellowBright, on `PermissionRequest`), WAITING (blueBright, on `Stop`), INTERRUPTED (yellow, on `PostToolUseFailure` with `is_interrupt`), ERROR (redBright, on `StopFailure`). Large colored badge with workflow name and timer
 - **File Sections (FR41-48):** "Fichiers modifiés" with tree view (in-project) and flat absolute paths (out-of-project), `*` for created files (Write) vs no marker for edited (Edit). "Fichiers lus" same layout. Counts in section headers. Line-wrap for long paths (no truncation). Sub-agent indicator on operations from `agent_id`
 - **Bash Commands (FR49-51):** Scrollable section (not sticky), deduplicated with execution counter (×N), simplified display, color-coded by command family (npm=green, git=yellow, node=cyan, filesystem=dim, other=magenta)
 - **Scroll (FR52-54):** Viewport scroll with manual offset (↑↓). Sticky zones: top (title + tabs + badge), bottom (shortcut bar only). Scroll indicators ▲/▼ with hidden item count
@@ -74,13 +79,21 @@ _Revision 4 — Preserves all Rev.2 hook decisions and Rev.3 TUI v2 decisions. A
 
 ### Rev.4 Technical Constraints & Dependencies
 
-**New hook events required (available in Claude Code, not yet configured):**
+**Hook events (Rev.6 — implemented):**
 
-| Hook Event | Matcher | Purpose |
-|------------|---------|---------|
+| Hook Event | Matcher/Config | Purpose |
+|------------|---------------|---------|
 | `PostToolUse` | `Bash` | Capture bash commands (`tool_input.command`) |
-| `Stop` | (any) | Detect LLM turn completion → EN ATTENTE state |
-| `Notification` | (any) | Detect permission prompts → PERMISSION state |
+| `Stop` | (any) | Detect LLM turn completion → WAITING state |
+| `StopFailure` | (auto) | Detect LLM errors → ERROR state |
+| `PermissionRequest` | (auto) | Detect permission dialogs → PERMISSION state |
+| `PermissionDenied` | (auto) | Auto-mode denial → ACTIVE state |
+| `PostToolUseFailure` | (auto) | Detect user interrupts (`is_interrupt`) → INTERRUPTED or ACTIVE |
+| `PreToolUse` | (auto) | Pre-permission → ACTIVE state |
+| `SubagentStart` / `SubagentStop` | (auto) | Track subagent metadata |
+| `SessionEnd` | (auto) | Delete `.alive-*` only, preserve status for resume |
+
+_Note: `Notification` event removed in Rev.6 — replaced by dedicated `PermissionRequest` event._
 
 **Sub-agent tracking:** `PostToolUse` events fire for sub-agent tool calls with `agent_id` field set. Same `session_id` as parent. Sub-agents in worktree mode have different `cwd` — affects in-project detection.
 
@@ -97,7 +110,7 @@ _Revision 4 — Preserves all Rev.2 hook decisions and Rev.3 TUI v2 decisions. A
 
 **Atomic writes** — Status file grows from ~1 KB to potentially 500 KB+. Write-then-rename pattern (`writeFileSync` to `.tmp`, `renameSync` to final path) prevents mid-write corruption. Applies to hook status file writes only (internal config stays small, no change needed).
 
-**Polling + sync I/O** — `setInterval` + `readFileSync` is pattern-compliant (Pattern 2) but new for the TUI. Must handle: file not found (session ended), parse errors (corrupted), and stale sessions (alive file old).
+**Polling + sync I/O** — `setInterval` + `readFileSync` is pattern-compliant (Pattern 2) but new for the TUI. Must handle: file not found (session ended), parse errors (corrupted), and stale sessions (alive file old). Rev.6: no timeout-based `inactive` state computation — display state is always `status.llm_state || 'waiting'`.
 
 **Shortcut complexity** — Monitor screen has ~15 keyboard shortcuts. Contextual display required: show only shortcuts relevant to current mode (normal, detail, chronology, export prompt). ShortcutBar component already supports dynamic arrays — pass different arrays per mode.
 
@@ -221,7 +234,7 @@ _All hook decisions from Architecture Rev.2 are preserved unchanged. This sectio
 
 #### Multi-Signal Hook Architecture
 
-Hook captures five event types via single script (`bmad-hook.js`), dispatches on `hook_event_name` then `tool_name`:
+Hook captures events via single script (`bmad-hook.js`), dispatches on `hook_event_name` then `tool_name`. Rev.6 expands to 15 dispatch entries (see "Hook Expansion" section for full table). Original 5 event types preserved:
 
 - **UserPromptSubmit** — intent signal. Matcher does NOT filter; hook filters internally with regex. Sets workflow active if trackable.
 - **PostToolUse Read** — data signal. Updates step, project, story candidate.
@@ -229,7 +242,7 @@ Hook captures five event types via single script (`bmad-hook.js`), dispatches on
 - **PostToolUse Edit** — story confirmation via sprint-status status change.
 - **SessionStart** — touches `.alive-{session_id}` for session persistence.
 
-**Hook Config (5 matchers, 3 event types):**
+**Hook Config (Rev.6 — configured matchers + auto-dispatched events):**
 ```json
 {
   "hooks": {
@@ -239,7 +252,11 @@ Hook captures five event types via single script (`bmad-hook.js`), dispatches on
     "PostToolUse": [
       { "matcher": "Read", "hooks": [{ "type": "command", "command": "node ~/.config/bmad-statusline/bmad-hook.js" }] },
       { "matcher": "Write", "hooks": [{ "type": "command", "command": "node ~/.config/bmad-statusline/bmad-hook.js" }] },
-      { "matcher": "Edit", "hooks": [{ "type": "command", "command": "node ~/.config/bmad-statusline/bmad-hook.js" }] }
+      { "matcher": "Edit", "hooks": [{ "type": "command", "command": "node ~/.config/bmad-statusline/bmad-hook.js" }] },
+      { "matcher": "Bash", "hooks": [{ "type": "command", "command": "node ~/.config/bmad-statusline/bmad-hook.js" }] }
+    ],
+    "Stop": [
+      { "matcher": "", "hooks": [{ "type": "command", "command": "node ~/.config/bmad-statusline/bmad-hook.js" }] }
     ],
     "SessionStart": [
       { "matcher": "resume", "hooks": [{ "type": "command", "command": "node ~/.config/bmad-statusline/bmad-hook.js" }] }
@@ -247,6 +264,7 @@ Hook captures five event types via single script (`bmad-hook.js`), dispatches on
   }
 }
 ```
+_Additional events handled by the hook dispatch but not requiring explicit config: PreToolUse, StopFailure, PermissionRequest, PermissionDenied, PostToolUseFailure, SubagentStart, SubagentStop, SessionEnd. Note: `Notification` matcher removed in Rev.6._
 
 #### Multi-Module Support
 
@@ -339,7 +357,7 @@ const total = files.filter(f => /^step-(?:[a-z]-)?(\d+)-.+\.md$/.test(f)).length
 }
 ```
 
-Reader-visible: `session_id`, `project`, `workflow`, `story`, `step.*` (current, current_name, next, next_name, total), `started_at`, `updated_at`. Hook-internal: `skill`, `story_priority`, `step.track`.
+Reader-visible: `session_id`, `project`, `workflow`, `story`, `step.*` (current, current_name, next, next_name, total), `started_at`, `llm_state`, `llm_state_since`. Hook-internal: `skill`, `story_priority`, `step.track`. Rev.6 additions: `subagent_type`, `error_type`, `active_skill`, `document_name`, `_outputFolders`, `reads[]`, `writes[]`, `commands[]`. See "Status File v2 Schema" for full field list.
 
 ### Internal Config Architecture
 
@@ -703,7 +721,7 @@ No `color` property — `preserveColors: true` means the reader's ANSI output is
 **Installer responsibilities (updated):**
 1. Deploy reader + hook to `~/.config/bmad-statusline/` (unchanged)
 2. Create `~/.cache/bmad-status/` (unchanged)
-3. Inject hook config into `~/.claude/settings.json` (unchanged — 5 matchers, 3 event types)
+3. Inject hook config into `~/.claude/settings.json` (Rev.6: PostToolUse×4, Stop, UserPromptSubmit, SessionStart — Notification removed)
 4. Create internal config `~/.config/bmad-statusline/config.json` with defaults (NEW — if absent)
 5. Inject `bmad-line-0` widget into ccstatusline line 0 (CHANGED — was individual widgets)
 6. Detect and remove old bmad-* individual widgets from ccstatusline (NEW — upgrade path)
@@ -799,8 +817,13 @@ The status file evolves from flat scalars (~1 KB) to scalars + history arrays (u
 
 ```json
 {
-  "llm_state": "active|permission|waiting",
+  "llm_state": "active|permission|waiting|interrupted|error",
   "llm_state_since": "<ISO 8601>",
+  "subagent_type": "<string|null>",
+  "error_type": "<string|null>",
+  "active_skill": "<string|null>",
+  "document_name": "<string|null>",
+  "_outputFolders": ["<string>"],
   "reads": [
     { "path": "<string>", "in_project": true, "at": "<ISO 8601>", "agent_id": "<string|null>" }
   ],
@@ -818,45 +841,90 @@ The status file evolves from flat scalars (~1 KB) to scalars + history arrays (u
 - `old_string`/`new_string` stored only for Edit operations (not Write — full file content too large)
 - `is_new` = true when first Write on a file not previously seen in `reads[]`
 - `agent_id` = null for main agent, payload `agent_id` value for sub-agents
+- `subagent_type` = metadata from SubagentStart (independent of LLM state), cleared on SubagentStop and most other events
+- `error_type` = error type from StopFailure payload, cleared on most events
+- `active_skill` = nested skill being read (for multi-skill detection)
+- `document_name` = document being edited in output folder
+- `_outputFolders` = output folder paths for document detection (internal)
+- History arrays (`reads[]`, `writes[]`, `commands[]`) capped at 500 entries via `trimHistory()`
 - No truncation of diff content — full `old_string`/`new_string` preserved
 - Safety guard: if file exceeds 10 MB, stop appending to arrays, continue updating scalars
 - **Atomic write pattern:** `writeFileSync(path + '.tmp', data)` then `renameSync(path + '.tmp', path)` — prevents corruption on crash mid-write
-- `"inactive"` state is never written by hook — it is computed by TUI from `updated_at` age (>5 min)
+- `"inactive"` state is never written or computed — removed in Rev.6 (was computed from 5-min timeout, now defaults to `waiting`)
 
-#### Hook Expansion
+#### Hook Expansion (Rev.6 — Full Dispatch Table)
 
-Hook dispatch extends from 3 event types / 5 matchers to 5 event types / 8 matchers.
+_Updated from Rev.4 (5 event types / 8 matchers) to reflect the complete 15-entry dispatch table. `Notification` event removed (replaced by `PermissionRequest`). New events: PreToolUse, StopFailure, PermissionRequest, PermissionDenied, PostToolUseFailure, SubagentStart, SubagentStop, SessionEnd._
 
-**New dispatch branches:**
+**Complete dispatch table:**
 
 ```js
-if (hookEvent === 'PostToolUse') {
+if (hookEvent === 'UserPromptSubmit') handleUserPrompt();
+else if (hookEvent === 'PreToolUse') handlePreToolUse();
+else if (hookEvent === 'PostToolUse') {
   const toolName = payload.tool_name;
   if (toolName === 'Read') handleRead();
   else if (toolName === 'Write') handleWrite();
   else if (toolName === 'Edit') handleEdit();
-  else if (toolName === 'Bash') handleBash();           // NEW
-} else if (hookEvent === 'Stop') {
-  handleStop();                                          // NEW
-} else if (hookEvent === 'Notification') {
-  handleNotification();                                  // NEW
+  else if (toolName === 'Bash') handleBash();
+}
+else if (hookEvent === 'Stop') handleStop();
+else if (hookEvent === 'StopFailure') handleStopFailure();
+else if (hookEvent === 'PermissionRequest') handlePermissionRequest();
+else if (hookEvent === 'PermissionDenied') handlePermissionDenied();
+else if (hookEvent === 'PostToolUseFailure') handlePostToolUseFailure();
+else if (hookEvent === 'SubagentStart') handleSubagentStart();
+else if (hookEvent === 'SubagentStop') handleSubagentStop();
+else if (hookEvent === 'SessionStart') { /* no-op — alive already touched */ }
+else if (hookEvent === 'SessionEnd') handleSessionEnd();
+```
+
+**Handler behavior table:**
+
+| Handler | llm_state | Clears | Additional |
+|---------|-----------|--------|------------|
+| `handleUserPrompt()` | `active` | error_type, subagent_type | Detect skill/workflow, reset arrays on skill change |
+| `handlePreToolUse()` | `active` | error_type, subagent_type | Fires BEFORE permission check |
+| `handleRead()` | `active` | — | Append to `reads[]`, update scalar `last_read`, detect step/story |
+| `handleWrite()` | `active` | — | Append to `writes[]`, update scalar `last_write`, detect document |
+| `handleEdit()` | `active` | — | Append to `writes[]` with old/new_string, detect story |
+| `handleBash()` | `active` | — | Append to `commands[]` with command string |
+| `handleStop()` | `waiting` | error_type, subagent_type | LLM intentional stop |
+| `handleStopFailure()` | `error` | subagent_type | Captures `error_type` from payload |
+| `handlePermissionRequest()` | `permission` | error_type, subagent_type | Permission dialog shown |
+| `handlePermissionDenied()` | `active` | error_type, subagent_type | Auto-mode classifier denial only |
+| `handlePostToolUseFailure()` | `interrupted` if `is_interrupt`, else `active` | error_type, subagent_type | User interrupt (Ctrl+C, manual denial) vs tool failure |
+| `handleSubagentStart()` | `active` | error_type | Sets `subagent_type` from payload |
+| `handleSubagentStop()` | `active` | subagent_type | Clears subagent metadata |
+| `handleSessionEnd()` | (no change) | — | Deletes `.alive-{id}` only, preserves status file for resume |
+
+**Interrupted state detection (PostToolUseFailure):**
+```js
+function handlePostToolUseFailure() {
+  const status = readStatus(sessionId);
+  status.llm_state = payload.is_interrupt === true ? 'interrupted' : 'active';
+  status.subagent_type = null;
+  status.error_type = null;
+  status.llm_state_since = new Date().toISOString();
+  writeStatus(sessionId, status);
+}
+```
+- Ctrl+C during Bash → `is_interrupt: true` → `interrupted`
+- Manual permission denial → `is_interrupt: true` → `interrupted`
+- Tool failure → `is_interrupt` absent/false → `active`
+
+**SessionEnd preservation for resume:**
+```js
+function handleSessionEnd() {
+  if (!isSafeId(sessionId)) return;
+  try { fs.unlinkSync(path.join(CACHE_DIR, '.alive-' + sessionId)); } catch {}
+  // Status file deliberately preserved — orphan cleanup handles stale files
 }
 ```
 
-**New handlers:**
+**Known limitation:** For Bash commands after permission acceptance, state stays at `permission` during entire command execution — no hook fires between acceptance and PostToolUse. Accepted limitation.
 
-- `handleBash()` — Extracts `payload.tool_input.command`, appends to `commands[]` array. Sets `llm_state = "active"`.
-- `handleStop()` — Sets `llm_state = "waiting"`, `llm_state_since = now`.
-- `handleNotification()` — Checks payload for permission-type notification. If permission: sets `llm_state = "permission"`, `llm_state_since = now`.
-
-**Extended existing handlers:**
-
-- `handleRead()` — In addition to existing scalar update, appends to `reads[]` with `{ path, in_project, at, agent_id }`. Sets `llm_state = "active"`.
-- `handleWrite()` — Appends to `writes[]` with `{ path, in_project, op: "write", is_new, at, agent_id }`. Sets `llm_state = "active"`.
-- `handleEdit()` — Appends to `writes[]` with `{ path, in_project, op: "edit", is_new: false, at, agent_id, old_string, new_string }`. Sets `llm_state = "active"`.
-- `handleUserPrompt()` — Sets `llm_state = "active"`. On skill change, resets arrays (`reads = [], writes = [], commands = []`).
-
-**New hook config (defaults.js):**
+**Hook config (defaults.js — Rev.6, Notification removed):**
 
 ```js
 PostToolUse: [
@@ -868,10 +936,8 @@ PostToolUse: [
 Stop: [
   { matcher: '', hooks: [{ type: 'command', command: `node "${hookPath}"` }] }
 ],
-Notification: [
-  { matcher: '', hooks: [{ type: 'command', command: `node "${hookPath}"` }] }
-],
 ```
+_All other events (PreToolUse, StopFailure, PermissionRequest, PermissionDenied, PostToolUseFailure, SubagentStart, SubagentStop, SessionStart, SessionEnd) are handled by the hook dispatch but do NOT require explicit matcher configuration — they fire automatically when configured in `~/.claude/settings.json`._
 
 #### Monitor Sub-Boundary
 
@@ -883,7 +949,7 @@ src/tui/monitor/
   MonitorDetailScreen.js      # Detail pages: file edit/read, bash command, chronology
   components/
     SessionTabs.js            # Two-level tab system with colors and badges
-    LlmBadge.js               # 4-state LLM activity badge
+    LlmBadge.js               # 5-state LLM activity badge (active, waiting, interrupted, error, permission)
     FileTreeSection.js         # Tree view with detail mode cursor navigation
     BashSection.js             # Bash commands section, color-coded by family
     ScrollableViewport.js      # Reusable viewport scroll component
@@ -933,7 +999,7 @@ function useSessionPolling(cachePath) {
 - Pattern 2 compliant (readFileSync)
 - Only sessions with `skill` defined are shown (BMAD sessions only)
 - Parse errors → skip silently (corrupted or mid-write)
-- `inactive` state computed in TUI: if `llm_state` is set but `updated_at` > 5 min → display as inactive (never written to file)
+- No `inactive` computation — Rev.6 removed timeout-based state derivation. Display state = `status.llm_state || 'waiting'`
 - `BMAD_CACHE_DIR` env var respected (Pattern 5)
 - Cleanup on unmount via `clearInterval` in useEffect return
 
@@ -986,28 +1052,47 @@ function groupSessionsByProject(sessions) {
 - Project tab: `config.projectColors[projectName]` or hash-based default (same as ProjectColorsScreen)
 - Session sub-tab: `config.skillColors[workflowName]` → `WORKFLOW_COLORS[workflowName]` → fallback white
 
-**Aggregate project badge:** Display priority: permission > waiting > active > inactive (worst state wins).
+**Aggregate project badge:** Worst state wins via `LLM_STATE_PRIORITY`: permission/error (2) > waiting/interrupted (1) > active (0).
 
 **Reorder:** `r` reorders project tabs, `R` reorders session sub-tabs. Both use vertical ReorderList overlay (existing component reuse).
 
-#### LLM State Machine
+#### LLM State Machine (5-State Model — Rev.6)
+
+_Replaces the 4-state+computed-inactive model from Rev.4. The `inactive` state (computed from 5-min timeout) and `active:subagent` state are removed. `INACTIVE_TIMEOUT_MS` constant deleted. `computeDisplayState()` simplified to `status.llm_state || 'waiting'`._
 
 ```
-UserPromptSubmit ──→ ACTIVE
-PostToolUse      ──→ ACTIVE
-Stop             ──→ WAITING
-Notification     ──→ PERMISSION (if permission-type)
-(timeout 5min)   ──→ INACTIVE (computed in TUI only)
+UserPromptSubmit    ──→ ACTIVE
+PreToolUse          ──→ ACTIVE
+PostToolUse         ──→ ACTIVE
+SubagentStart       ──→ ACTIVE
+SubagentStop        ──→ ACTIVE
+PermissionDenied    ──→ ACTIVE
+PostToolUseFailure  ──→ INTERRUPTED (if is_interrupt) or ACTIVE
+Stop                ──→ WAITING
+PermissionRequest   ──→ PERMISSION
+StopFailure         ──→ ERROR
 ```
 
-| State | Ink Color | Text | Badge Style |
-|-------|-----------|------|-------------|
-| ACTIVE | `green` | `⚡ ACTIF` | Bold, full-width colored background |
-| PERMISSION | `yellow` | `⏳ PERMISSION` | Bold, full-width colored background |
-| WAITING | `yellowBright` | `⏸ EN ATTENTE` | Bold, full-width colored background |
-| INACTIVE | `dim` | `○ INACTIF` | Dim text, no background |
+**State Priority (for worst-state aggregation in SessionTabs):**
+```js
+const LLM_STATE_PRIORITY = {
+  active: 0,        // highest (best state)
+  waiting: 1,
+  interrupted: 1,   // same priority as waiting
+  error: 2,
+  permission: 2,    // same priority as error (worst states)
+};
+```
 
-Badge also displays workflow name and elapsed timer (from `started_at`).
+| State | Badge bgColor | Badge fgColor | Label | Reader ANSI |
+|-------|--------------|---------------|-------|-------------|
+| ACTIVE | `green` | `white` | ACTIVE | green text |
+| WAITING | `blueBright` | `white` | WAITING | blue text |
+| INTERRUPTED | `yellow` | `#000000` | INTERRUPTED | yellow bg, black text |
+| ERROR | `redBright` | `white` | ERROR | red text |
+| PERMISSION | `yellowBright` | `#000000` | PERMISSION | yellow text |
+
+Badge also displays workflow name and elapsed timer (from `llm_state_since`). Timer always ticks (no inactive guard).
 
 #### Detail Mode with Tree Navigation
 
@@ -1042,7 +1127,7 @@ Triggered by `e` key → mini-menu (`l` = light, `f` = full, `Esc` = cancel). On
 
 **Detection:** Check if `Stop` matcher exists in `~/.claude/settings.json` hooks. If absent → upgrade needed.
 
-**Upgrade:** Add 3 new matchers (PostToolUse Bash, Stop, Notification) without duplicating existing ones. Same hook script path, same deployment location. Existing matchers preserved.
+**Upgrade:** Add new matchers (PostToolUse Bash, Stop) without duplicating existing ones. Same hook script path, same deployment location. Existing matchers preserved. Note: `Notification` matcher removed in Rev.6 — if present from prior install, it is harmless (hook dispatch simply ignores unhandled events) but should be cleaned up on next install.
 
 ### Rev.4 Decision Impact Analysis
 
@@ -1669,6 +1754,17 @@ MonitorScreen reads `config.projectColors` and `config.skillColors` for tab colo
 - Register signal handlers BEFORE `inkRender()` — never after (pattern 28)
 - Use `ttyCheckId.unref()` — never block Node.js exit with orphan detection interval (pattern 28)
 
+**New for Rev.6 (5-state LLM, Hook Expansion, Resume):**
+- Use 5-state LLM model exclusively: `active`, `waiting`, `interrupted`, `error`, `permission` — never reference `inactive` or `active:subagent` states
+- Default display state is `'waiting'` (not `'inactive'`) when `llm_state` is absent: `status.llm_state || 'waiting'`
+- `LLM_STATE_PRIORITY` for worst-state aggregation: active(0) < waiting/interrupted(1) < error/permission(2)
+- Hook dispatch must handle all 15 events — unrecognized events are silently ignored (no crash)
+- `PostToolUseFailure` must check `payload.is_interrupt === true` for interrupted vs active distinction
+- SessionEnd must only delete `.alive-*` file, never status file — status preserved for resume
+- Clean.js must respect 7-day threshold (`ALIVE_MAX_AGE_MS`) before deleting orphaned status files
+- Reader `module.exports` must expose internal functions for testability (conditional `if (require.main === module) main()`)
+- MonitorScreen must use stable Box wrappers with `display: 'none'/'flex'` to prevent yoga tree mutations — never conditionally render/remove nodes
+
 ### Test Organization & Conventions
 
 **Structure:** Tests in `test/` directory, mirroring `src/` layout.
@@ -1676,10 +1772,10 @@ MonitorScreen reads `config.projectColors` and `config.skillColors` for tab colo
 ```
 test/
   reader.test.js        # Updated — add line N tests, story formatting, remove composite tests
-  hook.test.js          # Unchanged from Rev.2
+  hook.test.js          # MODIFIED (Rev.4+6) — 15-entry dispatch, 5-state LLM, interrupted/error, SessionEnd preserve, PostToolUseFailure
   install.test.js       # Updated — bmad-line-0 injection, upgrade from v1
   uninstall.test.js     # Updated — bmad-line-N removal
-  clean.test.js         # Unchanged from Rev.2
+  clean.test.js         # MODIFIED (Rev.6) — 7-day orphan threshold tests
   defaults.test.js      # Updated — new getWidgetDefinitions format
   cli.test.js           # Unchanged
   tui-app.test.js       # Updated — multi-line state, config mutation, reset
@@ -1722,13 +1818,14 @@ bmad-statusline/
     cli.js                                      # UNCHANGED — dispatch only
   src/
     hook/
-      bmad-hook.js                              # MODIFIED (Rev.4) — handleBash, handleStop, handleNotification, array history, atomic write, llm_state
+      bmad-hook.js                              # MODIFIED (Rev.4+6) — 15-entry dispatch (adds PreToolUse, StopFailure, PermissionRequest, PermissionDenied, PostToolUseFailure, SubagentStart, SubagentStop, SessionEnd; removes Notification), 5-state LLM, interrupted detection, SessionEnd preserves status, array history, atomic write
       package.json                              # UNCHANGED — CJS marker
     reader/
-      bmad-sl-reader.js                         # MODIFIED — add line N, remove compact/full/minimal, story formatting, color fixes
+      bmad-sl-reader.js                         # MODIFIED (Rev.6) — add line N, remove compact/full/minimal, story formatting, color fixes, module.exports for testability, 5-state LLM display (removed inactive/active:subagent, added interrupted)
+      shared-constants.cjs                      # MODIFIED (Rev.6) — 5-state LLM_STATE_PRIORITY, simplified computeDisplayState, removed INACTIVE_TIMEOUT_MS
       package.json                              # UNCHANGED — CJS marker
     tui/
-      app.js                                    # MODIFIED (Rev.3+4) — multi-line state, updateConfig, navigation, Monitor route + paths prop
+      app.js                                    # MODIFIED (Rev.3+4+6) — multi-line state, updateConfig, navigation, Monitor route + paths prop, process lifecycle integration (registerPid/setupSignalHandlers/startTtyWatch), opportunistic orphan cleanup
       config-loader.js                          # MODIFIED — load internal config, v1→v2 migration
       config-writer.js                          # MODIFIED — write internal config + ccstatusline sync
       widget-registry.js                        # MODIFIED — remove dead code, add defaultColor/defaultMode to INDIVIDUAL_WIDGETS
@@ -1737,14 +1834,14 @@ bmad-statusline/
         Breadcrumb.js                           # UNCHANGED (exists from v1)
         ConfirmDialog.js                        # UNCHANGED (exists from v1)
         ThreeLinePreview.js                     # NEW — replaces DualPreview
-        ShortcutBar.js                          # UNCHANGED (exists from v1)
+        ShortcutBar.js                          # MODIFIED (Rev.6) — wrap: 'truncate' to prevent yoga overflow x-offset bug
         ScreenLayout.js                         # MODIFIED — uses ThreeLinePreview instead of DualPreview
         ReorderList.js                          # UNCHANGED (exists from v1)
         DualPreview.js                          # DELETED — replaced by ThreeLinePreview
         SelectWithPreview.js                    # EVALUATE — keep if reusable, else delete
       screens/
-        HomeScreen.js                           # MODIFIED (Rev.3+4) — menu options + Monitor button
-        EditLineScreen.js                       # NEW — per-line widget list, h/g/c/s/l shortcuts
+        HomeScreen.js                           # MODIFIED (Rev.3+4+6) — menu options + Monitor button, Q/q quit support
+        EditLineScreen.js                       # NEW (Rev.6: conditional 'm Mode' shortcut for bmad-story, display mode in name column, name padding 18 chars)
         ColorPickerScreen.js                    # MODIFIED — simplified, Dynamic for workflow only
         PresetScreen.js                         # NEW — save/load with 3 shared slots
         ReorderLinesScreen.js                   # NEW — swap entire line contents
@@ -1756,28 +1853,29 @@ bmad-statusline/
         TargetLineScreen.js                     # DELETED — replaced by per-line editing model
         PlaceholderScreen.js                    # DELETED — no longer needed
         PresetsScreen.js                        # DELETED — replaced by PresetScreen (split save/load)
+      tui-lifecycle.js                             # NEW (Rev.5) — PID registry, signal handlers, TTY orphan detection (Pattern 28)
       monitor/                                    # NEW (Rev.4) — Monitor sub-boundary
-        MonitorScreen.js                          # NEW — main: polling, tabs, badge, scroll orchestration
+        MonitorScreen.js                          # MODIFIED (Rev.6) — stable Box wrappers for yoga tree stability, spacer before badge, dynamic header row calculation
         MonitorDetailScreen.js                    # NEW — detail pages (file edit/read, bash, chronology)
         components/
-          SessionTabs.js                          # NEW — 2-level tabs with colors and badges
-          LlmBadge.js                             # NEW — 4-state LLM activity badge
+          SessionTabs.js                          # MODIFIED (Rev.6) — 5-state STATE_ICONS aligned with LlmBadge, permission→yellowBright
+          LlmBadge.js                             # MODIFIED (Rev.6) — 5-state LLM_BADGE_CONFIG (active, waiting, interrupted, error, permission), always-ticking timer
           FileTreeSection.js                      # NEW — tree view + detail mode cursor navigation
           BashSection.js                          # NEW — bash commands, color-coded by family
           ScrollableViewport.js                   # NEW — reusable viewport scroll component
           ExportPrompt.js                         # NEW — export light/full mini-menu
-        monitor-utils.js                          # NEW — cache I/O, polling, CSV generation, sorting
-    defaults.js                                 # MODIFIED (Rev.3+4) — getWidgetDefinitions, default colors, new hook matchers
+        monitor-utils.js                          # MODIFIED (Rev.6) — worstState fallback 'active' instead of 'inactive', re-exports from defaults.js
+    defaults.js                                 # MODIFIED (Rev.3+4+6) — getWidgetDefinitions, default colors, hook matchers (Notification removed), INACTIVE_TIMEOUT_MS export removed
     install.js                                  # MODIFIED (Rev.3+4) — per-line deployment, internal config, Phase 3→4 upgrade
     uninstall.js                                # MODIFIED — remove bmad-line-N, remove internal config
-    clean.js                                    # UNCHANGED (Rev.2 — .alive-based cleanup)
+    clean.js                                    # MODIFIED (Rev.6) — orphaned status files kept 7 days (ALIVE_MAX_AGE_MS) for session resume, age-based deletion threshold
   test/
     reader.test.js                              # MODIFIED — line N tests, story formatting, remove composite tests
     hook.test.js                                # MODIFIED (Rev.4) — new handlers, array history, atomic write, llm_state
     install.test.js                             # MODIFIED — bmad-line-0 injection, upgrade path, internal config creation
     uninstall.test.js                           # MODIFIED — bmad-line-N removal, internal config deletion
     defaults.test.js                            # MODIFIED — new getWidgetDefinitions format
-    clean.test.js                               # UNCHANGED (Rev.2)
+    clean.test.js                               # MODIFIED (Rev.6) — 7-day orphan threshold tests
     cli.test.js                                 # UNCHANGED
     tui-app.test.js                             # MODIFIED — multi-line state, updateConfig, reset, navigation
     tui-config-loader.test.js                   # MODIFIED — internal config loading, v1 migration
@@ -1823,8 +1921,8 @@ test/
 **Boundary 1: Hook (runtime, standalone) — THE WRITER**
 - `src/hook/bmad-hook.js` — deployed to `~/.config/bmad-statusline/`
 - CommonJS, zero dependencies, self-contained
-- **MODIFIED in Rev.4** — new handlers (Bash, Stop, Notification), history arrays (reads[], writes[], commands[]), llm_state tracking, atomic write pattern (Pattern 22)
-- The **sole** writer of status data and `.alive` files
+- **MODIFIED in Rev.4+6** — 15-entry dispatch table (PreToolUse, PostToolUse×4, Stop, StopFailure, PermissionRequest, PermissionDenied, PostToolUseFailure, SubagentStart, SubagentStop, SessionStart, SessionEnd; Notification removed), 5-state LLM model, interrupted/error detection, SessionEnd preserves status file for resume, history arrays (reads[], writes[], commands[]), atomic write pattern (Pattern 22)
+- The **sole** writer of status data. Deletes `.alive` files on SessionEnd only (preserves status).
 
 **Boundary 2: Reader (runtime, standalone) — THE CONSUMER**
 - `src/reader/bmad-sl-reader.js` — deployed to `~/.config/bmad-statusline/`
@@ -1847,7 +1945,7 @@ test/
 **Boundary 5: Command Modules (install-time)**
 - `src/install.js`, `src/uninstall.js`, `src/clean.js`
 - Each receives `paths` parameter (injected, testable)
-- **MODIFIED:** Install creates internal config + deploys bmad-line-0. Uninstall removes bmad-line-N + deletes internal config. Clean unchanged.
+- **MODIFIED:** Install creates internal config + deploys bmad-line-0. Uninstall removes bmad-line-N + deletes internal config. **Clean MODIFIED in Rev.6:** orphaned status files (no matching `.alive-*`) now kept for 7 days (`ALIVE_MAX_AGE_MS`) before deletion, enabling session resume.
 
 **Boundary 6: Defaults (shared data, install-time only)**
 - `src/defaults.js` — all config templates
@@ -1881,7 +1979,7 @@ test/
 ```
 npx bmad-statusline install
   → bin/cli.js → src/install.js → defaults.js for templates
-  → write hooks to ~/.claude/settings.json (8 matchers — Rev.4 adds Bash, Stop, Notification)
+  → write hooks to ~/.claude/settings.json (Rev.6: PostToolUse Read/Write/Edit/Bash + Stop — Notification removed)
   → write statusLine config (unchanged)
   → create internal config ~/.config/bmad-statusline/config.json (defaults)
   → write bmad-line-0 to ccstatusline settings
@@ -1889,17 +1987,19 @@ npx bmad-statusline install
   → create ~/.cache/bmad-status/
 ```
 
-**TUI flow (new):**
+**TUI flow (Rev.5+6):**
 ```
 npx bmad-statusline (no args)
   → bin/cli.js → src/tui/app.js
+  → cleanOrphanedStatusFiles() — opportunistic cleanup (>7 days threshold)
+  → registerPid() + setupSignalHandlers() + startTtyWatch() — Pattern 28
   → config-loader: read internal config (or migrate v1 / create defaults)
   → capture snapshot for reset
   → render Home with ThreeLinePreview
   → user interactions → updateConfig(mutator)
     → structuredClone → mutate → writeInternalConfig
     → if line empty/non-empty changed → syncCcstatusline
-  → q/Ctrl+C → exit (all changes already persisted)
+  → q/Q/Ctrl+C → onQuit → unregisterPid() + stopTtyWatch() + exit
 ```
 
 **Reader flow (updated):**
@@ -1918,7 +2018,7 @@ npx bmad-statusline (no args) → Home → Monitor button
   → useSessionPolling(cachePath) — immediate poll + setInterval(1500ms)
     → readdir .alive-* → read status-{id}.json for each alive session
     → filter: only sessions with skill defined (BMAD sessions)
-    → compute: inactive override if updated_at > 5 min
+    → display state = llm_state || 'waiting' (no timeout-based inactive — Rev.6)
     → setSessions(data) → re-render
   → SessionTabs groups by project, resolves colors from config
   → LlmBadge shows worst-state badge for active session
@@ -1930,20 +2030,27 @@ npx bmad-statusline (no args) → Home → Monitor button
   → Esc → goBack() to Home
 ```
 
-**Hook flow — MODIFIED in Rev.4 (extended from Rev.2):**
+**Hook flow — Rev.6 (15-entry dispatch):**
 ```
 Claude Code event → stdin JSON → node bmad-hook.js
   → parse stdin → extract session_id → touchAlive
-  → dispatch on hook_event_name:
+  → dispatch on hook_event_name (15 entries):
     UserPromptSubmit → detect skill, set llm_state="active", reset arrays on skill change
+    PreToolUse → set llm_state="active", clear error/subagent
     PostToolUse Read → update last_read + append to reads[], set llm_state="active"
     PostToolUse Write → update last_write + append to writes[], set llm_state="active"
     PostToolUse Edit → update last_write + append to writes[] with old/new_string, set llm_state="active"
-    PostToolUse Bash → append to commands[], set llm_state="active"           (NEW)
-    Stop → set llm_state="waiting"                                            (NEW)
-    Notification → if permission type, set llm_state="permission"             (NEW)
+    PostToolUse Bash → append to commands[], set llm_state="active"
+    Stop → set llm_state="waiting", clear error/subagent
+    StopFailure → set llm_state="error", capture error_type
+    PermissionRequest → set llm_state="permission", clear error/subagent
+    PermissionDenied → set llm_state="active", clear error/subagent
+    PostToolUseFailure → set llm_state="interrupted" (if is_interrupt) or "active"
+    SubagentStart → set llm_state="active", capture subagent_type
+    SubagentStop → set llm_state="active", clear subagent_type
     SessionStart → no-op (alive already touched)
-  → atomic write: writeFileSync(.tmp) + renameSync                            (NEW)
+    SessionEnd → delete .alive-{id} only, preserve status file for resume
+  → atomic write: writeFileSync(.tmp) + renameSync
 ```
 
 ### Requirements to Structure Mapping
@@ -1987,9 +2094,11 @@ Claude Code event → stdin JSON → node bmad-hook.js
 
 **Decision Compatibility (Rev.4):** All Rev.4 decisions are additive — no Rev.3 decisions modified or contradicted. Hook expansion adds new handlers without changing existing dispatch logic. Status file v2 is backward-compatible: existing scalar fields preserved and updated alongside new arrays. Monitor sub-boundary (`src/tui/monitor/`) is isolated from configurator TUI — no imports cross the boundary. Boundary 8 (TUI↔Cache) creates a new coupling but encapsulated in a single module (`monitor-utils.js`).
 
-**Pattern Consistency:** All 28 implementation patterns (0-27) are non-contradictory. Patterns 21-27 (Monitor) complement patterns 0-20 (hook/reader/TUI v2). Pattern 22 (atomic write) enhances Pattern 8 (cache write) for larger files — same direction, not conflicting. Pattern 23 (cache I/O isolation) mirrors Pattern 20 (reader internal config reading) — same encapsulation philosophy. Pattern 24 (externalized scroll state) aligns with Pattern 15 (externalized config mutation) — parent-controlled state pattern.
+**Decision Compatibility (Rev.6):** Rev.6 modifies two Rev.4 decisions: LLM state model (4→5 states) and hook dispatch (extends, removes Notification). Both are clean replacements — no downstream code depends on the old 4-state enum or Notification handler. The `inactive` state removal simplifies all consumers (reader, LlmBadge, SessionTabs, monitor-utils). SessionEnd preservation is additive — changes cleanup semantics without affecting any read paths. Clean.js 7-day threshold aligns with existing `ALIVE_MAX_AGE_MS` constant.
 
-**Structure Alignment:** 8 boundaries with no circular dependencies. Boundary 8 (TUI↔Cache read path) is new — couples TUI to cache but through a single module. File structure maps cleanly: `src/tui/monitor/` → Boundary 7 sub-domain + Boundary 8 (via monitor-utils.js). All other boundary mappings preserved from Rev.3.
+**Pattern Consistency:** All 29 implementation patterns (0-28) are non-contradictory. Patterns 21-27 (Monitor) complement patterns 0-20 (hook/reader/TUI v2). Pattern 22 (atomic write) enhances Pattern 8 (cache write) for larger files — same direction, not conflicting. Pattern 23 (cache I/O isolation) mirrors Pattern 20 (reader internal config reading) — same encapsulation philosophy. Pattern 24 (externalized scroll state) aligns with Pattern 15 (externalized config mutation) — parent-controlled state pattern. Pattern 28 (process lifecycle) complements Pattern 21 (polling lifecycle) — different concerns, same cleanup discipline.
+
+**Structure Alignment:** 8 boundaries with no circular dependencies. Boundary 8 (TUI↔Cache read path) is new — couples TUI to cache but through a single module. File structure maps cleanly: `src/tui/monitor/` → Boundary 7 sub-domain + Boundary 8 (via monitor-utils.js). `src/tui/tui-lifecycle.js` belongs to Boundary 7 (TUI). All other boundary mappings preserved from Rev.3.
 
 ### Requirements Coverage
 
@@ -2008,7 +2117,7 @@ Claude Code event → stdin JSON → node bmad-hook.js
 
 - **FR32-33** (monitor access/layout): HomeScreen + MonitorScreen + app.js routing
 - **FR34-38** (tabs): SessionTabs + monitor-utils grouping logic
-- **FR39-40** (LLM badge): LlmBadge + bmad-hook.js (handleStop/handleNotification)
+- **FR39-40** (LLM badge): LlmBadge (5-state) + bmad-hook.js (handleStop/handleStopFailure/handlePermissionRequest/handlePostToolUseFailure)
 - **FR41-48** (file sections): FileTreeSection + monitor-utils
 - **FR49-51** (bash commands): BashSection + bmad-hook.js (handleBash)
 - **FR52-54** (scroll): ScrollableViewport + MonitorScreen
@@ -2023,7 +2132,7 @@ Claude Code event → stdin JSON → node bmad-hook.js
 
 ### Implementation Readiness
 
-**Decision Completeness:** 20 architectural decisions total (10 Rev.3 + 10 Rev.4) documented with rationale, code snippets, and schema definitions. Status file v2 schema fully specified with field types and rules. Hook dispatch extended with new handler signatures. Polling architecture with lifecycle management. Viewport scroll as reusable stateless component. Tab system with 3 navigation modes. LLM state machine with 4 states and transition rules.
+**Decision Completeness:** 20+ architectural decisions total (10 Rev.3 + 10 Rev.4, updated through Rev.6) documented with rationale, code snippets, and schema definitions. Status file v2 schema fully specified with field types and rules (Rev.6: added subagent_type, error_type, active_skill, document_name). Hook dispatch expanded to 15 entries with full handler behavior table. Polling architecture with lifecycle management. Viewport scroll as reusable stateless component. Tab system with 3 navigation modes. LLM state machine with 5 states and transition rules (Rev.6).
 
 **Structure Completeness:** Full directory tree with 9 new files, 5 modified files, 3 new test files. 8 boundaries defined (Boundary 8 new). 5 data flows documented (install, TUI, reader, hook, monitor). FR-to-file mapping for all 67 requirements.
 
@@ -2034,9 +2143,10 @@ Claude Code event → stdin JSON → node bmad-hook.js
 **Critical Gaps: None.** All blocking decisions are made.
 
 **Important Gaps (non-blocking):**
-1. **Notification payload structure for permission detection** — Exact payload format from Claude Code not fully documented. Implementation must inspect real payloads to identify permission-type notifications. Fallback: if type cannot be determined, no state transition (stays ACTIVE).
+1. ~~**Notification payload structure for permission detection**~~ — **RESOLVED in Rev.6.** `Notification` event replaced by dedicated `PermissionRequest` event which fires explicitly for permission dialogs. No payload inspection needed.
 2. **`is_new` detection for written files** — Heuristic based on file not appearing in `reads[]` before first Write. May produce false positives if existing file is overwritten without prior read. Acceptable for a visual indicator (`*`).
 3. **SelectWithPreview disposition** (Rev.3) — Kept and used in SeparatorStyleScreen. Resolved.
+4. **Permission-to-Active transition for Bash commands** — After permission acceptance, Bash commands stay at `permission` state during execution. No hook fires between acceptance and PostToolUse. Accepted limitation (documented in Rev.6 hook expansion).
 
 **Phase 2 (explicitly deferred):**
 - File deletion/rename/move detection via Bash command parsing (~60-70% coverage, too fragile for MVP)
@@ -2063,7 +2173,7 @@ Claude Code event → stdin JSON → node bmad-hook.js
 - [x] Polling architecture with lifecycle management
 - [x] Viewport scroll as reusable component
 - [x] Tab system with 2-level grouping
-- [x] LLM state machine with 4 states
+- [x] LLM state machine with 5 states (Rev.6: active, waiting, interrupted, error, permission)
 
 **Implementation Patterns**
 - [x] 29 patterns (0-28): 14 Rev.2, 7 Rev.3, 7 Rev.4, 1 Rev.5
