@@ -185,8 +185,8 @@ export function MonitorScreen({ config, navigate, goBack, isActive, paths, pollI
     headerRows += mode === 'multi-project' ? 3 : 1; // SessionTabs (multi: project+spacer+session)
     headerRows += 1; // spacer after tabs
   }
+  headerRows += 1; // spacer before badge
   if (currentSession) headerRows += 1; // LlmBadge
-  headerRows += 1; // spacer before viewport
   const footerRows = 2; // spacer after viewport + shortcuts
 
   // Always reserve 2 rows for ScrollableViewport indicator placeholders
@@ -423,11 +423,11 @@ export function MonitorScreen({ config, navigate, goBack, isActive, paths, pollI
       }),
       e(Text, null, ' '),
     ),
+    e(Text, null, ' '),
     // Badge — stable wrapper Box (same pattern)
     e(Box, { display: currentSession ? 'flex' : 'none' },
       e(LlmBadge, badgeProps),
     ),
-    e(Text, null, ' '),
     // Content — hidden during reorder
     reorderMode
       ? null
