@@ -349,22 +349,22 @@ describe('Target 6: CLAUDE.md marker removal (backward compat)', () => {
     } finally { teardown(baseDir); }
   });
 
-  it('skips when no markers present', () => {
+  it('skips silently when no markers present', () => {
     const { baseDir, paths } = setup();
     try {
       copyFixture('claude-md-without-block.md', paths.claudeMd);
       const output = captureOutput(() => uninstall(paths));
       const after = fs.readFileSync(paths.claudeMd, 'utf8');
       assert.ok(after.includes('Some existing content here'), 'content should be unchanged');
-      assert.ok(output.includes('no markers found'));
+      assert.ok(!output.includes('CLAUDE.md'), 'should not mention CLAUDE.md when silently skipping');
     } finally { teardown(baseDir); }
   });
 
-  it('skips when file does not exist', () => {
+  it('skips silently when file does not exist', () => {
     const { baseDir, paths } = setup();
     try {
       const output = captureOutput(() => uninstall(paths));
-      assert.ok(output.includes('file not found'));
+      assert.ok(!output.includes('CLAUDE.md'), 'should not mention CLAUDE.md when file missing');
     } finally { teardown(baseDir); }
   });
 });
@@ -382,22 +382,22 @@ describe('Target 7: settings.local.json backward compat', () => {
     } finally { teardown(baseDir); }
   });
 
-  it('skips when no matching rules', () => {
+  it('skips silently when no matching rules', () => {
     const { baseDir, paths } = setup();
     try {
       const noMatch = { permissions: { allow: ['Bash(OTHER_RULE=*)'] } };
       fs.mkdirSync(path.dirname(paths.settingsLocal), { recursive: true });
       fs.writeFileSync(paths.settingsLocal, JSON.stringify(noMatch, null, 2));
       const output = captureOutput(() => uninstall(paths));
-      assert.ok(output.includes('no BMAD permission rules found'));
+      assert.ok(!output.includes('settings.local.json'), 'should not mention settings.local.json when silently skipping');
     } finally { teardown(baseDir); }
   });
 
-  it('skips when file does not exist', () => {
+  it('skips silently when file does not exist', () => {
     const { baseDir, paths } = setup();
     try {
       const output = captureOutput(() => uninstall(paths));
-      assert.ok(output.includes('.claude/settings.local.json'));
+      assert.ok(!output.includes('settings.local.json'), 'should not mention settings.local.json when file missing');
     } finally { teardown(baseDir); }
   });
 

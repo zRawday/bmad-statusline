@@ -18,11 +18,11 @@
   "scripts": {
     "test": "node --test --test-concurrency=4 --test-timeout=30000 test/*.test.js"
   },
-  "author": "Vibecloud-AI",
+  "author": "zrawday",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Vibecloud-AI/bmad-statusline.git"
+    "url": "git+https://github.com/zRawday/bmad-statusline.git"
   },
   "keywords": [
     "claude-code",
