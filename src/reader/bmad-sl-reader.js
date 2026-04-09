@@ -148,7 +148,7 @@ function touchAlive(sessionId) {
         try {
           if (fs.readFileSync(path.join(CACHE_DIR, f), 'utf8').trim() === pidStr) {
             fs.unlinkSync(path.join(CACHE_DIR, f));
-            try { fs.unlinkSync(path.join(CACHE_DIR, `status-${otherSid}.json`)); } catch {}
+            // Status file preserved — orphan cleanup handles stale status files
           }
         } catch {}
       }
@@ -166,9 +166,8 @@ function purgeStale() {
       let stat;
       try { stat = fs.statSync(filePath); } catch { continue; }
       if (now - stat.mtimeMs > ALIVE_MAX_AGE_MS) {
-        const staleId = entry.slice('.alive-'.length);
         try { fs.unlinkSync(filePath); } catch {}
-        try { fs.unlinkSync(path.join(CACHE_DIR, `status-${staleId}.json`)); } catch {}
+        // Status file preserved — orphan cleanup handles stale status files
       }
     }
   } catch {}

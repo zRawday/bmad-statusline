@@ -486,7 +486,7 @@ describe('reader color output', () => {
     execReader('project', 'trigger-purge');
 
     assert.ok(!fs.existsSync(alivePath), 'stale .alive file should be deleted');
-    assert.ok(!fs.existsSync(statusPath), 'stale status file should be deleted');
+    assert.ok(fs.existsSync(statusPath), 'stale status file should be preserved for resume');
   });
 
   // --- Health command — direct import, no process spawn ---
@@ -641,9 +641,9 @@ describe('purgeStale resilience', () => {
       env: { ...process.env, BMAD_CACHE_DIR: tmpDir },
     });
 
-    // The stale session should have been purged
+    // The stale alive should be purged, but status preserved for resume
     assert.ok(!fs.existsSync(alivePath), 'stale .alive file should be deleted');
-    assert.ok(!fs.existsSync(statusPath), 'stale status file should be deleted');
+    assert.ok(fs.existsSync(statusPath), 'stale status file should be preserved for resume');
   });
 });
 

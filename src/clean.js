@@ -64,11 +64,16 @@ export default function clean(paths = DEFAULT_PATHS) {
         aliveStat = fs.statSync(alivePath);
       } catch {
         // Alive file disappeared between readdirSync and statSync — treat as orphaned status
+        // Apply same 7-day age check as regular orphans (may be resumed)
+        const statusPath = path.join(cacheDir, statusFiles.get(sid));
         try {
-          fs.unlinkSync(path.join(cacheDir, statusFiles.get(sid)));
-          deleted++;
+          const sStat = fs.statSync(statusPath);
+          if ((now - sStat.mtimeMs) > ALIVE_MAX_AGE_MS) {
+            fs.unlinkSync(statusPath);
+            deleted++;
+          }
         } catch (err) {
-          logError(statusFiles.get(sid), `failed to delete — ${err.code || err.message}`);
+          if (err.code !== 'ENOENT') logError(statusFiles.get(sid), `failed to delete — ${err.code || err.message}`);
         }
         continue;
       }
