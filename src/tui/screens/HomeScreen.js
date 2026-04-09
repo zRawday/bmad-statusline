@@ -37,7 +37,7 @@ export function HomeScreen({ config, previewOverride, navigate, resetToOriginal,
   const [cursor, setCursor] = useState(0);
 
   useInput((input, key) => {
-    if (input === 'q') { onQuit(); return; }
+    if (input === 'q' || input === 'Q') { onQuit(); return; }
     if (key.upArrow) {
       setCursor(prev => {
         const pos = SELECTABLE_INDICES.indexOf(prev);

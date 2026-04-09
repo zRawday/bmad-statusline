@@ -10,15 +10,15 @@ const e = React.createElement;
 
 const RAINBOW_COLORS = ['red', 'yellow', 'green', 'cyan', 'blue', 'magenta', 'white'];
 
-const NAVIGATE_SHORTCUTS = [
+const BASE_NAVIGATE_SHORTCUTS = [
   { key: '\u2191\u2193', label: 'Navigate' },
   { key: 'h', label: 'Hide/Show' },
   { key: 'g', label: 'Grab' },
   { key: '\u2190\u2192', label: 'Color' },
-  { key: 'm', label: 'Mode' },
   { key: 'Enter', label: 'Edit skills' },
   { key: 'Esc', label: 'Back' },
 ];
+const STORY_MODE_SHORTCUT = { key: 'm', label: 'Mode' };
 
 const GRAB_SHORTCUTS = [
   { key: '\u2191\u2193', label: 'Move' },
@@ -190,7 +190,10 @@ export function EditLineScreen({ config, updateConfig, previewOverride, setPrevi
     screenColor: 'green',
     config,
     previewOverride,
-    shortcuts: grabMode ? GRAB_SHORTCUTS : NAVIGATE_SHORTCUTS,
+    shortcuts: grabMode ? GRAB_SHORTCUTS
+      : widgetList[cursorIndex]?.id === 'bmad-story'
+        ? [...BASE_NAVIGATE_SHORTCUTS.slice(0, 4), STORY_MODE_SHORTCUT, ...BASE_NAVIGATE_SHORTCUTS.slice(4)]
+        : BASE_NAVIGATE_SHORTCUTS,
   },
     e(Box, { flexDirection: 'column' },
       ...widgetList.map((widget, i) => {
@@ -211,25 +214,24 @@ export function EditLineScreen({ config, updateConfig, previewOverride, setPrevi
             `${statusIcon} ${isVisible ? 'visible' : 'hidden'}`));
         }
 
-        // Display mode hint for story widget
+        // Display mode hint for story widget — shown in name column
         const storyMode = isVisible && widget.id === 'bmad-story'
           ? (line.colorModes[widget.id]?.displayMode || 'full')
           : null;
-        const modeLen = storyMode ? 4 + storyMode.length : 0; // "  (full)" or "  (compact)"
+        const displayName = storyMode ? `${widget.name} (${storyMode})` : widget.name;
 
         // Compute padding so hints align vertically
         const statusLen = isVisible ? 9 : 8; // "■ visible" or "□ hidden"
         const colorDisplay = widget.id === 'bmad-llmstate' ? '(auto)' : colorName;
         const colorLen = isVisible ? 2 + colorDisplay.length : 0; // "  {color}"
         const grabLen = isGrabbed ? 3 : 0; // "  ↕"
-        const hintPad = ' '.repeat(Math.max(2, 26 - statusLen - colorLen - modeLen - grabLen));
+        const hintPad = ' '.repeat(Math.max(2, 26 - statusLen - colorLen - grabLen));
 
         return e(Text, { key: widget.id, bold: isGrabbed },
           prefix,
-          e(Text, null, widget.name.padEnd(16)),
+          e(Text, null, displayName.padEnd(18)),
           ...statusParts,
           isVisible ? e(Text, { dimColor: true }, `  ${widget.id === 'bmad-llmstate' ? '(auto)' : colorName}`) : null,
-          storyMode ? e(Text, { dimColor: true }, `  (${storyMode})`) : null,
           isGrabbed ? e(Text, { dimColor: true }, '  \u2195') : null,
           widget.hint ? e(Text, { dimColor: true }, `${hintPad}${widget.hint}`) : null,
         );
