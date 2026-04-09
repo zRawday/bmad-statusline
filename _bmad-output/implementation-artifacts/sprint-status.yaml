@@ -36,6 +36,7 @@
 
 generated: 2026-03-28
 last_updated: 2026-04-09
+# 8-7 code review passed 2026-04-09
 # 8-7 dev completed 2026-04-09
 # 8-7 dev started 2026-04-09
 # 8-7 story created 2026-04-09
@@ -161,7 +162,7 @@ development_status:
   8-4-shared-constants-reader-new-llm-state-support: done
   8-5-monitor-badge-error-subagent-display: done
   8-6-hook-interrupted-state-permission-active-transition: done
-  8-7-llm-state-simplification-5-state-model: review
+  8-7-llm-state-simplification-5-state-model: done
   epic-8-retrospective: optional
 
   # Epic 9: TUI Process Lifecycle — Orphan Prevention & Graceful Shutdown
