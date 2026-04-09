@@ -91,12 +91,16 @@ export default function clean(paths = DEFAULT_PATHS) {
       }
       // Active pair — skip both (do nothing)
     } else if (hasStatus && !hasAlive) {
-      // Orphaned status — delete
+      // Orphaned status — delete only if older than 7 days (may be resumed)
+      const statusPath = path.join(cacheDir, statusFiles.get(sid));
       try {
-        fs.unlinkSync(path.join(cacheDir, statusFiles.get(sid)));
-        deleted++;
+        const statusStat = fs.statSync(statusPath);
+        if ((now - statusStat.mtimeMs) > ALIVE_MAX_AGE_MS) {
+          fs.unlinkSync(statusPath);
+          deleted++;
+        }
       } catch (err) {
-        logError(statusFiles.get(sid), `failed to delete — ${err.code || err.message}`);
+        if (err.code !== 'ENOENT') logError(statusFiles.get(sid), `failed to delete — ${err.code || err.message}`);
       }
     } else if (!hasStatus && hasAlive) {
       // Orphaned alive — delete

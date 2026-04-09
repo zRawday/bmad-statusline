@@ -201,8 +201,12 @@ describe('EditLineScreen', () => {
     unmount();
   });
 
-  test('shows Mode shortcut label', () => {
-    const { lastFrame, unmount } = render(e(EditLineScreen, makeScreenProps()));
+  test('shows Mode shortcut label', async () => {
+    const { lastFrame, stdin, unmount } = render(e(EditLineScreen, makeScreenProps()));
+    // Move cursor to bmad-story (index 4: llmstate, project, workflow, activeskill, story)
+    for (let i = 0; i < 4; i++) {
+      await act(async () => { stdin.write('\x1B[B'); }); // arrow down
+    }
     const frame = lastFrame();
     assert.ok(frame.includes('Mode'), 'should show Mode shortcut');
     unmount();

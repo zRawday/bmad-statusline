@@ -82,7 +82,7 @@ try {
       try {
         if (fs.readFileSync(path.join(CACHE_DIR, f), 'utf8').trim() === myPid) {
           fs.unlinkSync(path.join(CACHE_DIR, f));
-          try { fs.unlinkSync(path.join(CACHE_DIR, 'status-' + otherSid + '.json')); } catch {}
+          // Status file preserved — orphan cleanup handles stale status files
         }
       } catch {}
     }
@@ -642,10 +642,10 @@ function handleStopFailure() {
 }
 
 // ─── 16. handleSessionEnd (session cleanup) ─────────────────────────────────
+// Only delete alive file — preserve status for resume. Orphan cleanup handles stale status files.
 function handleSessionEnd() {
   if (!isSafeId(sessionId)) return;
   try { fs.unlinkSync(path.join(CACHE_DIR, '.alive-' + sessionId)); } catch {}
-  try { fs.unlinkSync(path.join(CACHE_DIR, 'status-' + sessionId + '.json')); } catch {}
 }
 
 

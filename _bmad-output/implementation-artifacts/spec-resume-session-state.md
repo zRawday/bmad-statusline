@@ -2,7 +2,8 @@
 title: 'Resume session state preservation — survive SessionEnd for full widget recovery'
 type: 'bugfix'
 created: '2026-04-09'
-status: 'ready-for-dev'
+status: 'done'
+baseline_commit: 'fcf9b58'
 context: ['_bmad-output/project-context.md']
 ---
 
@@ -50,13 +51,13 @@ context: ['_bmad-output/project-context.md']
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `src/hook/bmad-hook.js` -- In handleSessionEnd, remove the status file deletion line (keep only alive deletion) -- status must survive for resume
-- [ ] `src/hook/bmad-hook.js` -- In stale PID cleanup (lines 84-85), remove the status file deletion -- same rationale, orphan cleanup handles it later
-- [ ] `src/clean.js` -- In orphaned status branch (lines 93-100), add mtime age check: only delete if `status mtime > ALIVE_MAX_AGE_MS` -- protect recent orphans that may be resumed
-- [ ] `src/tui/app.js` -- In launchTui, before render, add opportunistic cleanup: scan cache dir for `status-*.json` without matching `.alive-*`, delete if mtime > ALIVE_MAX_AGE_MS -- silent, no UI impact
-- [ ] `test/hook.test.js` -- Update SessionEnd tests: assert alive deleted but status preserved. Add test for stale PID cleanup preserving status.
-- [ ] `test/clean.test.js` -- Add tests: orphan status < 7 days is kept, orphan status > 7 days is deleted
-- [ ] `test/tui-app.test.js` -- Add test for opportunistic cleanup on TUI launch
+- [x] `src/hook/bmad-hook.js` -- In handleSessionEnd, remove the status file deletion line (keep only alive deletion) -- status must survive for resume
+- [x] `src/hook/bmad-hook.js` -- In stale PID cleanup (lines 84-85), remove the status file deletion -- same rationale, orphan cleanup handles it later
+- [x] `src/clean.js` -- In orphaned status branch (lines 93-100), add mtime age check: only delete if `status mtime > ALIVE_MAX_AGE_MS` -- protect recent orphans that may be resumed
+- [x] `src/tui/app.js` -- In launchTui, before render, add opportunistic cleanup: scan cache dir for `status-*.json` without matching `.alive-*`, delete if mtime > ALIVE_MAX_AGE_MS -- silent, no UI impact
+- [x] `test/hook.test.js` -- Update SessionEnd tests: assert alive deleted but status preserved
+- [x] `test/clean.test.js` -- Add tests: orphan status < 7 days is kept, orphan status > 7 days is deleted
+- [x] `test/tui-app.test.js` -- Add test for opportunistic cleanup on TUI launch
 
 **Acceptance Criteria:**
 - Given a session with skill/workflow/started_at, when SessionEnd fires, then status file is preserved and alive file is deleted
@@ -71,3 +72,32 @@ context: ['_bmad-output/project-context.md']
 - `node --test test/hook.test.js` -- expected: all pass including updated SessionEnd tests
 - `node --test test/clean.test.js` -- expected: all pass including new orphan age tests
 - `node --test test/tui-app.test.js` -- expected: all pass including cleanup test
+
+## Suggested Review Order
+
+**Status preservation on session close/resume**
+
+- SessionEnd now only deletes alive file — the core behavioral change
+  [`bmad-hook.js:644`](../../src/hook/bmad-hook.js#L644)
+
+- Stale PID cleanup also preserves status — same rationale, different trigger
+  [`bmad-hook.js:84`](../../src/hook/bmad-hook.js#L84)
+
+**Orphan cleanup (new safety net)**
+
+- TUI launch: opportunistic scan deletes orphaned status > 7 days
+  [`app.js:240`](../../src/tui/app.js#L240)
+
+- clean.js: orphaned status now respects 7-day age threshold
+  [`clean.js:94`](../../src/clean.js#L94)
+
+**Tests**
+
+- SessionEnd tests: alive deleted, status preserved with all fields
+  [`hook.test.js:2143`](../../test/hook.test.js#L2143)
+
+- Clean: recent orphan preserved, old orphan deleted, mixed state
+  [`clean.test.js:47`](../../test/clean.test.js#L47)
+
+- TUI cleanup: old/recent/paired/missing-dir coverage
+  [`tui-app.test.js:243`](../../test/tui-app.test.js#L243)

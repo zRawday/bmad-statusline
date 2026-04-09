@@ -9,7 +9,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { HomeScreen } from '../src/tui/screens/HomeScreen.js';
-import { App } from '../src/tui/app.js';
+import { App, cleanOrphanedStatusFiles } from '../src/tui/app.js';
 import { createDefaultConfig } from '../src/tui/widget-registry.js';
 
 const e = React.createElement;
@@ -238,5 +238,52 @@ describe('App v2 — state model', () => {
     const homeFrame = lastFrame();
     assert.ok(homeFrame.includes('Edit widget line 1'), 'back at Home');
     unmount();
+  });
+});
+
+describe('cleanOrphanedStatusFiles', () => {
+  test('deletes orphaned status files older than 7 days', () => {
+    const cacheDir = makeTmpDir();
+    // Old orphan (no alive, mtime > 7 days)
+    const statusPath = path.join(cacheDir, 'status-old.json');
+    fs.writeFileSync(statusPath, '{}');
+    const pastMs = Date.now() - (8 * 24 * 60 * 60 * 1000);
+    const pastSec = pastMs / 1000;
+    fs.utimesSync(statusPath, pastSec, pastSec);
+
+    cleanOrphanedStatusFiles(cacheDir);
+
+    assert.ok(!fs.existsSync(statusPath), 'old orphan should be deleted');
+  });
+
+  test('preserves recent orphaned status files', () => {
+    const cacheDir = makeTmpDir();
+    // Recent orphan (no alive, mtime is now)
+    const statusPath = path.join(cacheDir, 'status-recent.json');
+    fs.writeFileSync(statusPath, '{}');
+
+    cleanOrphanedStatusFiles(cacheDir);
+
+    assert.ok(fs.existsSync(statusPath), 'recent orphan should be kept');
+  });
+
+  test('preserves status files that have a matching alive file', () => {
+    const cacheDir = makeTmpDir();
+    // Old status WITH alive — not orphaned
+    const statusPath = path.join(cacheDir, 'status-paired.json');
+    fs.writeFileSync(statusPath, '{}');
+    fs.writeFileSync(path.join(cacheDir, '.alive-paired'), '12345');
+    const pastMs = Date.now() - (8 * 24 * 60 * 60 * 1000);
+    const pastSec = pastMs / 1000;
+    fs.utimesSync(statusPath, pastSec, pastSec);
+
+    cleanOrphanedStatusFiles(cacheDir);
+
+    assert.ok(fs.existsSync(statusPath), 'paired status should not be touched');
+  });
+
+  test('does not throw on missing cache directory', () => {
+    const missingDir = path.join(os.tmpdir(), 'nonexistent-cleanup-test-' + Date.now());
+    assert.doesNotThrow(() => cleanOrphanedStatusFiles(missingDir));
   });
 });

@@ -44,15 +44,31 @@ describe('clean command', () => {
     assert.ok(!fs.existsSync(path.join(cacheDir, '.alive-abc')), 'alive file deleted');
   });
 
-  it('deletes orphaned status file (no corresponding alive)', () => {
-    const cacheDir = path.join(tmpDir, 'orphan-status');
+  it('preserves recent orphaned status file (may be resumed)', () => {
+    const cacheDir = path.join(tmpDir, 'orphan-status-recent');
     fs.mkdirSync(cacheDir);
     fs.writeFileSync(path.join(cacheDir, 'status-orphan.json'), '{}');
+    // Just created — mtime is now, well within 7-day window
+
+    const output = captureOutput(() => clean({ cacheDir, homeDir: tmpDir }));
+
+    assert.ok(output.includes('already clean'), 'recent orphan should not be purged');
+    assert.ok(fs.existsSync(path.join(cacheDir, 'status-orphan.json')), 'recent orphaned status preserved');
+  });
+
+  it('deletes old orphaned status file (>7 days, no corresponding alive)', () => {
+    const cacheDir = path.join(tmpDir, 'orphan-status-old');
+    fs.mkdirSync(cacheDir);
+    fs.writeFileSync(path.join(cacheDir, 'status-orphan.json'), '{}');
+    // Set mtime to 8 days ago
+    const pastMs = Date.now() - (8 * 24 * 60 * 60 * 1000);
+    const pastSec = pastMs / 1000;
+    fs.utimesSync(path.join(cacheDir, 'status-orphan.json'), pastSec, pastSec);
 
     const output = captureOutput(() => clean({ cacheDir, homeDir: tmpDir }));
 
     assert.ok(output.includes('1 file(s) purged'));
-    assert.ok(!fs.existsSync(path.join(cacheDir, 'status-orphan.json')), 'orphaned status deleted');
+    assert.ok(!fs.existsSync(path.join(cacheDir, 'status-orphan.json')), 'old orphaned status deleted');
   });
 
   it('deletes orphaned alive file (no corresponding status)', () => {
@@ -91,8 +107,14 @@ describe('clean command', () => {
     const pastSec = pastMs / 1000;
     fs.utimesSync(path.join(cacheDir, '.alive-expired'), pastSec, pastSec);
 
-    // Orphaned status (no alive)
+    // Orphaned status — recent (should be kept for resume)
     fs.writeFileSync(path.join(cacheDir, 'status-no-alive.json'), '{}');
+
+    // Orphaned status — old (should be deleted)
+    fs.writeFileSync(path.join(cacheDir, 'status-old-orphan.json'), '{}');
+    const oldMs = Date.now() - (8 * 24 * 60 * 60 * 1000);
+    const oldSec = oldMs / 1000;
+    fs.utimesSync(path.join(cacheDir, 'status-old-orphan.json'), oldSec, oldSec);
 
     // Orphaned alive (no status)
     fs.writeFileSync(path.join(cacheDir, '.alive-no-status'), '');
@@ -106,14 +128,15 @@ describe('clean command', () => {
 
     const output = captureOutput(() => clean({ cacheDir, homeDir: tmpDir }));
 
-    assert.ok(output.includes('4 file(s) purged'), 'should purge 4 files (2 expired + 1 orphan status + 1 orphan alive)');
+    assert.ok(output.includes('4 file(s) purged'), 'should purge 4 files (2 expired + 1 old orphan status + 1 orphan alive)');
 
     // Expired pair deleted
     assert.ok(!fs.existsSync(path.join(cacheDir, 'status-expired.json')), 'expired status deleted');
     assert.ok(!fs.existsSync(path.join(cacheDir, '.alive-expired')), 'expired alive deleted');
 
-    // Orphans deleted
-    assert.ok(!fs.existsSync(path.join(cacheDir, 'status-no-alive.json')), 'orphaned status deleted');
+    // Old orphan status deleted, recent orphan preserved
+    assert.ok(!fs.existsSync(path.join(cacheDir, 'status-old-orphan.json')), 'old orphaned status deleted');
+    assert.ok(fs.existsSync(path.join(cacheDir, 'status-no-alive.json')), 'recent orphaned status preserved');
     assert.ok(!fs.existsSync(path.join(cacheDir, '.alive-no-status')), 'orphaned alive deleted');
 
     // Active pair preserved

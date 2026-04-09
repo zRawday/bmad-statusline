@@ -2138,11 +2138,11 @@ describe('hook — 8-signal passive detection', () => {
     assert.equal(status.error_type, 'unknown', 'missing error_type should fallback to unknown');
   });
 
-  // ─── 8.1: handleSessionEnd — file deletion + idempotency ─────────────────
+  // ─── 8.1: handleSessionEnd — alive deleted, status preserved for resume ───
 
-  it('8.1 AC#3: handleSessionEnd deletes alive and status files', () => {
+  it('8.1 AC#3: handleSessionEnd deletes alive but preserves status for resume', () => {
     const sid = 'se-del';
-    seedStatus(sid, { session_id: sid, project: 'TestProject', llm_state: 'active' });
+    seedStatus(sid, { session_id: sid, project: 'TestProject', skill: 'bmad-create-architecture', workflow: 'create-architecture', started_at: '2026-01-01T00:00:00.000Z', llm_state: 'active' });
     fs.writeFileSync(path.join(cacheDir, `.alive-${sid}`), '12345');
     assert.ok(aliveExists(sid), 'alive should exist before');
     assert.ok(readStatusFile(sid), 'status should exist before');
@@ -2150,27 +2150,35 @@ describe('hook — 8-signal passive detection', () => {
     execHook(makeSessionEndPayload(sid));
 
     assert.equal(aliveExists(sid), false, 'alive file should be deleted');
-    assert.equal(readStatusFile(sid), null, 'status file should be deleted');
+    const status = readStatusFile(sid);
+    assert.ok(status, 'status file should be preserved');
+    assert.equal(status.skill, 'bmad-create-architecture', 'skill preserved');
+    assert.equal(status.workflow, 'create-architecture', 'workflow preserved');
+    assert.equal(status.started_at, '2026-01-01T00:00:00.000Z', 'started_at preserved');
   });
 
-  it('8.1 AC#3: handleSessionEnd is idempotent — no error when files already removed', () => {
+  it('8.1 AC#3: handleSessionEnd is idempotent — no error when alive already removed', () => {
     const sid = 'se-idem';
+    seedStatus(sid, { session_id: sid, project: 'TestProject' });
     cleanAlive(sid);
-    const statusPath = path.join(cacheDir, `status-${sid}.json`);
-    if (fs.existsSync(statusPath)) fs.unlinkSync(statusPath);
 
     execHook(makeSessionEndPayload(sid));
     assert.equal(aliveExists(sid), false);
-    assert.equal(readStatusFile(sid), null);
+    assert.ok(readStatusFile(sid), 'status preserved even without prior alive');
   });
 
-  it('8.1 AC#3: handleSessionEnd does not create status file', () => {
+  it('8.1 AC#3: handleSessionEnd does not add skill/workflow to a bare status', () => {
     const sid = 'se-no-write';
     fs.mkdirSync(cacheDir, { recursive: true });
     fs.writeFileSync(path.join(cacheDir, `.alive-${sid}`), '12345');
 
     execHook(makeSessionEndPayload(sid));
-    assert.equal(readStatusFile(sid), null, 'status file should NOT exist after SessionEnd');
+    // Preamble creates status with project detection, but SessionEnd adds nothing
+    const status = readStatusFile(sid);
+    if (status) {
+      assert.equal(status.skill, null, 'no skill should be set by SessionEnd');
+      assert.equal(status.workflow, null, 'no workflow should be set by SessionEnd');
+    }
   });
 
   // ─── 8.1: error_type clearing on state transitions ───────────────────────

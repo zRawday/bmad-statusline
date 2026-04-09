@@ -15,6 +15,7 @@ import { SkillColorsScreen } from './screens/SkillColorsScreen.js';
 import { ProjectColorsScreen } from './screens/ProjectColorsScreen.js';
 import { MonitorScreen } from './monitor/MonitorScreen.js';
 import { registerPid, unregisterPid, setupSignalHandlers, startTtyWatch, stopTtyWatch } from './tui-lifecycle.js';
+import { ALIVE_MAX_AGE_MS } from '../defaults.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -236,10 +237,31 @@ function teardownAnsiDebug(debug) {
   fs.closeSync(debug.fd);
 }
 
+export function cleanOrphanedStatusFiles(cachePath) {
+  if (!fs.existsSync(cachePath)) return;
+  const now = Date.now();
+  const files = fs.readdirSync(cachePath);
+  const aliveSet = new Set();
+  for (const f of files) {
+    if (f.startsWith('.alive-')) aliveSet.add(f.slice('.alive-'.length));
+  }
+  for (const f of files) {
+    const m = f.match(/^status-(.+)\.json$/);
+    if (!m) continue;
+    if (aliveSet.has(m[1])) continue;
+    const fp = path.join(cachePath, f);
+    try {
+      if ((now - fs.statSync(fp).mtimeMs) > ALIVE_MAX_AGE_MS) fs.unlinkSync(fp);
+    } catch {}
+  }
+}
+
 export default async function launchTui(paths) {
   const { render: inkRender } = await import('ink');
   const cachePath = process.env.BMAD_CACHE_DIR || path.join(os.homedir(), '.cache', 'bmad-status');
   const restoreScreen = () => process.stdout.write('\x1b[?1049l');
+  // Opportunistic cleanup — delete orphaned status files older than 7 days
+  try { cleanOrphanedStatusFiles(cachePath); } catch {}
   // PID registry, signal handlers, TTY watch — before render (Pattern 28)
   try { registerPid(cachePath); } catch {}
   setupSignalHandlers(cachePath, restoreScreen);
