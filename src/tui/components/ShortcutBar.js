@@ -23,5 +23,5 @@ export function ShortcutBar({ actions }) {
         : e(Text, { key: `st-${i}`, dimColor: true }, ' OFF'));
     }
   }
-  return e(Text, null, ...parts);
+  return e(Text, { wrap: 'truncate' }, ...parts);
 }
