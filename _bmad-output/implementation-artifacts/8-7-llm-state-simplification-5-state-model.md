@@ -1,6 +1,6 @@
 # Story 8.7: LLM State Simplification — 5-State Model
 
-Status: review
+Status: done
 
 ## Story
 
@@ -134,6 +134,13 @@ So that **state detection is simpler, more stable, and every displayed state map
   - [x] 10.9 `test/tui-monitor-components.test.js`: Remove inactive LlmBadge test (line 140), active:subagent LlmBadge test (line 173), active:subagent SessionTabs test (line 213)
   - [x] 10.10 `test/tui-monitor.test.js`: Update computeDisplayState tests — remove stale→inactive test (line 403), missing→inactive test (line 419); update worstState inactive tests (line 452-456)
   - [x] 10.11 Run `npm test` — all story-related tests pass (1 pre-existing failure in tui-edit-line unrelated to this story)
+
+### Review Findings
+
+- [x] [Review][Patch] Dead `!cfg.bgColor` branch in LlmBadge unreachable after state removal — removed dead branch (lines 28-36). [src/tui/monitor/components/LlmBadge.js:28]
+- [x] [Review][Patch] Test fixture phase5 and install test assertions still referenced Notification with old 16-matcher counts — removed Notification from phase5 fixture, updated idempotency test. [test/fixtures/claude-settings-with-hooks-phase5.json, test/install.test.js]
+- [x] [Review][Defer] Orphaned sessions display as ACTIVE indefinitely (no stale detection) — intentional per story spec AC3. ALIVE_MAX_AGE_MS handles file cleanup. [src/reader/shared-constants.cjs:41] — deferred, by design
+- [x] [Review][Defer] Installer doesn't remove Notification from existing user settings — benign: hook silently exits on unmatched events. Migration cleanup for future installer revision. [src/install.js:189] — deferred, pre-existing
 
 ## Dev Notes
 

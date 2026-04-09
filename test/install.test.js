@@ -495,7 +495,7 @@ describe('Target 5: hook config injection', () => {
     } finally { teardown(baseDir); }
   });
 
-  it('Rev.5 idempotent — no changes when all 16 matchers present', () => {
+  it('Rev.5 idempotent — no changes when all 15 matchers present', () => {
     const { baseDir, paths } = setup();
     try {
       copyFixture('claude-settings-with-hooks-phase5.json', paths.claudeSettings);
@@ -507,13 +507,12 @@ describe('Target 5: hook config injection', () => {
       assert.equal(config.hooks.PreToolUse.length, 1, 'PreToolUse still 1');
       assert.equal(config.hooks.PostToolUse.length, 4, 'PostToolUse still 4');
       assert.equal(config.hooks.Stop.length, 1, 'Stop still 1');
-      assert.equal(config.hooks.Notification.length, 1, 'Notification still 1');
       assert.equal(config.hooks.SessionStart.length, 1, 'SessionStart still 1');
       for (const evt of ['PermissionRequest', 'PermissionDenied', 'PostToolUseFailure', 'StopFailure', 'SubagentStart', 'SubagentStop', 'SessionEnd']) {
         assert.equal(config.hooks[evt].length, 1, `${evt} still 1`);
       }
       const total = Object.values(config.hooks).reduce((sum, arr) => sum + arr.length, 0);
-      assert.equal(total, 16, 'total still 16');
+      assert.equal(total, 15, 'total still 15');
     } finally { teardown(baseDir); }
   });
 });

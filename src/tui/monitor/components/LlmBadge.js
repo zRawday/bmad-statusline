@@ -25,16 +25,6 @@ function LlmBadge({ state, workflow, startedAt, contextLabel }) {
   const elapsed = formatElapsed(startedAt);
   const suffix = [workflow, elapsed].filter(Boolean).join(' ');
 
-  if (!cfg.bgColor) {
-    return e(Box, { flexDirection: 'row' },
-      e(Text, { dimColor: true },
-        ' ', e(Text, { color: cfg.color }, cfg.icon), `  ${cfg.label}`,
-        suffix ? ` ${suffix}` : null, ' ',
-      ),
-      contextLabel ? e(Text, { dimColor: true }, `  ${contextLabel}`) : null,
-    );
-  }
-
   return e(Box, { flexDirection: 'row' },
     e(Text, { bold: true, backgroundColor: cfg.bgColor, color: cfg.fgColor },
       ' ', e(Text, { color: cfg.fgColor }, cfg.icon), `  ${cfg.label}`,

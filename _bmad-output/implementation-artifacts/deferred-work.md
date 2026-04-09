@@ -196,6 +196,11 @@
 - **LlmBadge fgColor black→#000000** — Terminal compatibility concern. `#000000` requires truecolor support, unlike `'black'` (always works). Unrelated to story 9-2, drive-by change.
 - **Wall-clock 103s exceeds AC5 <10s target** — Windows process isolation overhead with node --test runner. Primary achievement (no zombies, no hangs, deterministic) is delivered. Further optimization requires different approach (single-process runner, test count reduction).
 
+## Deferred from: code review of 8-7-llm-state-simplification-5-state-model (2026-04-09)
+
+- **Orphaned sessions display as ACTIVE indefinitely** — With INACTIVE_TIMEOUT_MS removed, sessions whose process crashed without SessionEnd persist with their last llm_state (e.g., `active`) forever. ALIVE_MAX_AGE_MS (7 days) handles file cleanup. Intentional per story spec AC3. Consider a future "session health heartbeat" feature.
+- **Installer doesn't remove Notification from existing user settings** — Users who installed a previous version retain Notification hook registration in ~/.claude/settings.json. Hook silently exits on unmatched events. Consider adding cleanup step in a future installer revision (similar to Phase 2 stale-matcher cleanup).
+
 ## Deferred from: code review of story-8.2 (2026-04-07)
 
 - **Missing AC#5 test coverage for subagent_type clearing via existing handlers** — Tests only verify SubagentStop, PostToolUseFailure, PermissionDenied clear subagent_type. Missing coverage for UserPromptSubmit, Read, Write, Edit, Bash, PreToolUse, Stop, Notification transitioning out of active:subagent. Code does clear it, but tests don't verify.
