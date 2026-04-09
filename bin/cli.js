@@ -26,7 +26,7 @@ if (!command) {
   if (!fs.existsSync(readerDest)) {
     console.log(`\n  ${R}${B}bmad-statusline is not installed.${_}\n`);
     console.log(`  Run the following command to install:\n`);
-    console.log(`    ${C}${B}bmad-statusline install${_}\n`);
+    console.log(`    ${C}${B}npx bmad-statusline install${_}\n`);
     process.exit(1);
   }
   const { default: launchTui } = await import('../src/tui/app.js');
