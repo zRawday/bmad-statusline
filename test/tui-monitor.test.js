@@ -1119,3 +1119,47 @@ describe('ScrollableViewport — content correctness after scroll', () => {
     u1();
   });
 });
+
+// ─── Auto-allow: Monitor integration tests ─────────────────────────────────
+
+describe('MonitorScreen — auto-allow', () => {
+  test('a key is ignored without active session', async () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'bmad-monitor-aa-'));
+    try {
+      const { stdin, lastFrame, unmount } = render(e(MonitorScreen, {
+        config: {},
+        navigate: () => {},
+        goBack: () => {},
+        isActive: true,
+        paths: { cachePath: tmpDir },
+        pollInterval: 10,
+      }));
+      await act(async () => { stdin.write('a'); });
+      const frame = lastFrame();
+      assert.ok(!frame.includes('WARNING'), 'a key should not open menu without session');
+      assert.ok(frame.includes('auto-allow'), 'shortcut bar should still show');
+      unmount();
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  test('shortcut bar includes auto-allow entry', async () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'bmad-monitor-aa-bar-'));
+    try {
+      const { lastFrame, unmount } = render(e(MonitorScreen, {
+        config: {},
+        navigate: () => {},
+        goBack: () => {},
+        isActive: true,
+        paths: { cachePath: tmpDir },
+        pollInterval: 10,
+      }));
+      const frame = lastFrame();
+      assert.ok(frame.includes('auto-allow'), 'shortcut bar should show auto-allow');
+      unmount();
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+});

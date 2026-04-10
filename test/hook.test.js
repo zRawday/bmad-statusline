@@ -2491,4 +2491,83 @@ describe('hook — 8-signal passive detection', () => {
     const status = readStatusFile(sid);
     assert.equal(status.step.current, null, 'Edit should not trigger step enrichment');
   });
+
+  // ─── Auto-allow: PermissionRequest hook response ─────────────────────────
+
+  function execHookWithConfig(payload, configDir) {
+    try {
+      return execSync(`node "${HOOK_PATH}"`, {
+        input: JSON.stringify(payload),
+        encoding: 'utf8',
+        env: { ...process.env, BMAD_CACHE_DIR: cacheDir, BMAD_CONFIG_DIR: configDir },
+        timeout: 5000
+      });
+    } catch (e) {
+      return e.stdout || '';
+    }
+  }
+
+  it('AC10: PermissionRequest with per-session auto-allow ON outputs allow JSON and keeps active', () => {
+    const sid = 'aa-session-on';
+    seedStatus(sid, { session_id: sid, project: 'TestProject', llm_state: 'active' });
+    fs.writeFileSync(path.join(cacheDir, '.autoallow-' + sid), 'on');
+    const configDir = fs.mkdtempSync(path.join(os.tmpdir(), 'bmad-config-'));
+    const stdout = execHookWithConfig(makePermissionRequestPayload(sid), configDir);
+    const status = readStatusFile(sid);
+    assert.equal(status.llm_state, 'active', 'should stay active when auto-allowing');
+    const parsed = JSON.parse(stdout);
+    assert.equal(parsed.hookSpecificOutput.hookEventName, 'PermissionRequest');
+    assert.equal(parsed.hookSpecificOutput.decision.behavior, 'allow');
+    fs.rmSync(configDir, { recursive: true, force: true });
+  });
+
+  it('AC11: PermissionRequest with auto-allow disabled outputs nothing and sets permission', () => {
+    const sid = 'aa-disabled';
+    seedStatus(sid, { session_id: sid, project: 'TestProject', llm_state: 'active' });
+    const configDir = fs.mkdtempSync(path.join(os.tmpdir(), 'bmad-config-'));
+    const stdout = execHookWithConfig(makePermissionRequestPayload(sid), configDir);
+    const status = readStatusFile(sid);
+    assert.equal(status.llm_state, 'permission', 'should set permission when disabled');
+    assert.equal(stdout.trim(), '', 'should not output anything to stdout');
+    fs.rmSync(configDir, { recursive: true, force: true });
+  });
+
+  it('AC12: per-session OFF overrides global ON — no auto-allow', () => {
+    const sid = 'aa-override-off';
+    seedStatus(sid, { session_id: sid, project: 'TestProject', llm_state: 'active' });
+    fs.writeFileSync(path.join(cacheDir, '.autoallow-' + sid), 'off');
+    const configDir = fs.mkdtempSync(path.join(os.tmpdir(), 'bmad-config-'));
+    fs.writeFileSync(path.join(configDir, 'config.json'), JSON.stringify({ autoAllow: true }));
+    const stdout = execHookWithConfig(makePermissionRequestPayload(sid), configDir);
+    const status = readStatusFile(sid);
+    assert.equal(status.llm_state, 'permission', 'per-session off should override global on');
+    assert.equal(stdout.trim(), '', 'should not output allow JSON');
+    fs.rmSync(configDir, { recursive: true, force: true });
+  });
+
+  it('AC12: per-session ON without global — auto-allow active', () => {
+    const sid = 'aa-session-only';
+    seedStatus(sid, { session_id: sid, project: 'TestProject', llm_state: 'active' });
+    fs.writeFileSync(path.join(cacheDir, '.autoallow-' + sid), 'on');
+    const configDir = fs.mkdtempSync(path.join(os.tmpdir(), 'bmad-config-'));
+    const stdout = execHookWithConfig(makePermissionRequestPayload(sid), configDir);
+    const status = readStatusFile(sid);
+    assert.equal(status.llm_state, 'active', 'per-session on should enable auto-allow');
+    const parsed = JSON.parse(stdout);
+    assert.equal(parsed.hookSpecificOutput.decision.behavior, 'allow');
+    fs.rmSync(configDir, { recursive: true, force: true });
+  });
+
+  it('AC12: global ON without per-session flag — auto-allow via fallback', () => {
+    const sid = 'aa-global-fallback';
+    seedStatus(sid, { session_id: sid, project: 'TestProject', llm_state: 'active' });
+    const configDir = fs.mkdtempSync(path.join(os.tmpdir(), 'bmad-config-'));
+    fs.writeFileSync(path.join(configDir, 'config.json'), JSON.stringify({ autoAllow: true }));
+    const stdout = execHookWithConfig(makePermissionRequestPayload(sid), configDir);
+    const status = readStatusFile(sid);
+    assert.equal(status.llm_state, 'active', 'global on should enable auto-allow');
+    const parsed = JSON.parse(stdout);
+    assert.equal(parsed.hookSpecificOutput.decision.behavior, 'allow');
+    fs.rmSync(configDir, { recursive: true, force: true });
+  });
 });

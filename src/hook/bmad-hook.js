@@ -8,6 +8,7 @@ const os = require('os');
 
 // ─── 2. Constants ──────────────────────────────────────────────────────────────
 const CACHE_DIR = process.env.BMAD_CACHE_DIR || path.join(os.homedir(), '.cache', 'bmad-status');
+const CONFIG_DIR = process.env.BMAD_CONFIG_DIR || path.join(os.homedir(), '.config', 'bmad-statusline');
 const STORY_WORKFLOWS = ['create-story', 'dev-story', 'code-review'];
 const STORY_READ_WORKFLOWS = ['dev-story', 'code-review'];
 const STORY_WRITE_WORKFLOWS = ['create-story'];
@@ -30,6 +31,22 @@ function shouldUpdateStory(incomingPriority, currentPriority) {
   if (incomingPriority === STORY_PRIORITY.SPRINT_STATUS) return true;
   if (incomingPriority === STORY_PRIORITY.STORY_FILE && (!currentPriority || currentPriority === STORY_PRIORITY.CANDIDATE)) return true;
   if (incomingPriority === STORY_PRIORITY.CANDIDATE && !currentPriority) return true;
+  return false;
+}
+
+function isAutoAllowEnabled(sid) {
+  if (!isSafeId(sid)) return false;
+  // 1. Per-session flag (highest priority)
+  try {
+    const flag = fs.readFileSync(path.join(CACHE_DIR, '.autoallow-' + sid), 'utf8').trim();
+    if (flag === 'off') return false;
+    if (flag === 'on') return true;
+  } catch {} // absent — fall through
+  // 2. Global flag in config.json
+  try {
+    const config = JSON.parse(fs.readFileSync(path.join(CONFIG_DIR, 'config.json'), 'utf8'));
+    return config.autoAllow === true;
+  } catch {}
   return false;
 }
 
@@ -619,6 +636,23 @@ function handleStop() {
 function handlePermissionRequest() {
   const status = readStatus(sessionId);
   const now = new Date().toISOString();
+
+  if (isAutoAllowEnabled(sessionId)) {
+    // Auto-allow: keep active state, respond with allow decision
+    status.llm_state = 'active';
+    status.llm_state_since = now;
+    status.subagent_type = null;
+    status.error_type = null;
+    status.session_id = sessionId;
+    writeStatus(sessionId, status);
+    process.stdout.write(JSON.stringify({
+      hookSpecificOutput: {
+        hookEventName: 'PermissionRequest',
+        decision: { behavior: 'allow' }
+      }
+    }));
+    return;
+  }
 
   status.llm_state = 'permission';
   status.llm_state_since = now;

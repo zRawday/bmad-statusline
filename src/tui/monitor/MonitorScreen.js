@@ -1,5 +1,8 @@
 // MonitorScreen.js — Monitor: tabs, badges, file tree, bash sections, scroll, reorder
 
+import fs from 'node:fs';
+import path from 'node:path';
+import os from 'node:os';
 import React, { useState, useEffect, useRef } from 'react';
 import { Box, Text, useInput, useStdout } from 'ink';
 import { ShortcutBar } from '../components/ShortcutBar.js';
@@ -8,6 +11,7 @@ import SessionTabs from './components/SessionTabs.js';
 import { pollSessions, groupSessionsByProject, computeDisplayState, filterReadOnly, findFirstSelectable, findNextSelectable, mergeChronology, generateCsv, writeCsvExport, STORY_WORKFLOWS, formatStoryTitle, resolveProjectColor } from './monitor-utils.js';
 import { MonitorDetailScreen } from './MonitorDetailScreen.js';
 import { ExportPrompt } from './components/ExportPrompt.js';
+import { AutoAllowMenu } from './components/AutoAllowMenu.js';
 import ScrollableViewport from './components/ScrollableViewport.js';
 import { renderFileSection } from './components/FileTreeSection.js';
 import { renderBashSection } from './components/BashSection.js';
@@ -77,6 +81,7 @@ function getShortcuts(navMode, detailMode, toggleState, reorderMode, reorderGrab
   shortcuts.push({ key: 'e', label: 'export', color: 'green' });
   if (hasSubAgents) shortcuts.push({ key: 'f', label: 'Subagents', color: 'magenta', checked: toggleState.showSubAgents });
   shortcuts.push({ key: 'b', label: 'Bash', color: 'magenta', checked: toggleState.showBash });
+  shortcuts.push({ key: 'a', label: 'auto-allow', color: 'red' });
   shortcuts.push({ key: 'Esc', label: 'home' });
   return shortcuts;
 }
@@ -102,6 +107,7 @@ export function MonitorScreen({ config, navigate, goBack, isActive, paths, pollI
   const [sortMode, setSortMode] = useState('chrono');
   const [showSubAgents, setShowSubAgents] = useState(true);
   const [showBash, setShowBash] = useState(false);
+  const [autoAllowMenu, setAutoAllowMenu] = useState(false);
 
   // Derived state — session grouping and navigation
   const groups = groupSessionsByProject(sessions);
@@ -250,6 +256,7 @@ export function MonitorScreen({ config, navigate, goBack, isActive, paths, pollI
     if (input === 'd') { const first = findFirstSelectable(allItems); if (first >= 0) { setDetailMode('detail'); setCursorIndex(first); } return; }
     if (input === 'c' && currentSession) { setDetailItem({ type: 'chronology', text: 'timeline', selectable: false, data: null }); return; }
     if (input === 'e' && currentSession) { setExportMode('prompt'); return; }
+    if (input === 'a' && sessionId) { setAutoAllowMenu(true); return; }
 
     // Scroll
     if (key.upArrow) { setScrollOffset(prev => Math.max(0, prev - 1)); return; }
@@ -291,7 +298,7 @@ export function MonitorScreen({ config, navigate, goBack, isActive, paths, pollI
       setReorderGrabbed(false);
       setReorderMode('sessions');
     }
-  }, { isActive: isActive && !reorderMode && !detailItem && !exportMode });
+  }, { isActive: isActive && !reorderMode && !detailItem && !exportMode && !autoAllowMenu });
 
   // Export handlers
   function handleExport(mode) {
@@ -409,11 +416,30 @@ export function MonitorScreen({ config, navigate, goBack, isActive, paths, pollI
         : '',
   } : { state: 'waiting', workflow: '', startedAt: '', contextLabel: '' };
 
+  // Compute auto-allow active state for current session indicator
+  const configDir = paths.configDir || process.env.BMAD_CONFIG_DIR || path.join(os.homedir(), '.config', 'bmad-statusline');
+  let isAutoAllowActive = false;
+  if (sessionId) {
+    try {
+      const flag = fs.readFileSync(path.join(paths.cachePath, '.autoallow-' + sessionId), 'utf8').trim();
+      if (flag === 'on') isAutoAllowActive = true;
+      else if (flag === 'off') isAutoAllowActive = false;
+      else isAutoAllowActive = false;
+    } catch {
+      // No per-session flag — check global
+      try {
+        const cfg = JSON.parse(fs.readFileSync(path.join(configDir, 'config.json'), 'utf8'));
+        isAutoAllowActive = cfg.autoAllow === true;
+      } catch { isAutoAllowActive = false; }
+    }
+  }
+
   return e(Box, { flexDirection: 'column', height: rows },
     // Sticky top: title + session count
     e(Text, { bold: true, color: 'cyan' }, 'MONITOR',
       activeProject && projectKeys.length === 1 ? e(Text, { color: resolveProjectColor(activeProject, config) }, `  ${activeProject}  `) : '  ',
-      e(Text, { dimColor: true }, `${sessions.length} session${sessions.length !== 1 ? 's' : ''}`)),
+      e(Text, { dimColor: true }, `${sessions.length} session${sessions.length !== 1 ? 's' : ''}`),
+      isAutoAllowActive ? e(Text, { color: 'red' }, '   Auto-allow') : null),
     e(Text, null, ' '),
     // Tabs — stable wrapper Box avoids yoga insertChild on root (prevents x-offset bug)
     e(Box, { flexDirection: 'column', display: showTabs ? 'flex' : 'none' },
@@ -437,11 +463,13 @@ export function MonitorScreen({ config, navigate, goBack, isActive, paths, pollI
           ? null
           : e(ScrollableViewport, { items: displayItems, height: viewportHeight, scrollOffset: effectiveScrollOffset }),
     e(Text, null, ' '),
-    // Sticky bottom — shortcut bar or export prompt/confirmation
-    exportMode === 'prompt'
-      ? e(ExportPrompt, { onSelect: handleExport, onCancel: () => setExportMode(null), isActive })
-      : exportMode === 'confirm'
-        ? e(Text, { dimColor: true }, confirmPath.startsWith('Error:') ? confirmPath : 'Exported: ' + confirmPath)
-        : e(ShortcutBar, { actions: getShortcuts(mode, detailMode, { showSubAgents, showBash, sortMode, timeFormat }, reorderMode, reorderGrabbed, { hasSubAgents, canScroll: items.length > viewportHeight }) }),
+    // Sticky bottom — shortcut bar, export prompt, or auto-allow menu
+    autoAllowMenu
+      ? e(AutoAllowMenu, { sessionId, cachePath: paths.cachePath, configDir, isActive, onClose: () => setAutoAllowMenu(false) })
+      : exportMode === 'prompt'
+        ? e(ExportPrompt, { onSelect: handleExport, onCancel: () => setExportMode(null), isActive })
+        : exportMode === 'confirm'
+          ? e(Text, { dimColor: true }, confirmPath.startsWith('Error:') ? confirmPath : 'Exported: ' + confirmPath)
+          : e(ShortcutBar, { actions: getShortcuts(mode, detailMode, { showSubAgents, showBash, sortMode, timeFormat }, reorderMode, reorderGrabbed, { hasSubAgents, canScroll: items.length > viewportHeight }) }),
   );
 }

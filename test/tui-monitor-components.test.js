@@ -355,3 +355,87 @@ describe('ShortcutBar', () => {
     unmount();
   });
 });
+
+// ─── AutoAllowMenu ──────────────────────────────────────────────────────────
+
+import fs from 'node:fs';
+import path from 'node:path';
+import os from 'node:os';
+import { act } from 'react';
+globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+import { AutoAllowMenu } from '../src/tui/monitor/components/AutoAllowMenu.js';
+
+describe('AutoAllowMenu', () => {
+  let tmpCache, tmpConfig;
+
+  function setup() {
+    tmpCache = fs.mkdtempSync(path.join(os.tmpdir(), 'bmad-aa-cache-'));
+    tmpConfig = fs.mkdtempSync(path.join(os.tmpdir(), 'bmad-aa-config-'));
+  }
+  function cleanup() {
+    fs.rmSync(tmpCache, { recursive: true, force: true });
+    fs.rmSync(tmpConfig, { recursive: true, force: true });
+  }
+
+  test('renders warning text and two toggle rows', () => {
+    setup();
+    const { lastFrame, unmount } = render(
+      e(AutoAllowMenu, { sessionId: 'test1', cachePath: tmpCache, configDir: tmpConfig, isActive: true, onClose: () => {} })
+    );
+    const frame = lastFrame();
+    assert.ok(frame.includes('WARNING'), 'should show WARNING header');
+    assert.ok(frame.includes('permission prompts'), 'should show warning text');
+    assert.ok(frame.includes('This session'), 'should show session toggle');
+    assert.ok(frame.includes('Always'), 'should show global toggle');
+    assert.ok(frame.includes('Esc close'), 'should show footer hint');
+    assert.ok(frame.includes('approved automatically'), 'warning should be on two lines');
+    unmount();
+    cleanup();
+  });
+
+  test('toggle writes per-session signal file', async () => {
+    setup();
+    const { stdin, lastFrame, unmount } = render(
+      e(AutoAllowMenu, { sessionId: 'sig1', cachePath: tmpCache, configDir: tmpConfig, isActive: true, onClose: () => {} })
+    );
+    // Cursor starts on row 0 (This session), press Enter to toggle ON
+    await act(async () => { stdin.write('\r'); });
+    const flagPath = path.join(tmpCache, '.autoallow-sig1');
+    assert.ok(fs.existsSync(flagPath), 'signal file should be created');
+    assert.equal(fs.readFileSync(flagPath, 'utf8').trim(), 'on');
+    unmount();
+    cleanup();
+  });
+
+  test('toggle writes global flag to config.json', async () => {
+    setup();
+    const { stdin, unmount } = render(
+      e(AutoAllowMenu, { sessionId: 'gflag1', cachePath: tmpCache, configDir: tmpConfig, isActive: true, onClose: () => {} })
+    );
+    // Move cursor to row 1 (Always), then press Enter
+    await act(async () => { stdin.write('\u001B[B'); }); // down arrow
+    await act(async () => { stdin.write('\r'); });       // Enter
+    const configPath = path.join(tmpConfig, 'config.json');
+    assert.ok(fs.existsSync(configPath), 'config.json should be created');
+    const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+    assert.equal(config.autoAllow, true, 'autoAllow should be true');
+    unmount();
+    cleanup();
+  });
+
+  test('cursor navigation between rows', async () => {
+    setup();
+    const { stdin, lastFrame, unmount } = render(
+      e(AutoAllowMenu, { sessionId: 'nav1', cachePath: tmpCache, configDir: tmpConfig, isActive: true, onClose: () => {} })
+    );
+    // Initially cursor on row 0
+    let frame = lastFrame();
+    assert.ok(frame.includes('> This session'), 'cursor should be on This session');
+    // Press down
+    await act(async () => { stdin.write('\u001B[B'); });
+    frame = lastFrame();
+    assert.ok(frame.includes('> Always'), 'cursor should move to Always');
+    unmount();
+    cleanup();
+  });
+});
