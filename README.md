@@ -11,23 +11,24 @@ Custom widget pack for [ccstatusline](https://github.com/sirmalloc/ccstatusline)
 ## Status Line
 
 <!-- Screenshot of the 3 widget lines rendered in the terminal -->
-![Status Line Widgets](docs/images/statusline.png)
+![Status Line Widgets](https://raw.githubusercontent.com/zRawday/bmad-statusline/main/docs/images/statusline.png)
 
 ## Features
 
 - **Passive detection via hooks** — 8 signals intercepted from the Claude Code lifecycle (prompts, reads, writes, bash, permissions, errors…). Zero manual action required.
+- **Interactive TUI configurator** — full visual editor to customize the display, colors, separators, and widget order
 - **11 configurable widgets across 3 lines** — LLM State, Project, Initial Skill, Active Skill, Story, Step, Next Step, Document, File Read, File Write/Edit, Timer
 - **Semantic colors** — each workflow and project has its own color (cyan = dev, green = planning, yellow = product, magenta = architecture…), individually customizable
-- **Interactive TUI configurator** — full visual editor to customize the display, colors, separators, and widget order
-- **Real-time Monitor** — built-in multi-session dashboard to follow all active BMAD sessions live, with file read/write/edit history and command tracking (see [Monitor](#monitor) section)
+- **Real-time Monitor** — built-in multi-session dashboard to follow all active BMAD sessions live, with file read/write/edit history, command tracking, and auto-allow permission control (see [Monitor](#monitor) section)
 - **Presets** — 3 slots to save and load complete layouts
 - **134 recognized workflows** — BMAD, GDS, WDS, CIS, and TEA compatibility
 
 ## Prerequisites
 
 - Node.js >= 20
-- [ccstatusline](https://github.com/sirmalloc/ccstatusline) >= 2.2
-- A compatible BMAD framework ([BMAD](https://bmadcode.github.io/BMAD-METHOD/), GDS, WDS)
+- [BMAD Framework](https://github.com/bmad-code-org/BMAD-METHOD/) >= 6.2.2 
+
+> [ccstatusline](https://github.com/sirmalloc/ccstatusline) is installed automatically via npx during setup — no manual installation needed.
 
 ## Installation
 
@@ -49,7 +50,7 @@ npx bmad-statusline
 ```
 
 <!-- Screenshot of the TUI home screen -->
-![TUI Configurator](docs/images/TUI.png)
+![TUI Configurator](https://raw.githubusercontent.com/zRawday/bmad-statusline/main/docs/images/TUI.png)
 
 The TUI lets you fully customize the status line display without editing any files:
 
@@ -80,7 +81,7 @@ Rearrange the order of the 3 lines with keyboard drag-and-drop.
 ## Monitor
 
 <!-- Screenshot of the monitor in action -->
-![Monitor](docs/images/Monitor.png)
+![Monitor](https://raw.githubusercontent.com/zRawday/bmad-statusline/main/docs/images/Monitor.png)
 
 The Monitor is a real-time dashboard built into the TUI that lets you follow the activity of all active Claude Code sessions live. It is a full-featured tool in its own right, accessible from the TUI main menu.
 
@@ -144,6 +145,15 @@ Merged timeline view of all operations (reads, writes, edits, bash commands):
 - **Sort** — toggle between alphabetical and chronological with `s`
 - **Time format** — toggle between absolute (HH:MM:SS) and relative ("5min ago") with `t`
 - **Type indicators** — READ (cyan), WRITE (green), EDIT (yellow), BASH (dimmed)
+
+### Auto-Allow
+
+Toggle automatic permission approval per-session or globally, directly from the Monitor (`a` key). When enabled, permission prompts are approved automatically — sessions can proceed unattended without waiting for manual confirmation.
+
+- **Per-session toggle** — enable or disable auto-allow for the current session only
+- **Global toggle ("Always")** — enable for all sessions, with per-session override capability
+- **Visual indicator** — `Auto-allow` shown in red on the monitor title line when active
+- **Warning overlay** — the menu clearly warns that tools will execute without human review
 
 ### CSV Export
 

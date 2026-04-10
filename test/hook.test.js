@@ -12,10 +12,12 @@ const HOOK_PATH = path.resolve(__dirname, '..', 'src', 'hook', 'bmad-hook.js');
 describe('hook — 8-signal passive detection', () => {
   let tmpDir;
   let cacheDir;
+  let configDir;
 
   before(() => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'bmad-hook-test-'));
     cacheDir = fs.mkdtempSync(path.join(os.tmpdir(), 'bmad-hook-cache-'));
+    configDir = fs.mkdtempSync(path.join(os.tmpdir(), 'bmad-hook-config-'));
 
     // _bmad directory
     fs.mkdirSync(path.join(tmpDir, '_bmad', 'bmm'), { recursive: true });
@@ -85,6 +87,7 @@ describe('hook — 8-signal passive detection', () => {
   after(() => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
     fs.rmSync(cacheDir, { recursive: true, force: true });
+    fs.rmSync(configDir, { recursive: true, force: true });
   });
 
   function execHook(payload) {
@@ -92,7 +95,7 @@ describe('hook — 8-signal passive detection', () => {
       return execSync(`node "${HOOK_PATH}"`, {
         input: JSON.stringify(payload),
         encoding: 'utf8',
-        env: { ...process.env, BMAD_CACHE_DIR: cacheDir },
+        env: { ...process.env, BMAD_CACHE_DIR: cacheDir, BMAD_CONFIG_DIR: configDir },
         timeout: 5000
       });
     } catch (e) {
