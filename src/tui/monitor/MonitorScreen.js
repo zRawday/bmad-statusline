@@ -454,8 +454,8 @@ export function MonitorScreen({ config, navigate, goBack, isActive, paths, pollI
     e(Box, { display: currentSession ? 'flex' : 'none' },
       e(LlmBadge, badgeProps),
     ),
-    // Content — hidden during reorder
-    reorderMode
+    // Content — hidden during reorder or auto-allow menu
+    reorderMode || autoAllowMenu
       ? null
       : sessions.length === 0
         ? e(Text, { dimColor: true }, 'No active BMAD session')
