@@ -36,6 +36,7 @@
 
 generated: 2026-03-28
 last_updated: 2026-04-13
+# 10-1 dev completed 2026-04-13
 # 10-1 dev started 2026-04-13
 # 8-7 code review passed 2026-04-09
 # 8-7 dev completed 2026-04-09
@@ -174,5 +175,5 @@ development_status:
 
   # Epic 10: Context Window Percentage Widget
   epic-10: in-progress
-  10-1-context-window-percentage-widget: in-progress
+  10-1-context-window-percentage-widget: review
   epic-10-retrospective: optional
