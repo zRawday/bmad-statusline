@@ -1,6 +1,6 @@
 // widget-registry.js — Widget metadata and config builder
 
-import { WORKFLOW_COLORS, SEPARATOR_VALUES } from '../defaults.js';
+import { SEPARATOR_VALUES } from '../defaults.js';
 
 const INDIVIDUAL_WIDGETS = [
   { id: 'bmad-llmstate',    command: 'llmstate',    name: 'LLM State',     hint: 'LLM needs attention signal',           defaultEnabled: true,  defaultColor: null,         defaultMode: 'dynamic' },

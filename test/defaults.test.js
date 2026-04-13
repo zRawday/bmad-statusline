@@ -4,7 +4,6 @@ import {
   getStatusLineConfig,
   getWidgetDefinitions,
   getHookConfig,
-  AGENT_COLORS,
   WORKFLOW_COLORS
 } from '../src/defaults.js';
 
@@ -100,11 +99,6 @@ describe('src/defaults.js config templates', () => {
     assert.equal(result.hooks.SessionStart[0].matcher, 'resume');
     assert.equal(result.hooks.SessionStart[0].hooks[0].type, 'command');
     assert.ok(result.hooks.SessionStart[0].hooks[0].command.includes('/test/path/bmad-hook.js'));
-  });
-
-  it('AGENT_COLORS is an object', () => {
-    assert.equal(typeof AGENT_COLORS, 'object');
-    assert.ok(AGENT_COLORS !== null);
   });
 
   it('WORKFLOW_COLORS is an object', () => {

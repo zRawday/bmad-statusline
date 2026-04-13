@@ -13,7 +13,7 @@ const STALE_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes
 
 // --- Shared constants ---
 
-const { ALIVE_MAX_AGE_MS, PROJECT_COLOR_PALETTE, SEPARATOR_VALUES: READER_SEPARATORS, isValidSessionId, hashProjectColor, computeDisplayState: computeLlmDisplayState, formatTimer, formatStoryName } = require('./shared-constants.cjs');
+const { ALIVE_MAX_AGE_MS, SEPARATOR_VALUES: READER_SEPARATORS, isValidSessionId, hashProjectColor, computeDisplayState: computeLlmDisplayState, formatTimer, formatStoryName } = require('./shared-constants.cjs');
 
 // --- Color maps ---
 

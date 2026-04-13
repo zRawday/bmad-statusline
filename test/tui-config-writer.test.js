@@ -5,7 +5,6 @@ import path from 'node:path';
 import os from 'node:os';
 
 import {
-  readInternalConfig,
   writeInternalConfig,
   syncCcstatuslineIfNeeded,
   syncCcstatuslineFromScratch,
@@ -108,29 +107,6 @@ describe('config-writer v2', () => {
 
       const backupPath = internalConfigPath() + '.bak';
       assert.ok(!fs.existsSync(backupPath), 'no backup should exist for internal config writes');
-    });
-  });
-
-  // --- readInternalConfig ---
-
-  describe('readInternalConfig', () => {
-    it('reads and parses internal config', () => {
-      const config = makeConfig(['bmad-project']);
-      fs.writeFileSync(internalConfigPath(), JSON.stringify(config, null, 2) + '\n');
-
-      const result = readInternalConfig(makePaths());
-      assert.deepStrictEqual(result, config);
-    });
-
-    it('returns null when file does not exist', () => {
-      const result = readInternalConfig(makePaths());
-      assert.equal(result, null);
-    });
-
-    it('returns null on corrupted JSON', () => {
-      fs.writeFileSync(internalConfigPath(), '{bad json');
-      const result = readInternalConfig(makePaths());
-      assert.equal(result, null);
     });
   });
 

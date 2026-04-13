@@ -1,7 +1,6 @@
 // ReorderLinesScreen.js — Reorder the 3 statusline lines by swapping entire line contents
 
 import React, { useState, useMemo } from 'react';
-import { useInput } from 'ink';
 import { ScreenLayout } from '../components/ScreenLayout.js';
 import { ReorderList } from '../components/ReorderList.js';
 import { getIndividualWidgets } from '../widget-registry.js';
@@ -67,9 +66,6 @@ export function ReorderLinesScreen({ config, updateConfig, previewOverride, setP
   function handleModeChange(mode) {
     setShortcuts(mode === 'moving' ? MOVING_SHORTCUTS : NAVIGATE_SHORTCUTS);
   }
-
-  // Escape handled by ReorderList's onBack in navigate mode
-  useInput(() => {}, { isActive: false });
 
   return e(ScreenLayout, {
     screenName: 'Reorder Lines',

@@ -672,10 +672,6 @@ describe('color maps sync', () => {
   const _require = createRequire(import.meta.url);
   const shared = _require(WORKFLOW_COLORS_PATH);
 
-  it('AGENT_COLORS is removed from reader (AC #2, #13)', () => {
-    assert.ok(!readerSrc.includes('AGENT_COLORS'), 'AGENT_COLORS should not exist in reader');
-  });
-
   it('reader requires shared workflow-colors.cjs', () => {
     assert.ok(readerSrc.includes("require('./workflow-colors.cjs')"), 'reader should require shared file');
   });

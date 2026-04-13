@@ -4,7 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { getStatusLineConfig, getWidgetDefinitions, getHookConfig } from './defaults.js';
 import { createDefaultConfig } from './tui/widget-registry.js';
-import { G, R, C, D, B, _, logSuccess, logSkipped, logError, logSection, readJsonFile, backupFile, writeJsonSafe } from './cli-utils.js';
+import { G, R, D, B, _, logSuccess, logSkipped, logError, logSection, readJsonFile, backupFile, writeJsonSafe } from './cli-utils.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const readerSource = path.join(__dirname, 'reader', 'bmad-sl-reader.js');

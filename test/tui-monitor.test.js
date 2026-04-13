@@ -14,7 +14,7 @@ import {
   getCommandFamily, buildFileTree, renderTreeLines,
   groupSessionsByProject, computeDisplayState, worstState,
   resolveSessionColor, resolveProjectColor, formatElapsed,
-  MONITOR_STALE_MS, MONITOR_IDLE_WINDOW_MS,
+  MONITOR_IDLE_WINDOW_MS,
 } from '../src/tui/monitor/monitor-utils.js';
 import { MonitorScreen } from '../src/tui/monitor/MonitorScreen.js';
 import { renderBashSection } from '../src/tui/monitor/components/BashSection.js';
@@ -948,7 +948,7 @@ describe('pollSessions — stale session filtering', () => {
     const alivePath = path.join(tmpDir, '.alive-stale1');
     fs.writeFileSync(alivePath, '');
     // Set mtime to 3 minutes ago (stale alive)
-    const staleTime = new Date(Date.now() - MONITOR_STALE_MS - 60000);
+    const staleTime = new Date(Date.now() - 3 * 60 * 1000 - 60000);
     fs.utimesSync(alivePath, staleTime, staleTime);
     fs.writeFileSync(path.join(tmpDir, 'status-stale1.json'), JSON.stringify({
       skill: 'bmad-dev-story',
@@ -994,7 +994,7 @@ describe('pollSessions — stale session filtering', () => {
     const alivePath = path.join(tmpDir, '.alive-stale2');
     const statusPath = path.join(tmpDir, 'status-stale2.json');
     fs.writeFileSync(alivePath, '');
-    const staleTime = new Date(Date.now() - MONITOR_STALE_MS - 60000);
+    const staleTime = new Date(Date.now() - 3 * 60 * 1000 - 60000);
     fs.utimesSync(alivePath, staleTime, staleTime);
     fs.writeFileSync(statusPath, JSON.stringify({
       skill: 'bmad-dev-story',

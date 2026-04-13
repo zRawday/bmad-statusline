@@ -8,19 +8,6 @@ const CONFIG_DIR = process.env.BMAD_CONFIG_DIR || path.join(os.homedir(), '.conf
 const CONFIG_PATH = path.join(CONFIG_DIR, 'config.json');
 
 /**
- * Read internal config from disk.
- * Returns parsed config or null on any error.
- */
-export function readInternalConfig(paths = {}) {
-  const configPath = paths.internalConfig || CONFIG_PATH;
-  try {
-    return JSON.parse(fs.readFileSync(configPath, 'utf8'));
-  } catch {
-    return null;
-  }
-}
-
-/**
  * Write internal config to disk.
  * Pattern 14: no backup, no validate. Synchronous I/O (pattern 2).
  */
