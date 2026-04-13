@@ -27,7 +27,7 @@ const GRAB_SHORTCUTS = [
 ];
 
 function getColorOptions(widgetId) {
-  if (widgetId === 'bmad-llmstate') return [];
+  if (widgetId === 'bmad-llmstate' || widgetId === 'bmad-contextpct') return [];
   if (widgetId === 'bmad-workflow' || widgetId === 'bmad-project' || widgetId === 'bmad-activeskill') return ['dynamic', ...ANSI_COLORS];
   return ANSI_COLORS;
 }
@@ -160,7 +160,9 @@ export function EditLineScreen({ config, updateConfig, previewOverride, setPrevi
       updateConfig(cfg => {
         const ln = cfg.lines[editingLine];
         if (!ln.colorModes[widget.id]) {
-          ln.colorModes[widget.id] = { mode: 'fixed', fixedColor: 'magenta' };
+          ln.colorModes[widget.id] = widget.id === 'bmad-contextpct'
+            ? { mode: 'dynamic', thresholdLow: 0, thresholdHigh: 100, displayMode: 'full' }
+            : { mode: 'fixed', fixedColor: 'magenta' };
         }
         const cm = ln.colorModes[widget.id];
         cm.displayMode = cm.displayMode === 'compact' ? 'full' : 'compact';

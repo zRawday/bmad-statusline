@@ -315,11 +315,12 @@ const COMMANDS = {
     if (cw) {
       if (cw.used_percentage != null) {
         pct = cw.used_percentage;
-      } else if (cw.current_usage != null && cw.context_window_size) {
+      } else if (cw.current_usage != null && cw.context_window_size > 0) {
         pct = (cw.current_usage / cw.context_window_size) * 100;
       }
     }
-    if (pct == null) return '';
+    if (pct == null || typeof pct !== 'number' || !isFinite(pct)) return '';
+    if (pct < 0) pct = 0;
     const cm = lc && lc.colorModes && lc.colorModes['bmad-contextpct'];
     const low = cm && cm.thresholdLow != null ? cm.thresholdLow : 0;
     const high = cm && cm.thresholdHigh != null ? cm.thresholdHigh : 100;
@@ -401,7 +402,7 @@ function main() {
   } catch { /* silent — no config or unreadable */ }
 
   try {
-    const result = COMMANDS[command](status, lineConfig);
+    const result = COMMANDS[command](status, lineConfig, stdin);
     process.stdout.write(result || '');
   } catch {
     process.stdout.write('');

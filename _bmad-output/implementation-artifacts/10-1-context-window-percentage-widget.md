@@ -1,6 +1,6 @@
 # Story 10.1: Context Window Percentage Widget — Gradient Color Bar with Threshold Configuration
 
-Status: review
+Status: done
 
 ## Story
 
@@ -286,6 +286,14 @@ None — clean implementation, no debugging required.
 - `test/tui-preview-utils.test.js` — modified (update key count 11→12)
 - `test/fixtures/internal-config-default.json` — modified (add contextpct to widgetOrder + line 2)
 - `test/fixtures/internal-config-multiline.json` — modified (add contextpct to widgetOrder)
+
+### Review Findings
+
+- [x] [Review][Patch] Color cycling (←→) destroys threshold config — getColorOptions returns ANSI_COLORS for contextpct instead of [] like llmstate; cycling replaces entire colorModes entry, losing thresholdLow/thresholdHigh [src/tui/screens/EditLineScreen.js:29] ✅ fixed
+- [x] [Review][Patch] Standalone command doesn't pass stdin to contextpct extractor — main() calls COMMANDS[command](status, lineConfig) with only 2 args; contextpct always returns '' in standalone mode [src/reader/bmad-sl-reader.js:404] ✅ fixed
+- [x] [Review][Patch] `m` key creates wrong default for contextpct — fallback creates {mode:'fixed', fixedColor:'magenta'} instead of contextpct-appropriate {mode:'dynamic', thresholdLow:0, thresholdHigh:100, displayMode:'full'} [src/tui/screens/EditLineScreen.js:162] ✅ fixed
+- [x] [Review][Patch] Division by zero when context_window_size=0 — fallback computation yields Infinity, displays "Infinity%" [src/reader/bmad-sl-reader.js:319] ✅ fixed
+- [x] [Review][Patch] Negative/NaN percentage not guarded — NaN passes null check, displays "NaN%" with broken ANSI; negative values display "-5.0%" [src/reader/bmad-sl-reader.js:312-322] ✅ fixed
 
 ### Change Log
 
