@@ -31,20 +31,12 @@ This story adds a new `bmad-contextpct` widget that:
 
 ### AC2: Reader Extraction — Stdin Context Window Data
 
-**Given** the reader receives ccstatusline's JSON via stdin containing `context_window`
+**Given** the reader receives ccstatusline's full JSON via stdin (confirmed: ccstatusline pipes `context.data` including `context_window` to custom-command widgets via `execSync({ input: jsonInput })`)
 **When** the `contextpct` command runs in COMMANDS
 **Then** it reads `stdin.context_window.used_percentage` as primary source
 **And** falls back to computing `(current_usage / context_window_size) * 100` if `used_percentage` is absent but token fields exist
 **And** returns empty string if no context window data is available (silent — Pattern 1)
-
-**CRITICAL — Spike first:** Before implementing, log stdin content in a test run to confirm `context_window` is present. If ccstatusline does NOT pass context_window to custom commands, implement Fallback AC2b instead.
-
-### AC2b: Fallback — Hook Capture (only if AC2 spike fails)
-
-**Given** the reader stdin does NOT contain `context_window`
-**When** a hook event fires
-**Then** the hook checks `payload.context_window` and stores it in the status file
-**And** the reader reads `status.context_window_pct` from the cache file instead
+**And** no hook modification is needed — data comes entirely from ccstatusline stdin pass-through
 
 ### AC3: Full Display Mode — Progress Bar with Gradient Coloring
 
@@ -137,13 +129,6 @@ Bar chars 1-9 are filled (60% of 15 = 9), colored from brightGreen (position 0%)
 
 ## Tasks / Subtasks
 
-- [ ] Task 0: Spike — Confirm stdin contains context_window (AC: 2)
-  - [ ] 0.1 Add temporary `fs.writeFileSync('/tmp/bmad-stdin-debug.json', JSON.stringify(stdin))` at line ~230 of `bmad-sl-reader.js` inside `handleLineCommand()`, after `readStdin()`
-  - [ ] 0.2 Run Claude Code with bmad-statusline active, trigger a few events
-  - [ ] 0.3 Inspect the debug file — confirm `context_window.used_percentage` is present
-  - [ ] 0.4 Remove the debug line
-  - [ ] 0.5 If context_window is NOT in stdin: implement AC2b (hook fallback) — add `context_window_pct` field to status schema in hook at line ~870, extract from `payload.context_window` in a handler (e.g., Stop, PostToolUse), store in status file, read from status in reader
-
 - [ ] Task 1: Widget Registry + Default Config (AC: 1)
   - [ ] 1.1 In `src/tui/widget-registry.js` line 15 (before bmad-timer): add `{ id: 'bmad-contextpct', command: 'contextpct', name: 'Context %', hint: 'Context window usage', defaultEnabled: true, defaultColor: null, defaultMode: 'dynamic' }`
   - [ ] 1.2 In `createDefaultConfig()` (line 31+): add `bmad-contextpct` to Line 3 widgets, positioned before `bmad-timer` — colorModes entry: `{ mode: 'dynamic', thresholdLow: 0, thresholdHigh: 100, displayMode: 'full' }`
@@ -156,7 +141,7 @@ Bar chars 1-9 are filled (60% of 15 = 9), colored from brightGreen (position 0%)
   - [ ] 2.4 Bridge to ESM in `src/defaults.js` via the existing `_sc = _require('./reader/shared-constants.cjs')` pattern
 
 - [ ] Task 3: Reader COMMANDS.contextpct Extractor (AC: 2, 3, 4, 5, 9)
-  - [ ] 3.1 In `src/reader/bmad-sl-reader.js` COMMANDS object (line ~307): add `contextpct` extractor. Signature: `(s, lc, stdin)` — **note: stdin must be passed through** (see Task 3.5)
+  - [ ] 3.1 In `src/reader/bmad-sl-reader.js` COMMANDS object (line ~307): add `contextpct` extractor. Signature: `(s, lc, stdin)` — **note: stdin must be passed through** (see Task 3.6)
   - [ ] 3.2 Extract percentage: `stdin?.context_window?.used_percentage` ?? fallback computation ?? `null`. If null, return `''`
   - [ ] 3.3 Read config: `lc.colorModes?.['bmad-contextpct']` for thresholdLow (default 0), thresholdHigh (default 100), displayMode (default 'full')
   - [ ] 3.4 **Full mode**: Build 15-char bar. For each position i (0-14), compute its percentage on the 0-100 scale (`i * 100 / 14`). If filled (position < current percentage), colorize `█` with `getGradientColor(positionPct, low, high)`. If empty, colorize `░` with brightBlack. Append space + percentage text colored with `getGradientColor(currentPct, low, high)`. Format percentage as `X.X%` with `toFixed(1)`
@@ -202,8 +187,7 @@ Bar chars 1-9 are filled (60% of 15 = 9), colored from brightGreen (position 0%)
 
 ### Architecture Compliance
 
-- **Pattern 0** (Hook entry structure): Only touch hook if AC2 spike fails (AC2b fallback)
-- **Pattern 1** (Error handling triad): Reader returns `''` on missing data, never throws. TUI uses StatusMessage on error
+- **Pattern 1** (Error handling triad): Reader returns `''` on missing data, never throws. TUI uses StatusMessage on error. No hook modification needed
 - **Pattern 2** (Synchronous I/O): All file reads/writes via `fs.readFileSync`/`fs.writeFileSync`
 - **Pattern 3** (ANSI color wrapping): All reader coloring via `colorize()` helper, TUI via `<Text color={}>`. **New**: per-character colorize calls for the gradient bar
 - **Pattern 14** (Internal config writes): No backup, no validate for config.json
@@ -262,6 +246,7 @@ Bar chars 1-9 are filled (60% of 15 = 9), colored from brightGreen (position 0%)
 - [Source: src/tui/app.js:71-85 — navigate/goBack pattern]
 - [Source: src/tui/preview-utils.js:31-36 — getSampleValue with displayMode check]
 - [Source: ccstatusline getContextWindowMetrics() — Priority: used_percentage > token computation > transcript fallback]
+- [Spike: ccstatusline dist/ccstatusline.js:57124-57127 — `execSync(commandPath, { input: JSON.stringify(context.data) })` confirms full JSON piped to custom-command stdin]
 
 ## Dev Agent Record
 
