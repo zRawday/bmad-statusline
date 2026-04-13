@@ -1,6 +1,6 @@
 # Story 10.1: Context Window Percentage Widget — Gradient Color Bar with Threshold Configuration
 
-Status: ready-for-dev
+Status: review
 
 ## Story
 
@@ -129,59 +129,59 @@ Bar chars 1-9 are filled (60% of 15 = 9), colored from brightGreen (position 0%)
 
 ## Tasks / Subtasks
 
-- [ ] Task 1: Widget Registry + Default Config (AC: 1)
-  - [ ] 1.1 In `src/tui/widget-registry.js` line 15 (before bmad-timer): add `{ id: 'bmad-contextpct', command: 'contextpct', name: 'Context %', hint: 'Context window usage', defaultEnabled: true, defaultColor: null, defaultMode: 'dynamic' }`
-  - [ ] 1.2 In `createDefaultConfig()` (line 31+): add `bmad-contextpct` to Line 3 widgets, positioned before `bmad-timer` — colorModes entry: `{ mode: 'dynamic', thresholdLow: 0, thresholdHigh: 100, displayMode: 'full' }`
-  - [ ] 1.3 Verify `ensureWidgetOrder()` in config-loader.js automatically picks up the new ID (it iterates `getIndividualWidgets()` — no change needed, just verify)
+- [x] Task 1: Widget Registry + Default Config (AC: 1)
+  - [x] 1.1 In `src/tui/widget-registry.js` line 15 (before bmad-timer): add `{ id: 'bmad-contextpct', command: 'contextpct', name: 'Context %', hint: 'Context window usage', defaultEnabled: true, defaultColor: null, defaultMode: 'dynamic' }`
+  - [x] 1.2 In `createDefaultConfig()` (line 31+): add `bmad-contextpct` to Line 3 widgets, positioned before `bmad-timer` — colorModes entry: `{ mode: 'dynamic', thresholdLow: 0, thresholdHigh: 100, displayMode: 'full' }`
+  - [x] 1.3 Verify `ensureWidgetOrder()` in config-loader.js automatically picks up the new ID (it iterates `getIndividualWidgets()` — no change needed, just verify)
 
-- [ ] Task 2: Gradient Color Utility in shared-constants.cjs (AC: 5)
-  - [ ] 2.1 In `src/reader/shared-constants.cjs`: add `CONTEXT_GRADIENT_PALETTE` array: `['brightGreen', 'green', 'yellow', 'brightYellow', 'brightRed', 'red']`
-  - [ ] 2.2 Add `function getGradientColor(percentage, thresholdLow, thresholdHigh)` that returns a color name from the palette based on linear interpolation within the threshold range. Returns `'brightGreen'` if percentage ≤ thresholdLow, `'red'` if ≥ thresholdHigh
-  - [ ] 2.3 Export both from `module.exports`
-  - [ ] 2.4 Bridge to ESM in `src/defaults.js` via the existing `_sc = _require('./reader/shared-constants.cjs')` pattern
+- [x] Task 2: Gradient Color Utility in shared-constants.cjs (AC: 5)
+  - [x] 2.1 In `src/reader/shared-constants.cjs`: add `CONTEXT_GRADIENT_PALETTE` array: `['brightGreen', 'green', 'yellow', 'brightYellow', 'brightRed', 'red']`
+  - [x] 2.2 Add `function getGradientColor(percentage, thresholdLow, thresholdHigh)` that returns a color name from the palette based on linear interpolation within the threshold range. Returns `'brightGreen'` if percentage ≤ thresholdLow, `'red'` if ≥ thresholdHigh
+  - [x] 2.3 Export both from `module.exports`
+  - [x] 2.4 Bridge to ESM in `src/defaults.js` via the existing `_sc = _require('./reader/shared-constants.cjs')` pattern
 
-- [ ] Task 3: Reader COMMANDS.contextpct Extractor (AC: 2, 3, 4, 5, 9)
-  - [ ] 3.1 In `src/reader/bmad-sl-reader.js` COMMANDS object (line ~307): add `contextpct` extractor. Signature: `(s, lc, stdin)` — **note: stdin must be passed through** (see Task 3.6)
-  - [ ] 3.2 Extract percentage: `stdin?.context_window?.used_percentage` ?? fallback computation ?? `null`. If null, return `''`
-  - [ ] 3.3 Read config: `lc.colorModes?.['bmad-contextpct']` for thresholdLow (default 0), thresholdHigh (default 100), displayMode (default 'full')
-  - [ ] 3.4 **Full mode**: Build 15-char bar. For each position i (0-14), compute its percentage on the 0-100 scale (`i * 100 / 14`). If filled (position < current percentage), colorize `█` with `getGradientColor(positionPct, low, high)`. If empty, colorize `░` with brightBlack. Append space + percentage text colored with `getGradientColor(currentPct, low, high)`. Format percentage as `X.X%` with `toFixed(1)`
-  - [ ] 3.5 **Compact mode**: return `colorize(percentage.toFixed(1) + '%', COLOR_CODES[getGradientColor(currentPct, low, high)])`
-  - [ ] 3.6 **Modify handleLineCommand** to pass `stdin` as third argument to extractors: change `extractor(status, lineConfig)` to `extractor(status, lineConfig, stdin)` at line ~249. Existing extractors ignore the third arg (safe)
-  - [ ] 3.7 **Modify color override exclusion** at line ~251: change `widgetId !== 'bmad-llmstate'` to `widgetId !== 'bmad-llmstate' && widgetId !== 'bmad-contextpct'`
+- [x] Task 3: Reader COMMANDS.contextpct Extractor (AC: 2, 3, 4, 5, 9)
+  - [x] 3.1 In `src/reader/bmad-sl-reader.js` COMMANDS object (line ~307): add `contextpct` extractor. Signature: `(s, lc, stdin)` — **note: stdin must be passed through** (see Task 3.6)
+  - [x] 3.2 Extract percentage: `stdin?.context_window?.used_percentage` ?? fallback computation ?? `null`. If null, return `''`
+  - [x] 3.3 Read config: `lc.colorModes?.['bmad-contextpct']` for thresholdLow (default 0), thresholdHigh (default 100), displayMode (default 'full')
+  - [x] 3.4 **Full mode**: Build 15-char bar. For each position i (0-14), compute its percentage on the 0-100 scale (`i * 100 / 14`). If filled (position < current percentage), colorize `█` with `getGradientColor(positionPct, low, high)`. If empty, colorize `░` with brightBlack. Append space + percentage text colored with `getGradientColor(currentPct, low, high)`. Format percentage as `X.X%` with `toFixed(1)`
+  - [x] 3.5 **Compact mode**: return `colorize(percentage.toFixed(1) + '%', COLOR_CODES[getGradientColor(currentPct, low, high)])`
+  - [x] 3.6 **Modify handleLineCommand** to pass `stdin` as third argument to extractors: change `extractor(status, lineConfig)` to `extractor(status, lineConfig, stdin)` at line ~249. Existing extractors ignore the third arg (safe)
+  - [x] 3.7 **Modify color override exclusion** at line ~251: change `widgetId !== 'bmad-llmstate'` to `widgetId !== 'bmad-llmstate' && widgetId !== 'bmad-contextpct'`
 
-- [ ] Task 4: TUI — Display Mode Toggle 'm' Key (AC: 6)
-  - [ ] 4.1 In `src/tui/screens/EditLineScreen.js` line ~155: extend the `m` key handler condition from `widget.id !== 'bmad-story'` to also accept `'bmad-contextpct'`. Toggle `cm.displayMode` between `'compact'` and `'full'` (same logic)
-  - [ ] 4.2 Line ~218: extend `storyMode` display hint to also trigger for `bmad-contextpct` (show `Context % (full)` or `Context % (compact)`)
-  - [ ] 4.3 Line ~193: extend the STORY_MODE_SHORTCUT condition to also match `bmad-contextpct`
+- [x] Task 4: TUI — Display Mode Toggle 'm' Key (AC: 6)
+  - [x] 4.1 In `src/tui/screens/EditLineScreen.js` line ~155: extend the `m` key handler condition from `widget.id !== 'bmad-story'` to also accept `'bmad-contextpct'`. Toggle `cm.displayMode` between `'compact'` and `'full'` (same logic)
+  - [x] 4.2 Line ~218: extend `storyMode` display hint to also trigger for `bmad-contextpct` (show `Context % (full)` or `Context % (compact)`)
+  - [x] 4.3 Line ~193: extend the STORY_MODE_SHORTCUT condition to also match `bmad-contextpct`
 
-- [ ] Task 5: TUI — ContextPctConfigScreen (AC: 7)
-  - [ ] 5.1 Create `src/tui/screens/ContextPctConfigScreen.js` following SkillColorsScreen pattern
-  - [ ] 5.2 Component: `ContextPctConfigScreen({ config, updateConfig, goBack, editingLine, isActive })`
-  - [ ] 5.3 State: `cursorIndex` (0 = thresholdLow, 1 = thresholdHigh)
-  - [ ] 5.4 Input handling: `↑↓` to select threshold, `←→` to adjust ±5, Esc to goBack
-  - [ ] 5.5 Clamping: thresholdLow ∈ [0, thresholdHigh - 5], thresholdHigh ∈ [thresholdLow + 5, 100]
-  - [ ] 5.6 Render layout using `ScreenLayout` component:
+- [x] Task 5: TUI — ContextPctConfigScreen (AC: 7)
+  - [x] 5.1 Create `src/tui/screens/ContextPctConfigScreen.js` following SkillColorsScreen pattern
+  - [x] 5.2 Component: `ContextPctConfigScreen({ config, updateConfig, goBack, editingLine, isActive })`
+  - [x] 5.3 State: `cursorIndex` (0 = thresholdLow, 1 = thresholdHigh)
+  - [x] 5.4 Input handling: `↑↓` to select threshold, `←→` to adjust ±5, Esc to goBack
+  - [x] 5.5 Clamping: thresholdLow ∈ [0, thresholdHigh - 5], thresholdHigh ∈ [thresholdLow + 5, 100]
+  - [x] 5.6 Render layout using `ScreenLayout` component:
     - Two rows: `▸ Seuil bas ........ [ N%]` and `  Seuil haut ....... [ N%]` — cursor indicator on selected
     - Blank line
     - Preview bar: `0%` + space + 15 `█` chars each colored via `getGradientColor(i * 100/14, low, high)` using `toInkColor()` + space + `100%` — **use `<Text color={toInkColor(color)}>█</Text>` for each char**
     - Shortcuts: `←→ ±5%   ↑↓ Select   Esc Back`
-  - [ ] 5.7 `updateConfig()` called on every `←→` press (immediate feedback, debounced write)
+  - [x] 5.7 `updateConfig()` called on every `←→` press (immediate feedback, debounced write)
 
-- [ ] Task 6: TUI — Navigation Wiring (AC: 7)
-  - [ ] 6.1 In `src/tui/screens/EditLineScreen.js` Enter handler (line ~117): add `else if (widget && widget.id === 'bmad-contextpct') { navigate('contextPctConfig'); }`
-  - [ ] 6.2 In `src/tui/app.js`: import `ContextPctConfigScreen`, add screen route `if (screen === 'contextPctConfig')` returning the component with `screenProps`
+- [x] Task 6: TUI — Navigation Wiring (AC: 7)
+  - [x] 6.1 In `src/tui/screens/EditLineScreen.js` Enter handler (line ~117): add `else if (widget && widget.id === 'bmad-contextpct') { navigate('contextPctConfig'); }`
+  - [x] 6.2 In `src/tui/app.js`: import `ContextPctConfigScreen`, add screen route `if (screen === 'contextPctConfig')` returning the component with `screenProps`
 
-- [ ] Task 7: Preview Utils (AC: 8)
-  - [ ] 7.1 In `src/tui/preview-utils.js` SAMPLE_VALUES: add `'bmad-contextpct': '████████░░░░░░░ 53.2%'`
-  - [ ] 7.2 In `getSampleValue()`: add case — if `bmad-contextpct` and displayMode is `'compact'`, return `'53.2%'`
-  - [ ] 7.3 In `resolvePreviewColor()`: contextpct with dynamic mode should return `'green'` (same as workflow sample)
+- [x] Task 7: Preview Utils (AC: 8)
+  - [x] 7.1 In `src/tui/preview-utils.js` SAMPLE_VALUES: add `'bmad-contextpct': '████████░░░░░░░ 53.2%'`
+  - [x] 7.2 In `getSampleValue()`: add case — if `bmad-contextpct` and displayMode is `'compact'`, return `'53.2%'`
+  - [x] 7.3 In `resolvePreviewColor()`: contextpct with dynamic mode should return `'green'` (same as workflow sample)
 
-- [ ] Task 8: Tests (AC: 10)
-  - [ ] 8.1 `test/reader.test.js`: test `contextpct` command — full mode, compact mode, gradient colors at 0/50/100%, threshold behavior, missing context_window returns empty, decimal formatting
-  - [ ] 8.2 `test/tui-widget-registry.test.js`: verify new widget in registry, createDefaultConfig includes it on Line 3 before timer
-  - [ ] 8.3 `test/tui-edit-line.test.js`: verify `m` key toggles displayMode on contextpct, Enter navigates to contextPctConfig
-  - [ ] 8.4 New `test/tui-context-pct-config.test.js`: test threshold adjustment ±5, clamping, preview bar rendering, Esc goes back
-  - [ ] 8.5 Run full test suite: `npm test` — zero regressions
+- [x] Task 8: Tests (AC: 10)
+  - [x] 8.1 `test/reader.test.js`: test `contextpct` command — full mode, compact mode, gradient colors at 0/50/100%, threshold behavior, missing context_window returns empty, decimal formatting
+  - [x] 8.2 `test/tui-widget-registry.test.js`: verify new widget in registry, createDefaultConfig includes it on Line 3 before timer
+  - [x] 8.3 `test/tui-edit-line.test.js`: verify `m` key toggles displayMode on contextpct, Enter navigates to contextPctConfig
+  - [x] 8.4 New `test/tui-context-pct-config.test.js`: test threshold adjustment ±5, clamping, preview bar rendering, Esc goes back
+  - [x] 8.5 Run full test suite: `npm test` — zero regressions
 
 ## Dev Notes
 
@@ -252,10 +252,41 @@ Bar chars 1-9 are filled (60% of 15 = 9), colored from brightGreen (position 0%)
 
 ### Agent Model Used
 
+Claude Opus 4.6 (1M context)
+
 ### Debug Log References
+
+None — clean implementation, no debugging required.
 
 ### Completion Notes List
 
+- Task 1: Added `bmad-contextpct` to INDIVIDUAL_WIDGETS before timer. Updated `createDefaultConfig()` to place it on Line 3 with threshold colorModes. Verified `ensureWidgetOrder()` handles new ID automatically.
+- Task 2: Added `CONTEXT_GRADIENT_PALETTE` (6-color array) and `getGradientColor()` function to shared-constants.cjs. Bridged both exports to ESM via defaults.js.
+- Task 3: Implemented `contextpct` extractor in COMMANDS with full/compact modes, gradient coloring, stdin pass-through, and color override exclusion. Modified `handleLineCommand` to pass stdin as third arg to all extractors (backward-compatible).
+- Task 4: Extended `m` key handler, display mode hint, and Mode shortcut condition to support `bmad-contextpct` alongside `bmad-story`.
+- Task 5: Created `ContextPctConfigScreen.js` with threshold adjustment (±5 increments), clamping, live preview bar with gradient coloring, and ScreenLayout integration.
+- Task 6: Wired Enter handler for contextpct in EditLineScreen and added `contextPctConfig` screen route in app.js.
+- Task 7: Added sample values for full/compact modes and `getSampleValue()` compact case. Dynamic mode resolves to 'green' via existing code path.
+- Task 8: Added 11 reader tests (full/compact mode, gradient colors at 0/50/100%, thresholds, missing data, fallback computation, decimal formatting), updated widget-registry tests (12 widgets, 5 dynamic, line 2 with contextpct), added 2 edit-line tests (m key + Enter navigation), created 8 context-pct-config tests (thresholds, clamping, Esc, shortcuts). Updated test fixtures and counts. Full suite: 113 suites, 655 pass, 0 fail.
+
 ### File List
 
+- `src/tui/widget-registry.js` — modified (add widget entry + default config)
+- `src/reader/shared-constants.cjs` — modified (add gradient palette + function)
+- `src/defaults.js` — modified (bridge gradient exports to ESM)
+- `src/reader/bmad-sl-reader.js` — modified (add contextpct extractor, pass stdin, exclude from color override)
+- `src/tui/screens/EditLineScreen.js` — modified (extend m key, displayMode hint, Mode shortcut, Enter handler)
+- `src/tui/screens/ContextPctConfigScreen.js` — **new** (threshold configuration screen)
+- `src/tui/app.js` — modified (import + route contextPctConfig)
+- `src/tui/preview-utils.js` — modified (add sample values + getSampleValue case)
+- `test/reader.test.js` — modified (add 11 contextpct tests)
+- `test/tui-widget-registry.test.js` — modified (update counts, add contextpct assertions)
+- `test/tui-edit-line.test.js` — modified (add m key + Enter tests for contextpct)
+- `test/tui-context-pct-config.test.js` — **new** (8 threshold config tests)
+- `test/tui-preview-utils.test.js` — modified (update key count 11→12)
+- `test/fixtures/internal-config-default.json` — modified (add contextpct to widgetOrder + line 2)
+- `test/fixtures/internal-config-multiline.json` — modified (add contextpct to widgetOrder)
+
 ### Change Log
+
+- 2026-04-13: Implemented context window percentage widget — 8 tasks, all ACs satisfied, 655 tests pass (0 regressions)

@@ -13,6 +13,7 @@ const INDIVIDUAL_WIDGETS = [
   { id: 'bmad-nextstep',     command: 'nextstep',     name: 'Next Step',     hint: 'Skills with BMAD /step format only',   defaultEnabled: false, defaultColor: 'yellow',     defaultMode: 'fixed' },
   { id: 'bmad-fileread',     command: 'fileread',     name: 'File Read',     hint: 'Last file read by LLM',                  defaultEnabled: false, defaultColor: 'cyan',        defaultMode: 'fixed' },
   { id: 'bmad-filewrite',    command: 'filewrite',    name: 'File Edit/Write', hint: 'Last file written or edited',          defaultEnabled: false, defaultColor: 'brightRed',   defaultMode: 'fixed' },
+  { id: 'bmad-contextpct',   command: 'contextpct',   name: 'Context %',     hint: 'Context window usage',                    defaultEnabled: true,  defaultColor: null,          defaultMode: 'dynamic' },
   { id: 'bmad-timer',        command: 'timer',        name: 'Timer',         hint: 'Refreshes only while LLM is active',     defaultEnabled: true,  defaultColor: 'brightBlack', defaultMode: 'fixed' },
 ];
 
@@ -31,7 +32,7 @@ export function getIndividualWidgets() {
 export function createDefaultConfig() {
   const allIds = INDIVIDUAL_WIDGETS.map(w => w.id);
   const widgets = INDIVIDUAL_WIDGETS.filter(w => w.defaultEnabled);
-  const widgetsLine1 = widgets.filter(w => w.id !== 'bmad-llmstate');
+  const widgetsLine1 = widgets.filter(w => w.id !== 'bmad-llmstate' && w.id !== 'bmad-contextpct');
   const colorModes = {};
   for (const w of widgets) {
     colorModes[w.id] = w.defaultMode === 'dynamic'
@@ -40,13 +41,14 @@ export function createDefaultConfig() {
   }
   const colorModesLine1 = { ...colorModes };
   delete colorModesLine1['bmad-llmstate'];
+  delete colorModesLine1['bmad-contextpct'];
   return {
     separator: 'modere',
     customSeparator: null,
     lines: [
       { widgets: widgetsLine1.map(w => w.id), widgetOrder: [...allIds], colorModes: colorModesLine1 },
       { widgets: ['bmad-llmstate'], widgetOrder: [...allIds], colorModes: { 'bmad-llmstate': { mode: 'dynamic' } } },
-      { widgets: [], widgetOrder: [...allIds], colorModes: {} },
+      { widgets: ['bmad-contextpct'], widgetOrder: [...allIds], colorModes: { 'bmad-contextpct': { mode: 'dynamic', thresholdLow: 0, thresholdHigh: 100, displayMode: 'full' } } },
     ],
     skillColors: {},
     projectColors: {},

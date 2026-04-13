@@ -16,6 +16,7 @@ export const SAMPLE_VALUES = {
   'bmad-timer': '12m34s',
   'bmad-fileread': 'read src/hook/bmad-hook.js',
   'bmad-filewrite': 'edit _bmad-output/prd.md',
+  'bmad-contextpct': '\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2591\u2591\u2591\u2591\u2591\u2591\u2591 53.2%',
 };
 
 export const SEPARATOR_MAP = SEPARATOR_VALUES;
@@ -31,6 +32,9 @@ export function toInkColor(name) {
 export function getSampleValue(widgetId, colorModes) {
   if (widgetId === 'bmad-story' && colorModes && colorModes[widgetId]?.displayMode === 'compact') {
     return '4-2';
+  }
+  if (widgetId === 'bmad-contextpct' && colorModes && colorModes[widgetId]?.displayMode === 'compact') {
+    return '53.2%';
   }
   return SAMPLE_VALUES[widgetId];
 }

@@ -81,3 +81,5 @@ export const computeDisplayState = _sc.computeDisplayState;
 export const formatTimer = _sc.formatTimer;
 export const formatStoryName = _sc.formatStoryName;
 export const LLM_STATE_PRIORITY = _sc.LLM_STATE_PRIORITY;
+export const CONTEXT_GRADIENT_PALETTE = _sc.CONTEXT_GRADIENT_PALETTE;
+export const getGradientColor = _sc.getGradientColor;

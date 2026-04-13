@@ -13,6 +13,7 @@ import { PresetLoadScreen } from './screens/PresetLoadScreen.js';
 import { ReorderLinesScreen } from './screens/ReorderLinesScreen.js';
 import { SkillColorsScreen } from './screens/SkillColorsScreen.js';
 import { ProjectColorsScreen } from './screens/ProjectColorsScreen.js';
+import { ContextPctConfigScreen } from './screens/ContextPctConfigScreen.js';
 import { MonitorScreen } from './monitor/MonitorScreen.js';
 import { registerPid, unregisterPid, setupSignalHandlers, startTtyWatch, stopTtyWatch } from './tui-lifecycle.js';
 import { ALIVE_MAX_AGE_MS } from '../defaults.js';
@@ -145,6 +146,10 @@ export function App({ paths }) {
 
   if (screen === 'projectColors') {
     return e(ProjectColorsScreen, { ...screenProps });
+  }
+
+  if (screen === 'contextPctConfig') {
+    return e(ContextPctConfigScreen, { ...screenProps });
   }
 
   if (screen === 'monitor') {

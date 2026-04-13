@@ -120,6 +120,8 @@ export function EditLineScreen({ config, updateConfig, previewOverride, setPrevi
         navigate('skillColors');
       } else if (widget && widget.id === 'bmad-project') {
         navigate('projectColors');
+      } else if (widget && widget.id === 'bmad-contextpct') {
+        navigate('contextPctConfig');
       }
     } else if (key.escape) {
       goBack();
@@ -153,7 +155,7 @@ export function EditLineScreen({ config, updateConfig, previewOverride, setPrevi
       setGrabMode(true);
     } else if (input === 'm') {
       const widget = widgetList[cursorIndex];
-      if (!widget || widget.id !== 'bmad-story') return;
+      if (!widget || (widget.id !== 'bmad-story' && widget.id !== 'bmad-contextpct')) return;
       if (!line.widgets.includes(widget.id)) return;
       updateConfig(cfg => {
         const ln = cfg.lines[editingLine];
@@ -191,7 +193,7 @@ export function EditLineScreen({ config, updateConfig, previewOverride, setPrevi
     config,
     previewOverride,
     shortcuts: grabMode ? GRAB_SHORTCUTS
-      : widgetList[cursorIndex]?.id === 'bmad-story'
+      : (widgetList[cursorIndex]?.id === 'bmad-story' || widgetList[cursorIndex]?.id === 'bmad-contextpct')
         ? [...BASE_NAVIGATE_SHORTCUTS.slice(0, 4), STORY_MODE_SHORTCUT, ...BASE_NAVIGATE_SHORTCUTS.slice(4)]
         : BASE_NAVIGATE_SHORTCUTS,
   },
@@ -215,7 +217,7 @@ export function EditLineScreen({ config, updateConfig, previewOverride, setPrevi
         }
 
         // Display mode hint for story widget — shown in name column
-        const storyMode = isVisible && widget.id === 'bmad-story'
+        const storyMode = isVisible && (widget.id === 'bmad-story' || widget.id === 'bmad-contextpct')
           ? (line.colorModes[widget.id]?.displayMode || 'full')
           : null;
         const displayName = storyMode ? `${widget.name} (${storyMode})` : widget.name;

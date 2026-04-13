@@ -8,9 +8,9 @@ import {
 } from '../src/tui/widget-registry.js';
 
 describe('widget-registry', () => {
-  it('getIndividualWidgets returns all 11 individual widgets', () => {
+  it('getIndividualWidgets returns all 12 individual widgets', () => {
     const widgets = getIndividualWidgets();
-    assert.equal(widgets.length, 11);
+    assert.equal(widgets.length, 12);
     for (const w of widgets) {
       assert.ok(w.id.startsWith('bmad-'), `widget id ${w.id} should start with bmad-`);
       assert.ok(w.command, `widget ${w.id} should have a command`);
@@ -60,6 +60,7 @@ describe('widget-registry', () => {
       'bmad-nextstep': 'yellow',
       'bmad-timer': 'brightBlack',
       'bmad-fileread': 'cyan',
+      'bmad-contextpct': null,
       'bmad-filewrite': 'brightRed',
     };
     for (const w of widgets) {
@@ -70,7 +71,7 @@ describe('widget-registry', () => {
   it('widget defaultMode values match specification', () => {
     const widgets = getIndividualWidgets();
     for (const w of widgets) {
-      if (w.id === 'bmad-llmstate' || w.id === 'bmad-workflow' || w.id === 'bmad-project' || w.id === 'bmad-activeskill') {
+      if (w.id === 'bmad-llmstate' || w.id === 'bmad-workflow' || w.id === 'bmad-project' || w.id === 'bmad-activeskill' || w.id === 'bmad-contextpct') {
         assert.equal(w.defaultMode, 'dynamic', `${w.id} is dynamic`);
       } else {
         assert.equal(w.defaultMode, 'fixed', `${w.id} is fixed`);
@@ -78,12 +79,12 @@ describe('widget-registry', () => {
     }
   });
 
-  it('dynamic defaultMode widgets are llmstate, workflow, project and activeskill', () => {
+  it('dynamic defaultMode widgets are llmstate, workflow, project, activeskill and contextpct', () => {
     const widgets = getIndividualWidgets();
     const dynamicWidgets = widgets.filter(w => w.defaultMode === 'dynamic');
-    assert.equal(dynamicWidgets.length, 4);
+    assert.equal(dynamicWidgets.length, 5);
     const ids = dynamicWidgets.map(w => w.id).sort();
-    assert.deepStrictEqual(ids, ['bmad-activeskill', 'bmad-llmstate', 'bmad-project', 'bmad-workflow']);
+    assert.deepStrictEqual(ids, ['bmad-activeskill', 'bmad-contextpct', 'bmad-llmstate', 'bmad-project', 'bmad-workflow']);
   });
 });
 
@@ -116,14 +117,24 @@ describe('createDefaultConfig', () => {
     assert.deepStrictEqual(cm['bmad-timer'], { mode: 'fixed', fixedColor: 'brightBlack' });
   });
 
-  it('line 1 has llmstate, line 2 is empty by default', () => {
+  it('line 1 has llmstate, line 2 has contextpct by default', () => {
     const config = createDefaultConfig();
     assert.deepStrictEqual(config.lines[1].widgets, ['bmad-llmstate']);
-    assert.deepStrictEqual(config.lines[2].widgets, []);
+    assert.deepStrictEqual(config.lines[2].widgets, ['bmad-contextpct']);
     assert.deepStrictEqual(config.lines[1].colorModes, { 'bmad-llmstate': { mode: 'dynamic' } });
-    assert.deepStrictEqual(config.lines[2].colorModes, {});
-    assert.equal(config.lines[1].widgetOrder.length, 11);
-    assert.equal(config.lines[2].widgetOrder.length, 11);
+    assert.deepStrictEqual(config.lines[2].colorModes, {
+      'bmad-contextpct': { mode: 'dynamic', thresholdLow: 0, thresholdHigh: 100, displayMode: 'full' },
+    });
+    assert.equal(config.lines[1].widgetOrder.length, 12);
+    assert.equal(config.lines[2].widgetOrder.length, 12);
+  });
+
+  it('bmad-contextpct appears in registry before bmad-timer', () => {
+    const widgets = getIndividualWidgets();
+    const contextIdx = widgets.findIndex(w => w.id === 'bmad-contextpct');
+    const timerIdx = widgets.findIndex(w => w.id === 'bmad-timer');
+    assert.ok(contextIdx >= 0, 'contextpct exists in registry');
+    assert.ok(contextIdx < timerIdx, 'contextpct should be before timer');
   });
 
   it('returns a new object on each call (not shared reference)', () => {

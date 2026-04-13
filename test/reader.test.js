@@ -426,6 +426,90 @@ describe('reader color output', () => {
     assert.equal(result, '');
   });
 
+  // --- Context percentage widget (AC: contextpct) — direct import ---
+
+  it('contextpct full mode returns bar + percentage with gradient colors', () => {
+    const lc = { colorModes: { 'bmad-contextpct': { mode: 'dynamic', thresholdLow: 0, thresholdHigh: 100, displayMode: 'full' } } };
+    const stdin = { context_window: { used_percentage: 60 } };
+    const result = reader.COMMANDS.contextpct({}, lc, stdin);
+    const plain = result.replace(/\x1b\[[0-9;]*m/g, '');
+    assert.ok(plain.includes('60.0%'), 'should contain formatted percentage');
+    // Full mode should have 15-char bar (█ and ░)
+    const barChars = plain.replace(/ .*$/, '');
+    assert.equal(barChars.length, 15, 'bar should be 15 characters');
+  });
+
+  it('contextpct compact mode returns percentage only', () => {
+    const lc = { colorModes: { 'bmad-contextpct': { mode: 'dynamic', thresholdLow: 0, thresholdHigh: 100, displayMode: 'compact' } } };
+    const stdin = { context_window: { used_percentage: 42.3 } };
+    const result = reader.COMMANDS.contextpct({}, lc, stdin);
+    const plain = result.replace(/\x1b\[[0-9;]*m/g, '');
+    assert.equal(plain, '42.3%');
+  });
+
+  it('contextpct at 0% returns brightGreen color', () => {
+    const lc = { colorModes: { 'bmad-contextpct': { mode: 'dynamic', thresholdLow: 0, thresholdHigh: 100, displayMode: 'compact' } } };
+    const stdin = { context_window: { used_percentage: 0 } };
+    const result = reader.COMMANDS.contextpct({}, lc, stdin);
+    assert.ok(result.includes(`${ESC}92m`), 'should use brightGreen at 0%');
+  });
+
+  it('contextpct at 100% returns red color', () => {
+    const lc = { colorModes: { 'bmad-contextpct': { mode: 'dynamic', thresholdLow: 0, thresholdHigh: 100, displayMode: 'compact' } } };
+    const stdin = { context_window: { used_percentage: 100 } };
+    const result = reader.COMMANDS.contextpct({}, lc, stdin);
+    assert.ok(result.includes(`${ESC}31m`), 'should use red at 100%');
+  });
+
+  it('contextpct at 50% returns yellow/middle gradient color', () => {
+    const lc = { colorModes: { 'bmad-contextpct': { mode: 'dynamic', thresholdLow: 0, thresholdHigh: 100, displayMode: 'compact' } } };
+    const stdin = { context_window: { used_percentage: 50 } };
+    const result = reader.COMMANDS.contextpct({}, lc, stdin);
+    assert.ok(result.includes(`${ESC}33m`), 'should use yellow at 50%');
+  });
+
+  it('contextpct returns empty string when no context_window data', () => {
+    const lc = { colorModes: {} };
+    const result = reader.COMMANDS.contextpct({}, lc, {});
+    assert.equal(result, '');
+  });
+
+  it('contextpct returns empty string when stdin is null', () => {
+    const lc = { colorModes: {} };
+    const result = reader.COMMANDS.contextpct({}, lc, null);
+    assert.equal(result, '');
+  });
+
+  it('contextpct fallback computation when used_percentage absent but tokens available', () => {
+    const lc = { colorModes: { 'bmad-contextpct': { mode: 'dynamic', thresholdLow: 0, thresholdHigh: 100, displayMode: 'compact' } } };
+    const stdin = { context_window: { current_usage: 50000, context_window_size: 100000 } };
+    const result = reader.COMMANDS.contextpct({}, lc, stdin);
+    const plain = result.replace(/\x1b\[[0-9;]*m/g, '');
+    assert.equal(plain, '50.0%');
+  });
+
+  it('contextpct threshold behavior — below thresholdLow is brightGreen', () => {
+    const lc = { colorModes: { 'bmad-contextpct': { mode: 'dynamic', thresholdLow: 30, thresholdHigh: 80, displayMode: 'compact' } } };
+    const stdin = { context_window: { used_percentage: 20 } };
+    const result = reader.COMMANDS.contextpct({}, lc, stdin);
+    assert.ok(result.includes(`${ESC}92m`), 'should use brightGreen below thresholdLow');
+  });
+
+  it('contextpct threshold behavior — above thresholdHigh is red', () => {
+    const lc = { colorModes: { 'bmad-contextpct': { mode: 'dynamic', thresholdLow: 30, thresholdHigh: 80, displayMode: 'compact' } } };
+    const stdin = { context_window: { used_percentage: 90 } };
+    const result = reader.COMMANDS.contextpct({}, lc, stdin);
+    assert.ok(result.includes(`${ESC}31m`), 'should use red above thresholdHigh');
+  });
+
+  it('contextpct decimal formatting with toFixed(1)', () => {
+    const lc = { colorModes: { 'bmad-contextpct': { mode: 'dynamic', thresholdLow: 0, thresholdHigh: 100, displayMode: 'compact' } } };
+    const stdin = { context_window: { used_percentage: 33.333 } };
+    const result = reader.COMMANDS.contextpct({}, lc, stdin);
+    const plain = result.replace(/\x1b\[[0-9;]*m/g, '');
+    assert.equal(plain, '33.3%');
+  });
+
   // --- getStoryOrRequest returns story only (AC #11) — direct import ---
 
   it('getStoryOrRequest returns story, ignores missing request (AC #11)', () => {

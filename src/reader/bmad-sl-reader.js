@@ -13,7 +13,7 @@ const STALE_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes
 
 // --- Shared constants ---
 
-const { ALIVE_MAX_AGE_MS, SEPARATOR_VALUES: READER_SEPARATORS, isValidSessionId, hashProjectColor, computeDisplayState: computeLlmDisplayState, formatTimer, formatStoryName } = require('./shared-constants.cjs');
+const { ALIVE_MAX_AGE_MS, SEPARATOR_VALUES: READER_SEPARATORS, isValidSessionId, hashProjectColor, computeDisplayState: computeLlmDisplayState, formatTimer, formatStoryName, getGradientColor } = require('./shared-constants.cjs');
 
 // --- Color maps ---
 
@@ -245,10 +245,10 @@ function handleLineCommand(lineIndex) {
     const extractor = COMMANDS[cmd];
     if (!extractor) continue;
     try {
-      let value = extractor(status, lineConfig);
+      let value = extractor(status, lineConfig, stdin);
       if (!value) continue;
       const colorMode = lineConfig.colorModes[widgetId];
-      if (widgetId !== 'bmad-llmstate' && colorMode && colorMode.mode === 'fixed' && colorMode.fixedColor) {
+      if (widgetId !== 'bmad-llmstate' && widgetId !== 'bmad-contextpct' && colorMode && colorMode.mode === 'fixed' && colorMode.fixedColor) {
         const code = COLOR_CODES[colorMode.fixedColor];
         if (widgetId === 'bmad-fileread' || widgetId === 'bmad-filewrite') {
           const plain = stripAnsi(value);
@@ -309,6 +309,36 @@ const COMMANDS = {
   timer:        (s) => formatTimer(s.started_at),
   fileread:     (s) => s.last_read ? `read ${s.last_read}` : '',
   filewrite:    (s) => s.last_write ? `${s.last_write_op || 'write'} ${s.last_write}` : '',
+  contextpct:   (s, lc, stdin) => {
+    const cw = stdin && stdin.context_window;
+    let pct = null;
+    if (cw) {
+      if (cw.used_percentage != null) {
+        pct = cw.used_percentage;
+      } else if (cw.current_usage != null && cw.context_window_size) {
+        pct = (cw.current_usage / cw.context_window_size) * 100;
+      }
+    }
+    if (pct == null) return '';
+    const cm = lc && lc.colorModes && lc.colorModes['bmad-contextpct'];
+    const low = cm && cm.thresholdLow != null ? cm.thresholdLow : 0;
+    const high = cm && cm.thresholdHigh != null ? cm.thresholdHigh : 100;
+    const displayMode = cm && cm.displayMode || 'full';
+    if (displayMode === 'compact') {
+      return colorize(pct.toFixed(1) + '%', COLOR_CODES[getGradientColor(pct, low, high)]);
+    }
+    const filled = Math.min(Math.max(Math.round(pct * 15 / 100), 0), 15);
+    let bar = '';
+    for (let i = 0; i < 15; i++) {
+      if (i < filled) {
+        const posPct = i * 100 / 14;
+        bar += colorize('\u2588', COLOR_CODES[getGradientColor(posPct, low, high)]);
+      } else {
+        bar += colorize('\u2591', COLOR_CODES.brightBlack);
+      }
+    }
+    return bar + ' ' + colorize(pct.toFixed(1) + '%', COLOR_CODES[getGradientColor(pct, low, high)]);
+  },
   health:       (s) => {
     const updatedAt = s.updated_at;
     if (!updatedAt) return colorize('\u25CB', COLOR_CODES.brightBlack);

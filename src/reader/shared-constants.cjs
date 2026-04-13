@@ -65,6 +65,18 @@ function formatStoryName(slug, displayMode) {
   return `${match[1]} ${title}`;
 }
 
+const CONTEXT_GRADIENT_PALETTE = ['brightGreen', 'green', 'yellow', 'brightYellow', 'brightRed', 'red'];
+
+function getGradientColor(percentage, thresholdLow, thresholdHigh) {
+  if (percentage <= thresholdLow) return 'brightGreen';
+  if (percentage >= thresholdHigh) return 'red';
+  const range = thresholdHigh - thresholdLow;
+  if (range <= 0) return 'brightGreen';
+  const normalized = (percentage - thresholdLow) / range;
+  const segmentIndex = Math.min(Math.floor(normalized * 5), 4);
+  return CONTEXT_GRADIENT_PALETTE[segmentIndex];
+}
+
 module.exports = {
   ALIVE_MAX_AGE_MS,
   STORY_WORKFLOWS,
@@ -76,4 +88,6 @@ module.exports = {
   computeDisplayState,
   formatTimer,
   formatStoryName,
+  CONTEXT_GRADIENT_PALETTE,
+  getGradientColor,
 };

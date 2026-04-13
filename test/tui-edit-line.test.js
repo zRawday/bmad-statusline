@@ -212,6 +212,51 @@ describe('EditLineScreen', () => {
     unmount();
   });
 
+  test('m key toggles displayMode on contextpct widget', async () => {
+    let updatedCfg = null;
+    const config = createDefaultConfig();
+    const props = makeScreenProps({
+      config,
+      editingLine: 2,
+      updateConfig: (mutator) => {
+        const cfg = structuredClone(config);
+        mutator(cfg);
+        updatedCfg = cfg;
+      },
+    });
+    const { stdin, unmount } = render(e(EditLineScreen, props));
+    // Navigate to bmad-contextpct on line 2 — it's in widgetOrder so find its index
+    const allWidgets = getIndividualWidgets();
+    const order = config.lines[2].widgetOrder;
+    const ctxIdx = order.indexOf('bmad-contextpct');
+    for (let i = 0; i < ctxIdx; i++) {
+      await act(async () => { stdin.write('\x1B[B'); });
+    }
+    await act(async () => { stdin.write('m'); });
+    assert.ok(updatedCfg, 'updateConfig was called');
+    assert.equal(updatedCfg.lines[2].colorModes['bmad-contextpct'].displayMode, 'compact', 'should toggle to compact');
+    unmount();
+  });
+
+  test('Enter on contextpct navigates to contextPctConfig', async () => {
+    let navigatedTo = null;
+    const config = createDefaultConfig();
+    const props = makeScreenProps({
+      config,
+      editingLine: 2,
+      navigate: (screen) => { navigatedTo = screen; },
+    });
+    const { stdin, unmount } = render(e(EditLineScreen, props));
+    const order = config.lines[2].widgetOrder;
+    const ctxIdx = order.indexOf('bmad-contextpct');
+    for (let i = 0; i < ctxIdx; i++) {
+      await act(async () => { stdin.write('\x1B[B'); });
+    }
+    await act(async () => { stdin.write('\r'); });
+    assert.equal(navigatedTo, 'contextPctConfig');
+    unmount();
+  });
+
   test('hidden widget status uses brightBlack color', () => {
     const { lastFrame, unmount } = render(e(EditLineScreen, makeScreenProps()));
     const frame = lastFrame();
