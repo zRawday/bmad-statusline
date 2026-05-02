@@ -5,7 +5,7 @@ import { getIndividualWidgets, SEPARATOR_VALUES } from './widget-registry.js';
 export const WORKFLOW_SAMPLE_COLOR = 'green';
 
 export const SAMPLE_VALUES = {
-  'bmad-llmstate': '\u2B24  Actif',
+  'bmad-llmstate': '\u2B24  WAITING',
   'bmad-project': 'myproject',
   'bmad-workflow': 'dev-story',
   'bmad-activeskill': 'code-review',
@@ -16,7 +16,7 @@ export const SAMPLE_VALUES = {
   'bmad-timer': '12m34s',
   'bmad-fileread': 'read src/hook/bmad-hook.js',
   'bmad-filewrite': 'edit _bmad-output/prd.md',
-  'bmad-contextpct': '\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2591\u2591\u2591\u2591\u2591\u2591\u2591 53.2%',
+  'bmad-contextpct': '\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2591\u2591\u2591\u2591\u2591\u2591\u2591 73.0%',
 };
 
 export const SEPARATOR_MAP = SEPARATOR_VALUES;
@@ -34,13 +34,23 @@ export function getSampleValue(widgetId, colorModes) {
     return '4-2';
   }
   if (widgetId === 'bmad-contextpct' && colorModes && colorModes[widgetId]?.displayMode === 'compact') {
-    return '53.2%';
+    return 'Ctx: 73.0%';
   }
   return SAMPLE_VALUES[widgetId];
 }
 
 export function resolvePreviewColor(widgetId, colorModes) {
-  if (widgetId === 'bmad-llmstate') return 'green';
+  if (widgetId === 'bmad-llmstate') return { color: 'white', backgroundColor: 'blue' };
+  if (widgetId === 'bmad-project') {
+    const mode = colorModes[widgetId];
+    if (!mode || mode.mode === 'dynamic') return 'red';
+    return mode.fixedColor || 'red';
+  }
+  if (widgetId === 'bmad-contextpct') {
+    const mode = colorModes[widgetId];
+    if (!mode || mode.mode === 'dynamic') return 'brightYellow';
+    return mode.fixedColor || 'brightYellow';
+  }
   const mode = colorModes[widgetId];
   if (!mode) {
     const widgets = getIndividualWidgets();

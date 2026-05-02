@@ -102,7 +102,7 @@ describe('createDefaultConfig', () => {
 
   it('line 0 contains default-enabled widgets without llmstate', () => {
     const config = createDefaultConfig();
-    const expectedWidgets = ['bmad-project', 'bmad-workflow', 'bmad-story', 'bmad-progressstep', 'bmad-timer'];
+    const expectedWidgets = ['bmad-project', 'bmad-workflow', 'bmad-activeskill', 'bmad-story', 'bmad-progressstep', 'bmad-timer'];
     assert.deepStrictEqual(config.lines[0].widgets, expectedWidgets);
   });
 
@@ -117,14 +117,14 @@ describe('createDefaultConfig', () => {
     assert.deepStrictEqual(cm['bmad-timer'], { mode: 'fixed', fixedColor: 'brightBlack' });
   });
 
-  it('line 1 has llmstate, line 2 has contextpct by default', () => {
+  it('line 1 has contextpct, line 2 has llmstate by default', () => {
     const config = createDefaultConfig();
-    assert.deepStrictEqual(config.lines[1].widgets, ['bmad-llmstate']);
-    assert.deepStrictEqual(config.lines[2].widgets, ['bmad-contextpct']);
-    assert.deepStrictEqual(config.lines[1].colorModes, { 'bmad-llmstate': { mode: 'dynamic' } });
-    assert.deepStrictEqual(config.lines[2].colorModes, {
+    assert.deepStrictEqual(config.lines[1].widgets, ['bmad-contextpct']);
+    assert.deepStrictEqual(config.lines[2].widgets, ['bmad-llmstate']);
+    assert.deepStrictEqual(config.lines[1].colorModes, {
       'bmad-contextpct': { mode: 'dynamic', thresholdLow: 0, thresholdHigh: 100, displayMode: 'full' },
     });
+    assert.deepStrictEqual(config.lines[2].colorModes, { 'bmad-llmstate': { mode: 'dynamic' } });
     assert.equal(config.lines[1].widgetOrder.length, 12);
     assert.equal(config.lines[2].widgetOrder.length, 12);
   });

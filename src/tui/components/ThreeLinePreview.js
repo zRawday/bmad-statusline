@@ -21,8 +21,10 @@ function renderLine(line, separator, lineIndex) {
       const sp = value.indexOf(' ');
       segments.push(e(Text, { key: widgetId },
         e(Text, { color: 'white' }, value.substring(0, sp)),
-        e(Text, { color: toInkColor(color) }, value.substring(sp)),
+        e(Text, { color: toInkColor(typeof color === 'string' ? color : color.color) }, value.substring(sp)),
       ));
+    } else if (typeof color === 'object' && color.backgroundColor) {
+      segments.push(e(Text, { key: widgetId, color: toInkColor(color.color), backgroundColor: toInkColor(color.backgroundColor) }, ` ${value} `));
     } else {
       segments.push(e(Text, { key: widgetId, color: toInkColor(color) }, value));
     }

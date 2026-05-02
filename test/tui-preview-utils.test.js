@@ -63,9 +63,9 @@ describe('preview-utils', () => {
       assert.equal(resolvePreviewColor('bmad-project', colorModes), 'red');
     });
 
-    test('returns WORKFLOW_SAMPLE_COLOR for project default (dynamic widget with no entry)', () => {
+    test('returns red for project default (dynamic widget with no entry)', () => {
       const colorModes = {};
-      assert.equal(resolvePreviewColor('bmad-project', colorModes), WORKFLOW_SAMPLE_COLOR);
+      assert.equal(resolvePreviewColor('bmad-project', colorModes), 'red');
     });
 
     test('returns WORKFLOW_SAMPLE_COLOR for workflow default (dynamic widget with no entry)', () => {
@@ -73,9 +73,9 @@ describe('preview-utils', () => {
       assert.equal(resolvePreviewColor('bmad-workflow', colorModes), WORKFLOW_SAMPLE_COLOR);
     });
 
-    test('returns white when fixed mode has no fixedColor', () => {
+    test('returns red when project fixed mode has no fixedColor', () => {
       const colorModes = { 'bmad-project': { mode: 'fixed' } };
-      assert.equal(resolvePreviewColor('bmad-project', colorModes), 'white');
+      assert.equal(resolvePreviewColor('bmad-project', colorModes), 'red');
     });
 
     test('returns white for unknown widget with no colorModes entry', () => {
