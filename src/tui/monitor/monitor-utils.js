@@ -102,7 +102,7 @@ export function resolveProjectColor(projectName, config) {
 
 export function extractStoryNumber(story) {
   if (!story) return '';
-  const m = story.match(/^(\d+-\d+)/);
+  const m = story.match(/^(\d+[a-z]?-\d+)/);
   return m ? m[1] : '';
 }
 

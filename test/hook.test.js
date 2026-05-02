@@ -858,6 +858,11 @@ describe('hook — 8-signal passive detection', () => {
     assert.ok(regex.test('/1-3-user-auth.md'), 'should match story files');
     assert.ok(regex.test('/4-2-hook-dispatch-userpromptsubmit-multi-module-cwd-sessionstart.md'),
       'should match long story slugs');
+
+    // Bis epics: epic number with optional letter suffix (e.g., 17b-5)
+    assert.ok(regex.test('/17b-5-some-feature.md'), 'should match bis-epic story files');
+    const bisMatch = '/17b-5-some-feature.md'.match(regex);
+    assert.equal(bisMatch && bisMatch[1], '17b-5-some-feature', 'should capture bis-epic slug');
   });
 
   // 4.4 subtask 4.15: story detection works with new regex on files outside /stories/
