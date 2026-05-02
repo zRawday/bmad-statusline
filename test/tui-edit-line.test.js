@@ -61,7 +61,7 @@ describe('EditLineScreen', () => {
   test('h key toggles visibility — hide a visible widget', async () => {
     let updatedCfg = null;
     const props = makeScreenProps({
-      editingLine: 2,
+      editingLine: 1,
       updateConfig: (mutator) => {
         const cfg = structuredClone(props.config);
         mutator(cfg);
@@ -69,12 +69,12 @@ describe('EditLineScreen', () => {
       },
     });
     const { stdin, unmount } = render(e(EditLineScreen, props));
-    // First widget in widgetOrder is bmad-llmstate, visible on line 2 — press h to hide
+    // First widget in widgetOrder is bmad-llmstate, visible on line 1 — press h to hide
     await act(async () => { stdin.write('h'); });
     assert.ok(updatedCfg, 'updateConfig was called');
-    assert.ok(!updatedCfg.lines[2].widgets.includes('bmad-llmstate'), 'widget removed from line');
+    assert.ok(!updatedCfg.lines[1].widgets.includes('bmad-llmstate'), 'widget removed from line');
     // colorModes should be preserved
-    assert.ok(updatedCfg.lines[2].colorModes['bmad-llmstate'], 'colorModes preserved on hide');
+    assert.ok(updatedCfg.lines[1].colorModes['bmad-llmstate'], 'colorModes preserved on hide');
     unmount();
   });
 
@@ -217,7 +217,7 @@ describe('EditLineScreen', () => {
     const config = createDefaultConfig();
     const props = makeScreenProps({
       config,
-      editingLine: 1,
+      editingLine: 2,
       updateConfig: (mutator) => {
         const cfg = structuredClone(config);
         mutator(cfg);
@@ -225,16 +225,16 @@ describe('EditLineScreen', () => {
       },
     });
     const { stdin, unmount } = render(e(EditLineScreen, props));
-    // Navigate to bmad-contextpct on line 1 — it's in widgetOrder so find its index
+    // Navigate to bmad-contextpct on line 2 — it's in widgetOrder so find its index
     const allWidgets = getIndividualWidgets();
-    const order = config.lines[1].widgetOrder;
+    const order = config.lines[2].widgetOrder;
     const ctxIdx = order.indexOf('bmad-contextpct');
     for (let i = 0; i < ctxIdx; i++) {
       await act(async () => { stdin.write('\x1B[B'); });
     }
     await act(async () => { stdin.write('m'); });
     assert.ok(updatedCfg, 'updateConfig was called');
-    assert.equal(updatedCfg.lines[1].colorModes['bmad-contextpct'].displayMode, 'compact', 'should toggle to compact');
+    assert.equal(updatedCfg.lines[2].colorModes['bmad-contextpct'].displayMode, 'full', 'should toggle from compact (default) to full');
     unmount();
   });
 

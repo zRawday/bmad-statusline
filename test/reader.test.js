@@ -291,21 +291,21 @@ describe('reader color output', () => {
     fs.rmSync(configDir, { recursive: true, force: true });
   });
 
-  it('line 2: llmstate-only line renders llm state (AC #2)', () => {
+  it('line 1: llmstate-only line renders llm state (AC #2)', () => {
     const configDir = fs.mkdtempSync(path.join(os.tmpdir(), 'bmad-cfg-'));
     fs.copyFileSync(FIXTURE_CONFIG_PATH, path.join(configDir, 'config.json'));
     writeStatus('line2', { project: 'Toulou' });
-    const result = execReaderWithConfig('line 2', 'line2', configDir);
-    assert.ok(result.includes('WAITING'), 'line 2 should render llmstate');
+    const result = execReaderWithConfig('line 1', 'line2', configDir);
+    assert.ok(result.includes('WAITING'), 'line 1 should render llmstate');
     fs.rmSync(configDir, { recursive: true, force: true });
   });
 
-  it('line 1: contextpct-only line returns empty without context data (AC #2)', () => {
+  it('line 2: contextpct-only line returns empty without context data (AC #2)', () => {
     const configDir = fs.mkdtempSync(path.join(os.tmpdir(), 'bmad-cfg-'));
     fs.copyFileSync(FIXTURE_CONFIG_PATH, path.join(configDir, 'config.json'));
     writeStatus('line2b', { project: 'Toulou' });
-    const result = execReaderWithConfig('line 1', 'line2b', configDir);
-    assert.equal(result, '', 'line 1 is contextpct but no context data');
+    const result = execReaderWithConfig('line 2', 'line2b', configDir);
+    assert.equal(result, '', 'line 2 is contextpct but no context data');
     fs.rmSync(configDir, { recursive: true, force: true });
   });
 

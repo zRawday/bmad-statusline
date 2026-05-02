@@ -17,7 +17,7 @@ function makeProps(overrides = {}) {
     updateConfig: () => {},
     previewOverride: null,
     goBack: () => {},
-    editingLine: 1,
+    editingLine: 2,
     isActive: true,
     ...overrides,
   };
@@ -57,7 +57,7 @@ describe('ContextPctConfigScreen', () => {
     // Cursor starts on thresholdLow (index 0)
     await act(async () => { stdin.write('\x1B[C'); }); // right arrow
     assert.ok(updatedCfg, 'updateConfig was called');
-    assert.equal(updatedCfg.lines[1].colorModes['bmad-contextpct'].thresholdLow, 5);
+    assert.equal(updatedCfg.lines[2].colorModes['bmad-contextpct'].thresholdLow, 5);
     unmount();
   });
 
@@ -75,7 +75,7 @@ describe('ContextPctConfigScreen', () => {
     const { stdin, unmount } = render(e(ContextPctConfigScreen, props));
     await act(async () => { stdin.write('\x1B[D'); }); // left arrow
     assert.ok(updatedCfg, 'updateConfig was called');
-    assert.equal(updatedCfg.lines[1].colorModes['bmad-contextpct'].thresholdLow, 0, 'should clamp to 0');
+    assert.equal(updatedCfg.lines[2].colorModes['bmad-contextpct'].thresholdLow, 0, 'should clamp to 0');
     unmount();
   });
 
@@ -95,7 +95,7 @@ describe('ContextPctConfigScreen', () => {
     await act(async () => { stdin.write('\x1B[B'); }); // down arrow
     await act(async () => { stdin.write('\x1B[D'); }); // left arrow — decrease high
     assert.ok(updatedCfg, 'updateConfig was called');
-    assert.equal(updatedCfg.lines[1].colorModes['bmad-contextpct'].thresholdHigh, 95);
+    assert.equal(updatedCfg.lines[2].colorModes['bmad-contextpct'].thresholdHigh, 95);
     unmount();
   });
 
@@ -103,8 +103,8 @@ describe('ContextPctConfigScreen', () => {
     let updatedCfg = null;
     const config = createDefaultConfig();
     // Set thresholdLow close to thresholdHigh
-    config.lines[1].colorModes['bmad-contextpct'].thresholdLow = 90;
-    config.lines[1].colorModes['bmad-contextpct'].thresholdHigh = 95;
+    config.lines[2].colorModes['bmad-contextpct'].thresholdLow = 90;
+    config.lines[2].colorModes['bmad-contextpct'].thresholdHigh = 95;
     const props = makeProps({
       config,
       updateConfig: (mutator) => {
@@ -117,15 +117,15 @@ describe('ContextPctConfigScreen', () => {
     // Try to increase thresholdLow beyond max
     await act(async () => { stdin.write('\x1B[C'); }); // right arrow
     assert.ok(updatedCfg);
-    assert.equal(updatedCfg.lines[1].colorModes['bmad-contextpct'].thresholdLow, 90, 'should stay clamped at thresholdHigh - 5');
+    assert.equal(updatedCfg.lines[2].colorModes['bmad-contextpct'].thresholdLow, 90, 'should stay clamped at thresholdHigh - 5');
     unmount();
   });
 
   test('thresholdHigh clamped to thresholdLow + 5', async () => {
     let updatedCfg = null;
     const config = createDefaultConfig();
-    config.lines[1].colorModes['bmad-contextpct'].thresholdLow = 90;
-    config.lines[1].colorModes['bmad-contextpct'].thresholdHigh = 95;
+    config.lines[2].colorModes['bmad-contextpct'].thresholdLow = 90;
+    config.lines[2].colorModes['bmad-contextpct'].thresholdHigh = 95;
     const props = makeProps({
       config,
       updateConfig: (mutator) => {
@@ -138,7 +138,7 @@ describe('ContextPctConfigScreen', () => {
     await act(async () => { stdin.write('\x1B[B'); }); // down to thresholdHigh
     await act(async () => { stdin.write('\x1B[D'); }); // left to decrease
     assert.ok(updatedCfg);
-    assert.equal(updatedCfg.lines[1].colorModes['bmad-contextpct'].thresholdHigh, 95, 'should stay clamped at thresholdLow + 5');
+    assert.equal(updatedCfg.lines[2].colorModes['bmad-contextpct'].thresholdHigh, 95, 'should stay clamped at thresholdLow + 5');
     unmount();
   });
 

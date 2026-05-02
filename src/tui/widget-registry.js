@@ -47,8 +47,8 @@ export function createDefaultConfig() {
     customSeparator: null,
     lines: [
       { widgets: widgetsLine1.map(w => w.id), widgetOrder: [...allIds], colorModes: colorModesLine1 },
-      { widgets: ['bmad-contextpct'], widgetOrder: [...allIds], colorModes: { 'bmad-contextpct': { mode: 'dynamic', thresholdLow: 0, thresholdHigh: 100, displayMode: 'full' } } },
       { widgets: ['bmad-llmstate'], widgetOrder: [...allIds], colorModes: { 'bmad-llmstate': { mode: 'dynamic' } } },
+      { widgets: ['bmad-contextpct'], widgetOrder: [...allIds], colorModes: { 'bmad-contextpct': { mode: 'dynamic', thresholdLow: 0, thresholdHigh: 100, displayMode: 'compact' } } },
     ],
     skillColors: {},
     projectColors: {},
