@@ -326,13 +326,14 @@ const COMMANDS = {
     const high = cm && cm.thresholdHigh != null ? cm.thresholdHigh : 100;
     const displayMode = cm && cm.displayMode || 'full';
     if (displayMode === 'compact') {
-      return colorize(pct.toFixed(1) + '%', COLOR_CODES[getGradientColor(pct, low, high)]);
+      return colorize('Ctx: ' + pct.toFixed(1) + '%', COLOR_CODES[getGradientColor(pct, low, high)]);
     }
-    const filled = Math.min(Math.max(Math.round(pct * 15 / 100), 0), 15);
+    const BAR_LENGTH = 25;
+    const filled = Math.min(Math.max(Math.round(pct * BAR_LENGTH / 100), 0), BAR_LENGTH);
     let bar = '';
-    for (let i = 0; i < 15; i++) {
+    for (let i = 0; i < BAR_LENGTH; i++) {
       if (i < filled) {
-        const posPct = i * 100 / 14;
+        const posPct = i * 100 / (BAR_LENGTH - 1);
         bar += colorize('\u2588', COLOR_CODES[getGradientColor(posPct, low, high)]);
       } else {
         bar += colorize('\u2591', COLOR_CODES.brightBlack);

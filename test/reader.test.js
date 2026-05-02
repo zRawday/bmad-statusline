@@ -291,21 +291,21 @@ describe('reader color output', () => {
     fs.rmSync(configDir, { recursive: true, force: true });
   });
 
-  it('line 1: llmstate-only line renders llm state (AC #2)', () => {
+  it('line 2: llmstate-only line renders llm state (AC #2)', () => {
     const configDir = fs.mkdtempSync(path.join(os.tmpdir(), 'bmad-cfg-'));
     fs.copyFileSync(FIXTURE_CONFIG_PATH, path.join(configDir, 'config.json'));
     writeStatus('line2', { project: 'Toulou' });
-    const result = execReaderWithConfig('line 1', 'line2', configDir);
-    assert.ok(result.includes('WAITING'), 'line 1 should render llmstate');
+    const result = execReaderWithConfig('line 2', 'line2', configDir);
+    assert.ok(result.includes('WAITING'), 'line 2 should render llmstate');
     fs.rmSync(configDir, { recursive: true, force: true });
   });
 
-  it('line 2: empty line returns empty string (AC #2)', () => {
+  it('line 1: contextpct-only line returns empty without context data (AC #2)', () => {
     const configDir = fs.mkdtempSync(path.join(os.tmpdir(), 'bmad-cfg-'));
     fs.copyFileSync(FIXTURE_CONFIG_PATH, path.join(configDir, 'config.json'));
     writeStatus('line2b', { project: 'Toulou' });
-    const result = execReaderWithConfig('line 2', 'line2b', configDir);
-    assert.equal(result, '', 'line 2 is empty in default config');
+    const result = execReaderWithConfig('line 1', 'line2b', configDir);
+    assert.equal(result, '', 'line 1 is contextpct but no context data');
     fs.rmSync(configDir, { recursive: true, force: true });
   });
 
@@ -434,17 +434,17 @@ describe('reader color output', () => {
     const result = reader.COMMANDS.contextpct({}, lc, stdin);
     const plain = result.replace(/\x1b\[[0-9;]*m/g, '');
     assert.ok(plain.includes('60.0%'), 'should contain formatted percentage');
-    // Full mode should have 15-char bar (█ and ░)
+    // Full mode should have 25-char bar (█ and ░)
     const barChars = plain.replace(/ .*$/, '');
-    assert.equal(barChars.length, 15, 'bar should be 15 characters');
+    assert.equal(barChars.length, 25, 'bar should be 25 characters');
   });
 
-  it('contextpct compact mode returns percentage only', () => {
+  it('contextpct compact mode returns Ctx-prefixed percentage', () => {
     const lc = { colorModes: { 'bmad-contextpct': { mode: 'dynamic', thresholdLow: 0, thresholdHigh: 100, displayMode: 'compact' } } };
     const stdin = { context_window: { used_percentage: 42.3 } };
     const result = reader.COMMANDS.contextpct({}, lc, stdin);
     const plain = result.replace(/\x1b\[[0-9;]*m/g, '');
-    assert.equal(plain, '42.3%');
+    assert.equal(plain, 'Ctx: 42.3%');
   });
 
   it('contextpct at 0% returns brightGreen color', () => {
@@ -485,7 +485,7 @@ describe('reader color output', () => {
     const stdin = { context_window: { current_usage: 50000, context_window_size: 100000 } };
     const result = reader.COMMANDS.contextpct({}, lc, stdin);
     const plain = result.replace(/\x1b\[[0-9;]*m/g, '');
-    assert.equal(plain, '50.0%');
+    assert.equal(plain, 'Ctx: 50.0%');
   });
 
   it('contextpct threshold behavior — below thresholdLow is brightGreen', () => {
@@ -507,7 +507,7 @@ describe('reader color output', () => {
     const stdin = { context_window: { used_percentage: 33.333 } };
     const result = reader.COMMANDS.contextpct({}, lc, stdin);
     const plain = result.replace(/\x1b\[[0-9;]*m/g, '');
-    assert.equal(plain, '33.3%');
+    assert.equal(plain, 'Ctx: 33.3%');
   });
 
   // --- getStoryOrRequest returns story only (AC #11) — direct import ---
