@@ -70,6 +70,16 @@ try {
   process.exit(0);
 }
 
+// ─── 3b. Early SessionEnd: delete alive file before _bmad guard can exit ─────
+{
+  const _ev = payload.hook_event_name;
+  const _sid = payload.session_id;
+  if (_ev === 'SessionEnd' && isSafeId(_sid)) {
+    try { fs.unlinkSync(path.join(CACHE_DIR, '.alive-' + _sid)); } catch {}
+    process.exit(0);
+  }
+}
+
 // ─── 4. Guard: _bmad/ existence (walk up to find it) ─────────────────────────
 let cwd = payload.cwd;
 if (!cwd) process.exit(0);
