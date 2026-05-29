@@ -21,6 +21,7 @@ const HOME_OPTIONS = [
   { label: '\uD83D\uDCC2 Load preset', value: 'presetLoad' },
   { label: '\u2500\u2500\u2500', value: '_sep3' },
   { label: '\u2699  Open ccstatusline', value: 'ccstatusline' },
+  { label: '\ud83e\ude7a Run health check', value: 'doctor' },
 ];
 
 const SELECTABLE_INDICES = HOME_OPTIONS
@@ -59,6 +60,7 @@ export function HomeScreen({ config, previewOverride, navigate, resetToOriginal,
       else if (value === 'presetSave') navigate('presetSave');
       else if (value === 'presetLoad') navigate('presetLoad');
       else if (value === 'ccstatusline') onLaunchCcstatusline();
+      else if (value === 'doctor') navigate('healthCheck');
       else if (value === 'monitor') navigate('monitor');
     }
   }, { isActive });

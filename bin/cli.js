@@ -14,6 +14,7 @@ Commands:
   install      Install status line widgets and reader
   uninstall    Remove status line widgets and reader
   clean        Clean cache files
+  doctor       Diagnose and repair the status line
 
 Options:
   -h, --help   Show this help text`;
@@ -37,7 +38,8 @@ if (!command) {
   switch (command) {
     case 'install':
     case 'uninstall':
-    case 'clean': {
+    case 'clean':
+    case 'doctor': {
       const mod = await import(`../src/${command}.js`);
       await mod.default();
       break;

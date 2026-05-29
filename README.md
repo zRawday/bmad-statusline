@@ -169,6 +169,11 @@ Export session data to CSV:
 | `npx bmad-statusline install` | Install widgets, reader, and hooks |
 | `npx bmad-statusline uninstall` | Remove all components |
 | `npx bmad-statusline clean` | Clean stale cache files |
+| `npx bmad-statusline doctor` | Diagnose the status line and auto-repair a broken ccstatusline npx cache |
+
+### Doctor
+
+If the status line goes blank while the monitor still works, run `npx bmad-statusline doctor` (or pick **🩺 Run health check** from the TUI home screen). It verifies the deployed reader, `config.json`, the `statusLine` entry in `~/.claude/settings.json`, and the registered ccstatusline widgets, then checks that `npx -y ccstatusline@latest` actually runs. The most common cause is a corrupted npx cache (missing Windows bin shims) — doctor detects this and purges the offending ccstatusline cache entry so npx regenerates it. It never touches your settings, config, or the npm cache as a whole; for anything it can't repair it points you to `npx bmad-statusline install`.
 
 ## How It Works
 
