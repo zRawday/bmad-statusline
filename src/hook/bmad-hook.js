@@ -80,6 +80,16 @@ try {
   }
 }
 
+// ─── 3c. Early SessionStart: auto-heal a corrupted ccstatusline npx cache ────
+// Claude Code's statusLine runs `npx -y ccstatusline@latest`. On Windows the
+// npx cache entry can lose its bin shims (ccstatusline.cmd/.ps1), leaving the
+// status line blank while the monitor keeps working. Purge only structurally
+// broken ccstatusline entries so the next npx call regenerates them cleanly.
+// Runs before the _bmad guard because the status line is global. Always silent.
+if (payload.hook_event_name === 'SessionStart') {
+  try { healCcstatuslineNpxCache(); } catch {}
+}
+
 // ─── 4. Guard: _bmad/ existence (walk up to find it) ─────────────────────────
 let cwd = payload.cwd;
 if (!cwd) process.exit(0);
@@ -906,5 +916,69 @@ function writeStatus(sid, status) {
     fs.renameSync(tmpPath, fp);
   } catch (e) {
     // Silent — never interfere with Claude Code
+  }
+}
+
+// ─── ccstatusline npx cache auto-heal ───────────────────────────────────────
+function ccstatuslineNpxCacheDir() {
+  if (process.env.BMAD_NPX_CACHE_DIR) return process.env.BMAD_NPX_CACHE_DIR;
+  if (process.platform === 'win32') {
+    return path.join(os.homedir(), 'AppData', 'Local', 'npm-cache', '_npx');
+  }
+  return path.join(os.homedir(), '.npm', '_npx');
+}
+
+// Match exactly like doctor.js: ccstatusline or ccstatusline@* (NOT ccstatusline-*)
+function isCcstatuslineEntry(pkg) {
+  const specs = pkg && pkg._npx && pkg._npx.packages;
+  if (!Array.isArray(specs)) return false;
+  return specs.some(s =>
+    typeof s === 'string' && (s === 'ccstatusline' || s.startsWith('ccstatusline@')));
+}
+
+// Broken = the bin shim npx needs to launch ccstatusline is missing. On Windows
+// that's the .cmd wrapper (the documented failure); elsewhere the bare shim.
+function ccstatuslineShimMissing(dir) {
+  const binName = process.platform === 'win32' ? 'ccstatusline.cmd' : 'ccstatusline';
+  return !fs.existsSync(path.join(dir, 'node_modules', '.bin', binName));
+}
+
+// Don't race a concurrent `npx` install. A genuinely corrupted entry was left
+// by a PAST session, so its dir is settled (old mtime). An entry written in the
+// last minute may be mid-install (package.json present, shim not yet) — deleting
+// it would corrupt the in-flight install. Skip recently-touched entries; a still
+// truly-broken one heals next session once its mtime has settled.
+function recentlyModified(dir) {
+  try {
+    // 60s window: long enough to cover an in-flight `npx` install. Inline literal
+    // (not a module const) because this runs in the early SessionStart block,
+    // before a late `const` declaration would be initialized (TDZ).
+    return (Date.now() - fs.statSync(dir).mtimeMs) < 60000;
+  } catch {
+    return false;
+  }
+}
+
+function healCcstatuslineNpxCache() {
+  const cacheDir = ccstatuslineNpxCacheDir();
+  let entries;
+  try {
+    entries = fs.readdirSync(cacheDir, { withFileTypes: true });
+  } catch {
+    return; // cache dir absent — nothing to heal
+  }
+  for (const ent of entries) {
+    if (!ent.isDirectory()) continue;
+    const dir = path.join(cacheDir, ent.name);
+    let pkg;
+    try {
+      pkg = JSON.parse(fs.readFileSync(path.join(dir, 'package.json'), 'utf8'));
+    } catch {
+      continue;
+    }
+    if (!isCcstatuslineEntry(pkg)) continue;
+    if (ccstatuslineShimMissing(dir) && !recentlyModified(dir)) {
+      try { fs.rmSync(dir, { recursive: true, force: true }); } catch {}
+    }
   }
 }

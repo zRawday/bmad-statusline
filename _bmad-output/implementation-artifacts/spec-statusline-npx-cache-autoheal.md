@@ -2,7 +2,8 @@
 title: 'Auto-heal ccstatusline npx cache on session start'
 type: 'bugfix'
 created: '2026-06-03'
-status: 'ready-for-dev'
+status: 'done'
+baseline_commit: '8f6f969'
 context: []
 ---
 
@@ -56,11 +57,11 @@ context: []
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `src/hook/bmad-hook.js` -- add `if (payload.hook_event_name === 'SessionStart') { … purge broken ccstatusline npx entries … }` before the `_bmad` guard, with inline `npxCacheDir()` (env + platform) and `isBrokenCcstatuslineEntry(dir)` (platform shim check); all silent/try-catch -- heals the documented failure at the natural moment.
-- [ ] `src/defaults.js` -- change SessionStart matcher to `''` -- fire on fresh sessions, not only resume.
-- [ ] `src/install.js` -- in `installTarget5`, rewrite an existing bmad SessionStart `'resume'` matcher to `''` before the add-missing merge -- upgrade existing installs without creating a duplicate entry.
-- [ ] `test/hook.test.js` -- add cases: broken purged, healthy kept, non-ccstatusline kept, no-cache-dir no-op, repair runs without `_bmad` -- lock the behavior.
-- [ ] `test/defaults.test.js` / `test/install.test.js` / `test/uninstall.test.js` -- assert matcher `''`, that re-install upgrades `'resume'`→`''` with no duplicate, and that uninstall still removes the widened entry.
+- [x] `src/hook/bmad-hook.js` -- add `if (payload.hook_event_name === 'SessionStart') { … purge broken ccstatusline npx entries … }` before the `_bmad` guard, with inline `npxCacheDir()` (env + platform) and `isBrokenCcstatuslineEntry(dir)` (platform shim check); all silent/try-catch -- heals the documented failure at the natural moment.
+- [x] `src/defaults.js` -- change SessionStart matcher to `''` -- fire on fresh sessions, not only resume.
+- [x] `src/install.js` -- in `installTarget5`, rewrite an existing bmad SessionStart `'resume'` matcher to `''` before the add-missing merge -- upgrade existing installs without creating a duplicate entry.
+- [x] `test/hook.test.js` -- add cases: broken purged, healthy kept, non-ccstatusline kept, no-cache-dir no-op, repair runs without `_bmad` -- lock the behavior.
+- [x] `test/defaults.test.js` / `test/install.test.js` / `test/uninstall.test.js` -- assert matcher `''`, that re-install upgrades `'resume'`→`''` with no duplicate, and that uninstall still removes the widened entry.
 
 **Acceptance Criteria:**
 - Given a corrupted ccstatusline npx entry (missing the platform shim), when a SessionStart hook fires, then that entry's folder is deleted and other cache entries remain.
@@ -77,3 +78,41 @@ context: []
 
 **Manual checks:**
 - After `npx bmad-statusline install`, inspect `~/.claude/settings.json` → `hooks.SessionStart` has exactly one bmad entry with `matcher: ""`.
+
+## Suggested Review Order
+
+**Auto-heal trigger & logic**
+
+- Entry point — heal fires at SessionStart, before the `_bmad` guard (global).
+  [`bmad-hook.js:89`](../../src/hook/bmad-hook.js#L89)
+
+- The heal routine — scan npx cache, purge only broken ccstatusline entries.
+  [`bmad-hook.js:962`](../../src/hook/bmad-hook.js#L962)
+
+- Race guard — skip entries touched <60s ago to not kill an in-flight `npx` install.
+  [`bmad-hook.js:951`](../../src/hook/bmad-hook.js#L951)
+
+- Entry match mirrors doctor.js — `ccstatusline` / `ccstatusline@*`, never `ccstatusline-*`.
+  [`bmad-hook.js:932`](../../src/hook/bmad-hook.js#L932)
+
+- Cache dir resolution — honors `BMAD_NPX_CACHE_DIR`, else per-platform default.
+  [`bmad-hook.js:923`](../../src/hook/bmad-hook.js#L923)
+
+**Matcher widening & install upgrade**
+
+- Fire on fresh sessions too: SessionStart matcher `'resume'` → `''`.
+  [`defaults.js:64`](../../src/defaults.js#L64)
+
+- Upgrade existing installs in place, before the add-missing merge (no duplicate).
+  [`install.js:189`](../../src/install.js#L189)
+
+**Tests**
+
+- Auto-heal suite: broken purged, healthy/fork kept, no-cache no-op, pre-guard, in-flight kept.
+  [`hook.test.js:2584`](../../test/hook.test.js#L2584)
+
+- Installer `'resume'`→`''` upgrade with single entry.
+  [`install.test.js:519`](../../test/install.test.js#L519)
+
+- Default matcher assertion updated to `''`.
+  [`defaults.test.js:98`](../../test/defaults.test.js#L98)

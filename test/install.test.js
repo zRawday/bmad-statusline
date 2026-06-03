@@ -288,7 +288,7 @@ describe('Target 5: hook config injection', () => {
       assert.equal(config.hooks.Stop.length, 1);
       assert.equal(config.hooks.Stop[0].matcher, '');
       assert.equal(config.hooks.SessionStart.length, 1);
-      assert.equal(config.hooks.SessionStart[0].matcher, 'resume');
+      assert.equal(config.hooks.SessionStart[0].matcher, '');
       // All commands reference bmad-hook.js
       for (const event of eventTypes) {
         for (const entry of config.hooks[event]) {
@@ -395,7 +395,7 @@ describe('Target 5: hook config injection', () => {
       assert.equal(config.hooks.UserPromptSubmit[0].matcher, '(?:bmad|gds|wds)[:-]');
       assert.equal(config.hooks.Stop.length, 1, 'Stop matcher added');
       assert.equal(config.hooks.SessionStart.length, 1);
-      assert.equal(config.hooks.SessionStart[0].matcher, 'resume');
+      assert.equal(config.hooks.SessionStart[0].matcher, '');
       // PreToolUse wildcard added
       assert.ok(config.hooks.PreToolUse.some(e => e.matcher === ''), 'PreToolUse wildcard added');
       // Rev.5 event types
@@ -513,6 +513,29 @@ describe('Target 5: hook config injection', () => {
       }
       const total = Object.values(config.hooks).reduce((sum, arr) => sum + arr.length, 0);
       assert.equal(total, 15, 'total still 15');
+    } finally { teardown(baseDir); }
+  });
+
+  it("upgrades existing bmad SessionStart matcher 'resume' → '' without duplicating", () => {
+    const { baseDir, paths } = setup();
+    try {
+      const existing = {
+        statusLine: { type: 'command', command: 'npx -y ccstatusline@latest', padding: 0 },
+        hooks: {
+          SessionStart: [
+            { matcher: 'resume', hooks: [{ type: 'command', command: `node "${paths.hookDest}"` }] }
+          ]
+        }
+      };
+      fs.mkdirSync(paths.claudeDir, { recursive: true });
+      fs.writeFileSync(paths.claudeSettings, JSON.stringify(existing, null, 2) + '\n');
+      captureOutput(() => install(paths));
+      const config = JSON.parse(fs.readFileSync(paths.claudeSettings, 'utf8'));
+      const bmadEntries = config.hooks.SessionStart.filter(e =>
+        Array.isArray(e.hooks) && e.hooks.some(h => h.command && h.command.includes('bmad-hook.js')));
+      assert.equal(bmadEntries.length, 1, 'exactly one bmad SessionStart entry (no duplicate)');
+      assert.equal(config.hooks.SessionStart.length, 1, 'SessionStart has a single entry');
+      assert.equal(config.hooks.SessionStart[0].matcher, '', "matcher upgraded 'resume' → ''");
     } finally { teardown(baseDir); }
   });
 });

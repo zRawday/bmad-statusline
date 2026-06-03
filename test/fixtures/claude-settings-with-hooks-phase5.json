@@ -140,7 +140,7 @@
     ],
     "SessionStart": [
       {
-        "matcher": "resume",
+        "matcher": "",
         "hooks": [
           {
             "type": "command",

@@ -2579,3 +2579,113 @@ describe('hook — 8-signal passive detection', () => {
     fs.rmSync(configDir, { recursive: true, force: true });
   });
 });
+
+// ─── SessionStart: auto-heal a corrupted ccstatusline npx cache ─────────────
+describe('hook — SessionStart ccstatusline npx cache auto-heal', () => {
+  let projectDir; // has _bmad → exercises the full-flow path
+  let bareDir;    // no _bmad → exercises the pre-guard path
+  let cacheDir;
+  let configDir;
+
+  // The bin shim npx needs to launch ccstatusline: .cmd on Windows, bare name elsewhere.
+  const SHIM = process.platform === 'win32' ? 'ccstatusline.cmd' : 'ccstatusline';
+
+  before(() => {
+    projectDir = fs.mkdtempSync(path.join(os.tmpdir(), 'bmad-heal-proj-'));
+    bareDir = fs.mkdtempSync(path.join(os.tmpdir(), 'bmad-heal-bare-'));
+    cacheDir = fs.mkdtempSync(path.join(os.tmpdir(), 'bmad-heal-cache-'));
+    configDir = fs.mkdtempSync(path.join(os.tmpdir(), 'bmad-heal-config-'));
+    fs.mkdirSync(path.join(projectDir, '_bmad', 'bmm'), { recursive: true });
+    fs.writeFileSync(path.join(projectDir, '_bmad', 'bmm', 'config.yaml'), 'project_name: Heal\n');
+  });
+
+  after(() => {
+    for (const d of [projectDir, bareDir, cacheDir, configDir]) {
+      fs.rmSync(d, { recursive: true, force: true });
+    }
+  });
+
+  function freshNpxRoot() {
+    return fs.mkdtempSync(path.join(os.tmpdir(), 'bmad-heal-npx-'));
+  }
+
+  // Plant an npx cache entry: dir/package.json + node_modules/.bin/. withShim=true => healthy.
+  // ageMs backdates the dir mtime so it reads as "settled" (a past session's leftover);
+  // pass ageMs=0 to simulate an entry being written right now (in-flight install).
+  function plantEntry(npxRoot, name, specs, withShim, ageMs = 5 * 60 * 1000) {
+    const dir = path.join(npxRoot, name);
+    fs.mkdirSync(path.join(dir, 'node_modules', '.bin'), { recursive: true });
+    fs.writeFileSync(path.join(dir, 'package.json'), JSON.stringify({ _npx: { packages: specs } }));
+    if (withShim) fs.writeFileSync(path.join(dir, 'node_modules', '.bin', SHIM), '');
+    if (ageMs > 0) {
+      const t = new Date(Date.now() - ageMs);
+      fs.utimesSync(dir, t, t); // set last (file writes above bump dir mtime)
+    }
+    return dir;
+  }
+
+  function runHook(payload, npxRoot) {
+    try {
+      execSync(`node "${HOOK_PATH}"`, {
+        input: JSON.stringify(payload),
+        encoding: 'utf8',
+        env: { ...process.env, BMAD_CACHE_DIR: cacheDir, BMAD_CONFIG_DIR: configDir, BMAD_NPX_CACHE_DIR: npxRoot },
+        timeout: 5000
+      });
+    } catch (e) { /* hook always exits 0; swallow */ }
+  }
+
+  function sessionStart(cwd) {
+    return { session_id: 'heal-sess', cwd, hook_event_name: 'SessionStart', source: 'startup' };
+  }
+
+  it('purges a broken ccstatusline entry, keeps healthy + non-ccstatusline (BMAD project)', () => {
+    const npxRoot = freshNpxRoot();
+    const broken = plantEntry(npxRoot, 'broken', ['ccstatusline@latest'], false);
+    const healthy = plantEntry(npxRoot, 'healthy', ['ccstatusline@latest'], true);
+    const other = plantEntry(npxRoot, 'other', ['some-other-pkg@1.0.0'], false);
+    runHook(sessionStart(projectDir), npxRoot);
+    assert.ok(!fs.existsSync(broken), 'broken ccstatusline entry should be purged');
+    assert.ok(fs.existsSync(healthy), 'healthy ccstatusline entry should be kept');
+    assert.ok(fs.existsSync(other), 'non-ccstatusline entry should be kept');
+    fs.rmSync(npxRoot, { recursive: true, force: true });
+  });
+
+  it('repairs even when cwd is not a BMAD project (runs before the _bmad guard)', () => {
+    const npxRoot = freshNpxRoot();
+    const broken = plantEntry(npxRoot, 'broken', ['ccstatusline'], false);
+    runHook(sessionStart(bareDir), npxRoot);
+    assert.ok(!fs.existsSync(broken), 'broken entry purged even without _bmad');
+    fs.rmSync(npxRoot, { recursive: true, force: true });
+  });
+
+  it('does not touch ccstatusline-fork (only ccstatusline / ccstatusline@*)', () => {
+    const npxRoot = freshNpxRoot();
+    const fork = plantEntry(npxRoot, 'fork', ['ccstatusline-fork@2.0.0'], false);
+    runHook(sessionStart(bareDir), npxRoot);
+    assert.ok(fs.existsSync(fork), 'ccstatusline-fork should be preserved');
+    fs.rmSync(npxRoot, { recursive: true, force: true });
+  });
+
+  it('no-op when the npx cache dir is absent', () => {
+    const npxRoot = path.join(cacheDir, 'no-such-npx-dir');
+    runHook(sessionStart(bareDir), npxRoot); // must not throw; hook exits 0
+    assert.ok(!fs.existsSync(npxRoot), 'absent cache dir stays absent');
+  });
+
+  it('does NOT scan/purge on non-SessionStart events', () => {
+    const npxRoot = freshNpxRoot();
+    const broken = plantEntry(npxRoot, 'broken', ['ccstatusline@latest'], false);
+    runHook({ session_id: 'heal-stop', cwd: bareDir, hook_event_name: 'Stop' }, npxRoot);
+    assert.ok(fs.existsSync(broken), 'broken entry untouched on non-SessionStart events');
+    fs.rmSync(npxRoot, { recursive: true, force: true });
+  });
+
+  it('does NOT purge an entry being regenerated right now (in-flight install guard)', () => {
+    const npxRoot = freshNpxRoot();
+    const inflight = plantEntry(npxRoot, 'inflight', ['ccstatusline@latest'], false, 0); // fresh mtime
+    runHook(sessionStart(bareDir), npxRoot);
+    assert.ok(fs.existsSync(inflight), 'recently-modified broken entry kept (avoid racing npx install)');
+    fs.rmSync(npxRoot, { recursive: true, force: true });
+  });
+});

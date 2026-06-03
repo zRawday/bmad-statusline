@@ -186,6 +186,19 @@ function installTarget5(paths) {
       if (config.hooks.PostToolUse.length < before) changed = true;
     }
 
+    // Upgrade: widen bmad SessionStart matcher 'resume' → '' so the npx-cache
+    // auto-repair runs on fresh sessions too. Rewrite in place to avoid a duplicate.
+    if (Array.isArray(config.hooks.SessionStart)) {
+      for (const entry of config.hooks.SessionStart) {
+        if (entry.matcher === 'resume' &&
+          Array.isArray(entry.hooks) &&
+          entry.hooks.some(h => h.command && h.command.includes('bmad-hook.js'))) {
+          entry.matcher = '';
+          changed = true;
+        }
+      }
+    }
+
     // Per-event-type granular merge: add only missing bmad matchers
     for (const [event, desiredEntries] of Object.entries(desired.hooks)) {
       if (!Array.isArray(config.hooks[event])) config.hooks[event] = [];

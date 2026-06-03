@@ -95,8 +95,8 @@ describe('src/defaults.js config templates', () => {
     assert.equal(result.hooks.Stop[0].matcher, '');
     assert.equal(result.hooks.Stop[0].hooks[0].type, 'command');
     assert.ok(result.hooks.Stop[0].hooks[0].command.includes('/test/path/bmad-hook.js'));
-    // SessionStart — 'resume' (type + command validation)
-    assert.equal(result.hooks.SessionStart[0].matcher, 'resume');
+    // SessionStart — '' wildcard (fires on fresh sessions too, for npx-cache auto-repair)
+    assert.equal(result.hooks.SessionStart[0].matcher, '');
     assert.equal(result.hooks.SessionStart[0].hooks[0].type, 'command');
     assert.ok(result.hooks.SessionStart[0].hooks[0].command.includes('/test/path/bmad-hook.js'));
   });

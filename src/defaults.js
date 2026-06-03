@@ -61,7 +61,7 @@ export function getHookConfig(hookPath) {
         { matcher: '', hooks: [{ type: 'command', command: cmd }] }
       ],
       SessionStart: [
-        { matcher: 'resume', hooks: [{ type: 'command', command: cmd }] }
+        { matcher: '', hooks: [{ type: 'command', command: cmd }] }
       ],
       SessionEnd: [
         { matcher: '', hooks: [{ type: 'command', command: cmd }] }
