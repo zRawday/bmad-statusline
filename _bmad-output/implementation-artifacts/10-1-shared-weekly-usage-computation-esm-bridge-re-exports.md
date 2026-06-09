@@ -1,6 +1,6 @@
 # Story 10.1: Shared weekly-usage computation + ESM bridge re-exports
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -258,3 +258,23 @@ claude-opus-4-8[1m] (Opus 4.8, 1M context)
 ### Change Log
 
 - 2026-06-09 — Story 10.1 implemented: shared weekly-usage computation (`computeWeeklyUsage`, `computeWeekDayTicks` + 5 consts) added to `shared-constants.cjs`, re-exported via the `defaults.js` ESM bridge, locked down with 17 tests across `reader.test.js` and `defaults.test.js`. All ACs satisfied; full suite green (695/695).
+
+## Review Findings
+
+_Adversarial 3-layer code review (Blind Hunter · Edge Case Hunter · Acceptance Auditor) — 2026-06-10._
+
+**Outcome:** 0 decision-needed · 0 patch · 2 defer · 6 dismissed. The Acceptance Auditor verified all 12 ACs; full suite green (695/695). **No code changed** — the only actionable findings would diverge from the LOCKED, copy-verbatim Architecture Rev.7 reference for inputs the verified data-source contract cannot produce, so both are deferred to their downstream owners rather than patched into this foundation story.
+
+### Deferred
+
+- [x] [Review][Defer] `resets_at` not type/finite-guarded (asymmetric with `used_percentage`) [src/reader/shared-constants.cjs:98] — deferred. A non-numeric `resets_at` bypasses the `== null` guard, makes `weekStartMs`/`timePct` `NaN`, and the zone ladder falls through to `slowdown` → a spurious **SLOW DOWN / red** for healthy usage. Raised **High** by blind+edge. Not a defect vs this story's contract: AC7 type-guards `used_percentage` only, and the VERIFIED data source (`rate_limits.seven_day.resets_at`, seconds) always supplies a number — patching would diverge from the Rev.7 verbatim reference. Hardening belongs to the snapshot-building consumer (story 10.2 reader) and/or 10.5 reconciliation. One-line fix if adopted: `if (typeof snapshot.resets_at !== 'number' || !isFinite(snapshot.resets_at)) return null;`.
+- [x] [Review][Defer] Week-end `slowdown` unreachable (`timePct` clamped to 100) [src/reader/shared-constants.cjs:105-108] — deferred. When now ≥ reset, `slowdown` needs `usagePct ≥ 110`, impossible for a ≤100 percentage, so a fully-maxed user at the very end of the week renders **TOO HIGH** (high), never **SLOW DOWN**. Raised **Medium** by blind. Property of the LOCKED Rev.7 zone formula, faithfully implemented — changing it is an architecture/product call. Flag for story 10.5 (`rev7-flag-reconciliation … intentional-asymmetry`).
+
+### Dismissed (by-design / out of scope / noise)
+
+- `computeWeekDayTicks` ignores `nowMs` — intentional per the AC10 note (signature symmetry / forward use).
+- 6-vs-7 tick count for a midnight-aligned reset — correct: only day boundaries *strictly inside* the window count (edges excluded), so a midnight-aligned 7-day window yields 6 interior midnights, a noon-aligned one 7.
+- Friday-noon tick test "hides a bug" — no bug to hide (above); the test pins the AC9 recipe exactly.
+- Negative / >100 `used_percentage` unclamped — out of scope per the null-contract seam; the data source supplies 0–100 and the Rev.7 reference echoes `usagePct` verbatim.
+- DST makes `positionPct` spacing uneven — intended: ticks sit at the true local-midnight position (AC9/AC10), genuinely 23h/25h apart across a DST change.
+- Comment/data band duplication & raw `usagePct` echo — cosmetic, no behavioral impact.
