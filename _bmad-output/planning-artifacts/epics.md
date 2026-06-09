@@ -1,5 +1,5 @@
 ---
-stepsCompleted: [1, 2, 3, 4, 'e6-step-01', 'e6-step-02', 'e6-step-03', 'e6-step-04']
+stepsCompleted: [1, 2, 3, 4, 'e6-step-01', 'e6-step-02', 'e6-step-03', 'e6-step-04', 'e10-step-01', 'e10-step-02', 'e10-step-03', 'e10-step-04']
 status: 'complete'
 completedAt: '2026-03-31'
 inputDocuments:
@@ -2288,3 +2288,238 @@ So that **closing terminals or crashing doesn't leave zombie Node.js processes c
 **When** executed
 **Then** tests for PID registration on startup, dead PID cleanup, PID removal on normal exit, PID removal on signal, TTY detection triggering exit, multi-instance coexistence, atomic write of registry file
 **And** all existing tests pass (`npm test`)
+
+## Epic 10: Weekly Usage — Plan Consumption Widget & TUI Screen
+
+Le développeur abonné voit en un coup d'œil s'il consomme son quota hebdomadaire plus vite que la semaine ne s'écoule — via un 13ᵉ widget statusline `bmad-weeklyusage` qui affiche `Weekly usage : <STATUS>` dans la couleur de la zone, et un écran TUI "Weekly usage" en lecture seule (accessible depuis un nouveau bouton Home) rendant deux barres (usage + temps avec graduations de jour). Les deux surfaces partagent une math unique (`computeWeeklyUsage`, `computeWeekDayTicks`) classant la consommation en 4 zones fixes (GOOD/SWEET SPOT/TOO HIGH/SLOW DOWN) calculées en points de pourcentage de la semaine, sans timezone ni jour codés en dur. Le reader persiste un snapshot account-global `weekly-usage.json` (Pattern 29) que l'écran TUI lit en lecture seule ; le widget, lui, calcule directement depuis son stdin live (précédent `bmad-contextpct`). Ajout brownfield purement additif — aucun contrat de composant existant n'est modifié.
+
+**Architecture:** Rev.7 — Pattern 29 (Reader Usage-Snapshot Cache). New shared computation, one new widget (self-colored, `defaultEnabled:false`), one new read-only TUI screen, one new cache file. No hook change, no installer change beyond shipping the updated reader/shared-constants.
+
+**Stories:**
+- 10.1: Shared weekly-usage computation (`shared-constants.cjs`) + `defaults.js` ESM-bridge re-exports
+- 10.2: Reader — `weeklyusage` extractor + `persistUsageSnapshot()` + self-color exclusion
+- 10.3: Widget registry entry (13th widget) + configurator preview integration
+- 10.4: TUI "Weekly usage" screen + Home button + app routing
+- 10.5: Rev.7 flag reconciliation — widget-count → 13, Boundary 2 wording, intentional asymmetry doc
+
+**Dependencies:** 10.1 first (foundation — pure math + bridge). 10.2 and 10.3 parallelizable after 10.1. 10.4 depends on 10.1 (shared math via bridge) and 10.3 (widget registered + previewable). 10.5 after 10.1–10.4 (sweeps prose/docs once the feature exists).
+
+### Story 10.1: Shared weekly-usage computation + ESM bridge re-exports
+
+As a **bmad-statusline developer**,
+I want **the weekly-usage zone math and day-tick math to live as pure, testable functions in `shared-constants.cjs` and be re-exported through the `defaults.js` ESM bridge**,
+So that **the reader (CJS) and the TUI (ESM) compute identical zones and ticks from one source of truth, with the locked boundary thresholds verified by tests**.
+
+**Acceptance Criteria:**
+
+**Given** `src/reader/shared-constants.cjs`
+**When** inspected
+**Then** it exports `WEEK_MS` (`7 * 24 * 60 * 60 * 1000`), `WEEKLY_USAGE_SWEET_BAND` (`5`), `WEEKLY_USAGE_HIGH_BAND` (`10`), `WEEKLY_USAGE_ZONES` (`good`/`sweet`/`high`/`slowdown` → `{status, color}`), `WEEKDAY_LABELS` (`['Sun','Mon','Tue','Wed','Thu','Fri','Sat']`), `computeWeeklyUsage`, and `computeWeekDayTicks` — all added to `module.exports`
+
+**Given** `computeWeeklyUsage(snapshot, nowMs)` and `time%` derived from a snapshot
+**When** `usagePct === timePct - 5` exactly (lower edge of the sweet band)
+**Then** the zone is `sweet` (status `SWEET SPOT`, color `blue`) — the boundary at `time−5` belongs to `sweet`, not `good`
+
+**Given** `computeWeeklyUsage(snapshot, nowMs)`
+**When** `usagePct` is just below `timePct - 5` (e.g. `timePct - 5.001`)
+**Then** the zone is `good` (status `GOOD`, color `green`)
+
+**Given** `computeWeeklyUsage(snapshot, nowMs)`
+**When** `usagePct === timePct` exactly (lower edge of the high band)
+**Then** the zone is `high` (status `TOO HIGH`, color `yellow`) — the boundary at `time` belongs to `high`, not `sweet`
+
+**Given** `computeWeeklyUsage(snapshot, nowMs)`
+**When** `usagePct === timePct + 10` exactly (lower edge of the slowdown band)
+**Then** the zone is `slowdown` (status `SLOW DOWN`, color `red`) — the boundary at `time+10` belongs to `slowdown`, not `high`
+
+**Given** `computeWeeklyUsage` and a snapshot whose `resets_at * 1000 - WEEK_MS` is in the future relative to `nowMs`, or far in the past
+**When** computed
+**Then** `timePct` is clamped to the range `[0, 100]` via `clamp01((nowMs − (resets_at − 7d)) / 7d) × 100` — never negative, never above 100
+
+**Given** `computeWeeklyUsage(snapshot, nowMs)`
+**When** `snapshot` is null, or `used_percentage` is null/absent, or `resets_at` is null/absent, or `used_percentage` is non-numeric/non-finite (`NaN`/`Infinity`)
+**Then** it returns `null` (empty-state signal for both surfaces)
+
+**Given** `computeWeeklyUsage(snapshot, nowMs)` returning a populated result
+**When** inspected
+**Then** the object is `{ usagePct, timePct, zone, status, color }` with `status`/`color` sourced from `WEEKLY_USAGE_ZONES[zone]`
+
+**Given** `computeWeekDayTicks(resetsAtSec, nowMs)` for a window that starts Friday at noon local time
+**When** computed
+**Then** it returns one `{ positionPct, label }` per **local-midnight** day boundary strictly inside the window, `label` = the day that is **starting** (via `WEEKDAY_LABELS[d.getDay()]`), with the first Fri-noon→Sat-midnight segment naturally half-width and no hardcoded weekday
+
+**Given** `computeWeekDayTicks`
+**When** advancing across a window that crosses a DST transition
+**Then** each tick advances via `d.setHours(24, 0, 0, 0)` (next local midnight), not a fixed `+24h` offset — boundaries do not drift
+
+**Given** `src/defaults.js`
+**When** inspected
+**Then** it re-exports the new shared-constants symbols (`WEEK_MS`, the zone consts, `WEEKLY_USAGE_ZONES`, `WEEKDAY_LABELS`, `computeWeeklyUsage`, `computeWeekDayTicks`) via the existing `createRequire` bridge, so ESM consumers (TUI) import them from `defaults.js`
+
+**Given** the shared-constants math tests live in **`test/reader.test.js`** (the existing CJS-consumer test file — no new `test/shared-constants*.test.js` is created), and the ESM-bridge assertion lives in **`test/defaults.test.js`**
+**When** updated for this story
+**Then** `test/reader.test.js` covers: (a) the three locked boundaries at `time−5`, `time`, `time+10`, (b) `good` and `slowdown` extremes, (c) `timePct` clamping at both ends, (d) null/empty/non-finite → `null`, (e) day-tick count + labels + half-width first segment for a Friday-noon reset; **and** `test/defaults.test.js` covers (f) the `defaults.js` bridge re-exports resolve to the same function references as `shared-constants.cjs`
+
+### Story 10.2: Reader — `weeklyusage` extractor + snapshot persistence + self-color exclusion
+
+As a **developer with the `bmad-weeklyusage` widget on a status line**,
+I want **the reader to render the zone-colored `Weekly usage : <STATUS>` from live stdin and persist an account-global usage snapshot for the TUI**,
+So that **the statusline shows my live weekly-quota zone and the standalone TUI screen can read the latest usage without its own stdin payload**.
+
+**Acceptance Criteria:**
+
+**Given** `COMMANDS.weeklyusage(s, lc, stdin)` in `src/reader/bmad-sl-reader.js`
+**When** `stdin.rate_limits.seven_day` has numeric `used_percentage` and `resets_at`
+**Then** it returns `colorize('Weekly usage : ' + u.status, COLOR_CODES[u.color])` where `u = computeWeeklyUsage({ used_percentage, resets_at }, Date.now())` — self-colored with the zone color
+
+**Given** `COMMANDS.weeklyusage`
+**When** `stdin.rate_limits` (or `.seven_day`) is absent, or `computeWeeklyUsage` returns `null`
+**Then** it returns `''` (empty string) — matching the `contextpct` precedent; the segment is skipped (`if (!value) continue`), so the widget contributes nothing and shows no `--` placeholder in the statusline
+
+**Given** the self-color exclusion guard in `handleLineCommand()` (currently `bmad-sl-reader.js:~251`)
+**When** updated
+**Then** `bmad-weeklyusage` is added to the exclusion alongside `bmad-llmstate` and `bmad-contextpct`, so the generic fixed-color wrapper never wraps it (it self-colors in its extractor)
+
+**Given** `persistUsageSnapshot(stdin)` in the reader
+**When** `stdin.rate_limits.seven_day` has non-null `used_percentage` and `resets_at`
+**Then** it writes `{ used_percentage, resets_at, captured_at }` (`captured_at` = `new Date().toISOString()`) to `<CACHE_DIR>/weekly-usage.json` via atomic write — `writeFileSync(USAGE_PATH + '.tmp', …)` then `renameSync(tmp, USAGE_PATH)` (Pattern 8), `JSON.stringify(snap, null, 2) + '\n'`
+
+**Given** `persistUsageSnapshot(stdin)` where `CACHE_DIR` resolves via `process.env.BMAD_CACHE_DIR || ~/.cache/bmad-status` (Pattern 5)
+**When** `rate_limits` is absent or `used_percentage`/`resets_at` is null
+**Then** it returns early and writes nothing (empty state — nothing to persist)
+
+**Given** an existing `weekly-usage.json` whose `used_percentage` and `resets_at` equal the incoming values (content-change throttle, Pattern 29)
+**When** `persistUsageSnapshot` runs
+**Then** it reads the previous snapshot and skips the write — no disk write when meaningful fields are unchanged (prevents per-render write storms)
+
+**Given** up to 3 concurrent `line N` reader processes (plus native-widget reader processes) rendering in the same cycle
+**When** they all call `persistUsageSnapshot` with identical values
+**Then** the atomic `.tmp`→rename plus the content-change throttle make concurrent identical writes safe — the first writes, the rest see "unchanged" and skip, and a torn read is impossible
+
+**Given** any `fs` error inside `persistUsageSnapshot` (read, write, rename, or `JSON.parse` of a corrupt previous snapshot)
+**When** it occurs
+**Then** it is swallowed silently (`try { … } catch {}`) — reader = silent always (Pattern 1); never throws, never logs
+
+**Given** the reader entry paths
+**When** inspected
+**Then** `persistUsageSnapshot(stdin)` is invoked once right after `readStdin()` in **both** `handleLineCommand()` — placed **before** the `if (!status) return ''` early-return so the snapshot is captured even outside a BMAD project / before any status file exists — and the individual-command path in `main()`
+
+**Given** `test/reader.test.js`
+**When** updated for this story
+**Then** it tests: (a) extractor zone output for each of the 4 zones, (b) extractor empty state (`rate_limits` absent → `''`), (c) snapshot atomic write produces the correct schema, (d) content-change throttle skips an unchanged write, (e) snapshot written even when no status file exists (TUI-without-session path), (f) silent-fail on a write error, (g) `bmad-weeklyusage` excluded from generic fixed-color wrapping
+
+### Story 10.3: Widget registry entry (13th widget) + configurator preview integration
+
+As a **developer configuring the status line in the TUI**,
+I want **`bmad-weeklyusage` registered as the 13th widget and previewed correctly in the configurator**,
+So that **I can add it to a line via Edit Line and see a representative zone-colored sample in the live preview**.
+
+**Acceptance Criteria:**
+
+**Given** `INDIVIDUAL_WIDGETS` in `src/tui/widget-registry.js`
+**When** inspected
+**Then** it contains a 13th entry `{ id: 'bmad-weeklyusage', command: 'weeklyusage', name: 'Weekly Usage', hint: 'Claude plan weekly consumption vs week elapsed (subscribers)', defaultEnabled: false, defaultColor: null, defaultMode: 'dynamic' }`
+
+**Given** `createDefaultConfig()`
+**When** a fresh default config is created
+**Then** `bmad-weeklyusage` is NOT placed on any default line (`defaultEnabled: false`) — the existing 3-line default layout is unchanged
+
+**Given** an existing user config loaded after upgrade (its `widgetOrder` predates this widget)
+**When** `ensureWidgetOrder()` runs on load
+**Then** `bmad-weeklyusage` is appended to every line's `widgetOrder` (exactly as `bmad-contextpct` was appended pre-v1.2), so existing users see it in the Edit Line screen without losing their layout
+
+**Given** `bmad-weeklyusage` has no per-widget config screen
+**When** a user selects it in Edit Line
+**Then** its `colorMode` is simply `{ mode: 'dynamic' }` — there is no threshold/displayMode sub-screen (the 4 zones are fixed by spec)
+
+**Given** `SAMPLE_VALUES` in `src/tui/preview-utils.js`
+**When** inspected
+**Then** it maps `'bmad-weeklyusage'` → `'Weekly usage : SWEET SPOT'`
+
+**Given** `resolvePreviewColor(widgetId, colorModes)` in `src/tui/preview-utils.js`
+**When** `widgetId === 'bmad-weeklyusage'`
+**Then** it returns a representative zone color (`'blue'`, for the SWEET SPOT sample) regardless of mode — mirroring the `bmad-contextpct` self-coloring branch
+
+**Given** `test/tui-widget-registry.test.js` and `test/tui-preview-utils.test.js`
+**When** updated for this story
+**Then** they assert: (a) `INDIVIDUAL_WIDGETS.length === 13` and the new entry's fields, (b) `createDefaultConfig()` does not include `bmad-weeklyusage` on any line, (c) `ensureWidgetOrder()` appends it to a legacy config, (d) `SAMPLE_VALUES['bmad-weeklyusage']` and `resolvePreviewColor` return the expected sample and color
+
+### Story 10.4: TUI "Weekly usage" screen + Home button + app routing
+
+As a **subscriber wanting a fuller view of my weekly consumption**,
+I want **a read-only "Weekly usage" screen reachable from a new Home button, showing a usage bar and a time bar with day ticks**,
+So that **I can see at a glance whether I'm ahead of or behind the week's pace, even outside a tracked BMAD session**.
+
+**Acceptance Criteria:**
+
+**Given** `src/tui/screens/WeeklyUsageScreen.js` (new, PascalCase, `const e = React.createElement;`, JSX-less)
+**When** it mounts with a valid `weekly-usage.json` snapshot
+**Then** it computes `u = computeWeeklyUsage(snapshot, Date.now())` and `ticks = computeWeekDayTicks(snapshot.resets_at, Date.now())` (imported from `defaults.js`) and renders two fixed-width bars: a **usage bar** filled to `u.usagePct` colored with `toInkColor(u.color)` (with `u.usagePct.toFixed(1) + '%'`), and a **time bar** filled to `u.timePct` in a neutral/dim color with `│` tick glyphs at each `ticks[i].positionPct` and the day label under each tick
+
+**Given** the populated screen
+**When** rendered
+**Then** it also shows a status line `Weekly usage : <u.status>` in the zone color — wording visually identical to the statusline widget
+
+**Given** the prototype `docs/prototype weekly usage.png` (indicative only, NOT pixel-authoritative)
+**When** the developer reconciles format details against the locked spec
+**Then** the authoritative formats are: the percentage reads `u.usagePct.toFixed(1) + '%'` (e.g. `24.0%`, one decimal, no space) — the prototype's `24 %` (integer + space) is indicative; and day-tick labels use the short `WEEKDAY_LABELS` form (`'Fri'`, not the prototype's spelled-out `Friday`)
+
+**Given** the snapshot file is missing, invalid JSON, or `computeWeeklyUsage` returns `null` (empty state — `rate_limits` never captured)
+**When** the screen renders
+**Then** it shows a dim placeholder: a grey `░`-filled bar plus a message such as `Weekly usage : --` and "Waiting for usage data (subscribers only; appears after the first API response)." — no crash, no colored zone
+
+**Given** the screen reads `weekly-usage.json`
+**When** it accesses the file
+**Then** it reads from `paths.cachePath` dir **read-only**, synchronously (Pattern 2) — it never calls `updateConfig` / `setConfig` / `writeInternalConfig` (no config mutation, no BF2 risk)
+
+**Given** the screen is mounted
+**When** ~60s elapse
+**Then** a low-frequency `setInterval` (`.unref()`'d, cleared on unmount) re-reads the snapshot and forces a re-render so the time bar advances and `used_percentage` refreshes — a render-only effect (not a config read+write), so it does not violate the BF2 anti-pattern
+
+**Given** the screen receives the reduced read-only props shape `{ config, previewOverride, goBack, isActive, paths }` (Pattern 18, like `HealthCheckScreen`)
+**When** the user presses Escape
+**Then** `useInput({ isActive })` calls `goBack()` — `isActive` is passed to prevent ghost input on the unfocused screen
+
+**Given** `src/tui/screens/HomeScreen.js`
+**When** inspected
+**Then** `HOME_OPTIONS` includes `{ label: '📈 Weekly usage', value: 'weeklyUsage' }` (placed near Monitor — both read-only dashboards) and the `key.return` handler has an `else if (value === 'weeklyUsage') navigate('weeklyUsage')` branch
+
+**Given** `src/tui/app.js`
+**When** inspected
+**Then** it routes `screen === 'weeklyUsage'` to `e(WeeklyUsageScreen, { ...screenProps, paths })`, mirroring the read-only HealthCheck precedent
+
+**Given** `test/tui-weekly-usage.test.js` (new)
+**When** run
+**Then** it tests: (a) populated render — both bars + zone status line for a known snapshot, (b) empty state — grey bar + waiting message when the file is missing/invalid, (c) Escape calls `goBack()`, (d) the screen performs no config write, (e) Home option present and routes to the screen
+
+### Story 10.5: Rev.7 flag reconciliation — widget count, Boundary 2 wording, intentional asymmetry
+
+As a **maintainer keeping docs and tests consistent with the shipped feature**,
+I want **the three flags raised in Architecture Rev.7 reconciled across tests and project docs**,
+So that **future agents see "13 widgets" everywhere, understand that the reader legitimately owns cache-dir bookkeeping, and know the widget/screen visibility asymmetry is intentional**.
+
+**Acceptance Criteria:**
+
+**Given** the test suite and any "11 widgets" / "12 widgets" prose or hardcoded counts — explicitly including `tui-widget-registry.test.js` expectations, comments, fixtures, any README count, **and `_bmad-output/project-context.md`** (its "12 widgets (widget registry…)" heading + 12-row widget table, and every "all 12 widget IDs" reference in the Internal Config Schema / `widgetOrder` prose)
+**When** swept for this story
+**Then** every widget-count reference reads **13**, the `project-context.md` widget table gains a `bmad-weeklyusage` row (`weeklyusage` / Weekly Usage / false / — / dynamic), and `npm test` passes — no remaining assertion or prose claiming 11 or 12 widgets (flag #1)
+
+**Given** `_bmad-output/project-context.md` Boundary 2 ("Reader (runtime, standalone) — THE CONSUMER")
+**When** updated
+**Then** the "Reader NEVER writes" framing is reconciled to "read-only w.r.t. config & status; owns cache-dir bookkeeping (alive files + usage snapshot)" consistent with Pattern 29 — so it no longer contradicts the reader's `persistUsageSnapshot` write (flag #2)
+
+**Given** project documentation (project-context.md and/or README, wherever the widget is described)
+**When** updated
+**Then** it states the intentional asymmetry: the `bmad-weeklyusage` **widget renders only inside a tracked BMAD session** (the `line N` reader returns `''` with no status file), while the **TUI "Weekly usage" screen works anywhere** (the snapshot is persisted before the `line N` early-return) — documented as deliberate, not a bug (flag #3)
+
+**Given** Pattern 29 (Reader Usage-Snapshot Cache) is now realized in code
+**When** project-context.md is reviewed
+**Then** it references Pattern 29 / the `weekly-usage.json` snapshot where the reader's cache-dir responsibilities are described, so the documented contract matches the as-built reader
+
+**Given** the "Reader Multi-Line Architecture" section of `_bmad-output/project-context.md` (its "Color application in `line N`" prose currently states *"`bmad-llmstate` AND `bmad-contextpct` are excluded from generic fixed-color application (line ~251)"*)
+**When** updated for this story
+**Then** that prose lists **all three** self-coloring widgets — `bmad-llmstate`, `bmad-contextpct`, **and `bmad-weeklyusage`** — so the documented exclusion matches the as-built guard, with no stale two-widget wording remaining
+
+**Given** the full reconciliation
+**When** `npm test` runs
+**Then** all tests pass with the updated counts and no doc/test references contradict the 13-widget, snapshot-writing reader reality

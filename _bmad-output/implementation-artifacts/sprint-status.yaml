@@ -35,7 +35,8 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-03-28
-last_updated: 2026-04-13
+last_updated: 2026-06-09
+# Epic 10 reframed → Weekly Usage; 10-1..10-5 added (backlog) via sprint-planning 2026-06-09
 # 10-1 code review passed 2026-04-13
 # 10-1 dev completed 2026-04-13
 # 10-1 dev started 2026-04-13
@@ -174,7 +175,12 @@ development_status:
   9-2-test-suite-performance-optimization: done
   epic-9-retrospective: optional
 
-  # Epic 10: Context Window Percentage Widget
+  # Epic 10: Weekly Usage — Plan Consumption Widget & TUI Screen (was: Context Window Percentage Widget)
   epic-10: in-progress
   10-1-context-window-percentage-widget: done
+  10-1-shared-weekly-usage-computation-esm-bridge-re-exports: backlog
+  10-2-reader-weeklyusage-extractor-snapshot-persistence-self-color-exclusion: backlog
+  10-3-widget-registry-entry-13th-widget-configurator-preview-integration: backlog
+  10-4-tui-weekly-usage-screen-home-button-app-routing: backlog
+  10-5-rev7-flag-reconciliation-widget-count-boundary2-wording-intentional-asymmetry: backlog
   epic-10-retrospective: optional

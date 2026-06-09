@@ -1,24 +1,26 @@
 ---
 project_name: 'bmad-statusline'
 user_name: 'Fred'
-date: '2026-04-09'
-sections_completed: ['technology_stack', 'critical_rules_patterns_0_13', 'tui_v2_patterns_14_20', 'hook_architecture', 'status_file_contract', 'internal_config_schema', 'reader_multiline', 'architectural_boundaries', 'tui_state_model', 'bug_fix_architecture', 'testing_conventions', 'code_conventions', 'installer_deployment', 'llm_state_model', 'shared_constants', 'tui_lifecycle', 'history_arrays']
+date: '2026-06-09'
+sections_completed: ['technology_stack', 'critical_rules_patterns_0_13', 'tui_v2_patterns_14_20', 'hook_architecture', 'status_file_contract', 'internal_config_schema', 'reader_multiline', 'architectural_boundaries', 'tui_state_model', 'bug_fix_architecture', 'testing_conventions', 'code_conventions', 'installer_deployment', 'llm_state_model', 'shared_constants', 'tui_lifecycle', 'history_arrays', 'contextpct_widget', 'doctor_healthcheck', 'npx_cache_autoheal', 'cli_utils']
 status: 'complete'
-completedAt: '2026-04-09'
+completedAt: '2026-06-09'
 existing_patterns_found: 28
-rule_count: 85
+rule_count: 92
 optimized_for_llm: true
 source_documents:
   - '_bmad-output/planning-artifacts/prd.md'
   - '_bmad-output/planning-artifacts/ux-design-specification.md'
   - '_bmad-output/planning-artifacts/architecture.md (Rev.5)'
   - '_bmad-output/planning-artifacts/epics.md'
-epic_status: 'Epics 1-9 delivered'
+  - 'src/ (code as-built, v1.2.1)'
+epic_status: 'Epics 1-9 delivered; v1.2.0 doctor health check + v1.2.1 npx cache auto-heal'
+package_version: '1.2.1'
 ---
 
 # Project Context for AI Agents
 
-_Critical rules and patterns that AI agents must follow when implementing code in bmad-statusline. Architecture is hook-based (passive extraction via Claude Code hooks). This document reflects the current implemented state from Architecture Rev.5, PRD v2, and UX Design Spec v2._
+_Critical rules and patterns that AI agents must follow when implementing code in bmad-statusline. Architecture is hook-based (passive extraction via Claude Code hooks). This document reflects the current implemented state from Architecture Rev.5, PRD v2, UX Design Spec v2, and the code as-built at **v1.2.1** (adds the Context % widget, the `doctor` health check, and ccstatusline npx cache auto-heal)._
 
 ---
 
@@ -35,9 +37,11 @@ _Critical rules and patterns that AI agents must follow when implementing code i
 - **TUI dependencies:** `ink` (v6.8.0), `react` (v19.2.4), `@inkjs/ui` (v2.0.0) — scoped to `src/tui/` only
 - **Testing:** `node:test` + `node:assert/strict` (built-in, zero dev deps), `ink-testing-library` (v4.0.0) for TUI component tests
 - **Build:** No build step (plain JS, no transpilation)
-- **npm scripts:** `"test": "node --test --test-concurrency=4 --test-timeout=30000 test/*.test.js"`
+- **npm scripts:** `"test": "node --test --test-concurrency=4 --test-timeout=30000 test/*.test.js"` (27 test files as of v1.2.1)
 - **Compatibility:** ccstatusline >= 2.2 (custom-command widget support, preserveColors)
 - **Platform:** Cross-platform — Windows (Git Bash), macOS, Linux
+- **CLI helpers:** `src/cli-utils.js` (ESM) — single source for installer/doctor ANSI colors, log helpers, and JSON mutation helpers. Imported by `install.js`, `uninstall.js`, `clean.js`, `doctor.js`. Never re-declare these locally.
+- **npx cache env var:** `BMAD_NPX_CACHE_DIR` — overrides the ccstatusline npx cache dir for doctor + hook auto-heal (default: Windows `~/AppData/Local/npm-cache/_npx`, else `~/.npm/_npx`).
 
 ---
 
@@ -47,7 +51,7 @@ _Patterns 0-13 from Architecture Rev.5 — preserved from Rev.2 (hook/reader/ins
 
 ### Pattern 0 — Hook Entry Point Structure
 
-The hook script follows this exact structure: Requires → Constants → Stdin parsing (try/catch → silent exit) → Guard (`_bmad/` check via walk-up) → Alive touch (PID detection) → Stale session cleanup (same-PID) → Project + output folders detection → Dispatch on `hook_event_name` (13 events) → Handlers → Story priority helper → Status file helpers → Main entry. **Rule:** Constants → helpers → handlers → main.
+The hook script follows this exact structure: Requires → Constants → Stdin parsing (try/catch → silent exit) → **Early SessionStart npx cache auto-heal (try/catch, BEFORE the guard)** → Guard (`_bmad/` check via walk-up) → Alive touch (PID detection) → Stale session cleanup (same-PID) → Project + output folders detection → Dispatch on `hook_event_name` (13 events) → Handlers → Story priority helper → Status file helpers → npx cache auto-heal helpers → Main entry. **Rule:** Constants → helpers → handlers → main. **Exception:** the SessionStart npx cache heal runs before the `_bmad/` guard because the status line is global (not project-scoped) — it must repair the cache even outside a BMAD project.
 
 ### Pattern 1 — Error Handling Triad
 
@@ -84,16 +88,21 @@ Applies ONLY to ccstatusline config writes from installer and TUI ccstatusline s
 - **Reader + Hook:** Respect `BMAD_CACHE_DIR` env var: `process.env.BMAD_CACHE_DIR || path.join(os.homedir(), '.cache', 'bmad-status')`
 - **Reader + TUI:** Respect `BMAD_CONFIG_DIR` env var: `process.env.BMAD_CONFIG_DIR || path.join(os.homedir(), '.config', 'bmad-statusline')`
 - **Internal config path:** `path.join(BMAD_CONFIG_DIR, 'config.json')` — same env var in reader and TUI.
+- **Doctor + Hook (npx cache):** Respect `BMAD_NPX_CACHE_DIR` env var. Default differs by platform: `path.join(os.homedir(), 'AppData', 'Local', 'npm-cache', '_npx')` on `win32`, else `path.join(os.homedir(), '.npm', '_npx')`. The hook computes this inline (standalone CJS, cannot import doctor.js); doctor.js exports `defaultNpxCacheDir()`. Both must stay in sync.
 
-### Pattern 6 — Console Output Format (Installer Only)
+### Pattern 6 — Console Output Format (Installer + Doctor) [UPDATED v1.2]
+
+Logging + JSON helpers are now **centralized in `src/cli-utils.js`** — no longer declared locally per command file. Import them: `import { G, R, D, B, _, logSuccess, logSkipped, logError, logSection, readJsonFile, backupFile, writeJsonSafe } from './cli-utils.js';`
 
 ```js
-function logSuccess(target, message) { console.log(`  ✓ ${target} — ${message}`); }
-function logSkipped(target, message) { console.log(`  ○ ${target} — ${message}`); }
-function logError(target, message)   { console.log(`  ✗ ${target} — ${message}`); }
+// src/cli-utils.js — colored helpers (5-space indent, colored glyph, em-dash)
+export function logSuccess(target, message) { console.log(`     ${G}✓${_} ${target} ${D}—${_} ${G}${message}${_}`); }
+export function logSkipped(target, message) { console.log(`     ${D}○ ${target} — ${message}${_}`); }
+export function logError(target, message)   { console.log(`     ${R}✗ ${target} — ${message}${_}`); }
+export function logSection(emoji, title)    { console.log(`\n  ${emoji} ${B}${C}${title}${_}`); }
 ```
 
-Format: 2 spaces + marker + space + target + em dash + description. Helpers defined locally in each command file.
+Format: 5 spaces + colored glyph + target + em dash + message. `logSection` prints a bold cyan section header. **Rule:** installer/doctor/clean/uninstall import from `cli-utils.js` — never re-declare. JSON mutation helpers (`readJsonFile`, `backupFile`, `writeJsonSafe`) also live here; `writeJsonSafe` performs the pattern-4 reread-and-parse validation.
 
 ### Pattern 7 — Hook Stdin Parsing
 
@@ -380,7 +389,7 @@ The hook is the **central component** — sole writer of status data.
 | **PostToolUseFailure** | `hook_event_name: "PostToolUseFailure"` | Tool failed or user interrupted | `is_interrupt` | `interrupted` if interrupt, else `active` |
 | **SubagentStart** | `hook_event_name: "SubagentStart"` | Subagent spawned | `agent_type` | `active` + sets `subagent_type` |
 | **SubagentStop** | `hook_event_name: "SubagentStop"` | Subagent completed | — | `active` + clears `subagent_type` |
-| **SessionStart** | `hook_event_name: "SessionStart"` | Session alive touch (resume only) | — | no-op (alive already touched) |
+| **SessionStart** | `hook_event_name: "SessionStart"` | Auto-heal corrupted ccstatusline npx cache (runs BEFORE `_bmad/` guard); alive touch | — | no-op for status (alive already touched) |
 | **SessionEnd** | `hook_event_name: "SessionEnd"` | Delete alive file, preserve status for resume | — | no write — only deletes `.alive-{id}` |
 
 ### Hook Config (13 event types, deployed via installer)
@@ -442,10 +451,73 @@ The hook is the **central component** — sole writer of status data.
 | **PostToolUseFailure** | `is_interrupt !== true` | Set `llm_state=active` |
 | **SubagentStart** | Always | Set `llm_state=active`, store `subagent_type` |
 | **SubagentStop** | Always | Set `llm_state=active`, clear `subagent_type` |
-| **SessionStart** | Always (matcher ensures resume only) | No-op — alive already touched on entry |
+| **SessionStart** | Always (matcher ensures resume only) | Call `healCcstatuslineNpxCache()` in an early try/catch **before the `_bmad/` guard** (status line is global), then no-op — alive already touched on entry |
 | **SessionEnd** | Always | Delete `.alive-{session_id}`, preserve status file for resume recovery |
 
 All Read/Write/Edit gated by cwd scoping (pattern 11). History appends gated by `canAppendHistory()` (10MB max file size).
+
+---
+
+## ccstatusline npx Cache Auto-Heal [CURRENT] (v1.2, shared logic — hook + doctor)
+
+Claude Code's status line runs `npx -y ccstatusline@latest`. On Windows the npx cache entry can lose its bin shims (`ccstatusline.cmd`/`.ps1`), leaving the status line blank while the monitor keeps working. Two code paths repair this — they MUST use identical matching logic.
+
+### Matching rules (identical in hook and doctor)
+
+```js
+// Match exactly ccstatusline or ccstatusline@* — NOT ccstatusline-* (a different package)
+function isCcstatuslineEntry(pkg) {
+  const specs = pkg && pkg._npx && pkg._npx.packages;
+  if (!Array.isArray(specs)) return false;
+  return specs.some(s => typeof s === 'string' && (s === 'ccstatusline' || s.startsWith('ccstatusline@')));
+}
+```
+
+### Hook: `healCcstatuslineNpxCache()` (passive, structural, anti-race)
+
+- Runs at **SessionStart, before the `_bmad/` guard** (status line is global).
+- Iterates `BMAD_NPX_CACHE_DIR` entries, reads each `package.json`, keeps only ccstatusline entries.
+- **Broken = shim missing:** `ccstatuslineShimMissing(dir)` checks `node_modules/.bin/ccstatusline.cmd` (Windows) or `ccstatusline` (else) is absent.
+- **Anti-race guard:** `recentlyModified(dir)` skips entries whose mtime is < 60s old (an in-flight `npx` install has `package.json` written but shim not yet — deleting it would corrupt the install). The 60s window is an **inline literal**, not a module const — TDZ: this runs in the early SessionStart block before late `const` declarations initialize.
+- Only deletes when `shimMissing && !recentlyModified`. Always silent (`try {} catch {}`).
+
+### Doctor: `purgeCcstatuslineNpxCache(npxCacheDir)` (functional, reactive)
+
+- Triggered only when the functional npx check (`defaultRunStatusline()`) fails.
+- Purges **all** ccstatusline cache entries (not shim-conditional — it already knows npx is broken), returns purged dir names, then re-runs the functional check to confirm repair.
+
+**Rules:**
+- Hook heal is **structural** (shim presence) + **conservative** (mtime guard); doctor purge is **functional** (npx exit code) + **aggressive** (purge all). Do not unify — they serve different trigger contexts.
+- The npx cache is regenerable — purging is always safe. Both wrap every `fs` op in try/catch.
+- Never match `ccstatusline-*` prefixed packages (different packages).
+
+---
+
+## Doctor / Health Check [CURRENT] (`src/doctor.js`, v1.2 — shared CLI + TUI)
+
+`src/doctor.js` is a shared health-check module consumed by both the `doctor` CLI command and the TUI `HealthCheckScreen`. Core function: `runHealthCheck(paths, runStatusline)` returns `{ checks, healthy }`.
+
+### The 5 checks (in order)
+
+| id | Check | OK condition |
+|----|-------|--------------|
+| `reader` | Reader files deployed | `bmad-sl-reader.js`, `shared-constants.cjs`, `workflow-colors.cjs` all exist in `readerDir` |
+| `config` | `config.json` valid | parses as JSON |
+| `statusline` | statusLine configured | `~/.claude/settings.json` has a `statusLine` object |
+| `widgets` | ccstatusline widgets registered | a `bmad-line-*` widget present in ccstatusline `lines` (flattened) |
+| `npx` | ccstatusline runs via npx | `npx -y ccstatusline@latest` exits 0; on failure → `purgeCcstatuslineNpxCache` then retry |
+
+### Check status values
+
+- `ok` — passed.
+- `repaired` — npx check failed, cache purged, retry succeeded (logged as success with "repaired —" prefix; green ✓ in CLI, **yellow** ✓ in TUI).
+- `fail` — could not pass/repair. `healthy = checks.every(c => c.status !== 'fail')`.
+
+**Rules:**
+- `paths` and `runStatusline` are injected (testable) — `defaultPaths` honors `BMAD_CONFIG_DIR` (readerDir) and `BMAD_NPX_CACHE_DIR`.
+- `defaultRunStatusline()` spawns npx: on Windows `spawn('npx -y ccstatusline@latest', { shell: true })` (single string — args array + shell triggers DEP0190); else `spawn('npx', ['-y', ...])`. 60s timeout, swallow stdin EPIPE errors.
+- CLI wrapper (`doctor()` default export) prints results + exits 1 if unhealthy. TUI `HealthCheckScreen` renders the same `checks` array read-only.
+- Fail/repair details append the install hint `run: npx bmad-statusline install`.
 
 ---
 
@@ -527,7 +599,7 @@ Read by: Reader (for `line N` command) and TUI (on launch)
   "lines": [
     {
       "widgets": ["bmad-project", "bmad-workflow", "bmad-story", "bmad-progressstep", "bmad-timer"],
-      "widgetOrder": ["bmad-project", "bmad-workflow", "bmad-story", "...all 11 widget IDs..."],
+      "widgetOrder": ["bmad-project", "bmad-workflow", "bmad-story", "...all 12 widget IDs..."],
       "colorModes": {
         "bmad-project": { "mode": "dynamic" },
         "bmad-workflow": { "mode": "dynamic" },
@@ -538,10 +610,14 @@ Read by: Reader (for `line N` command) and TUI (on launch)
     },
     {
       "widgets": ["bmad-llmstate"],
-      "widgetOrder": ["...all 11 widget IDs..."],
+      "widgetOrder": ["...all 12 widget IDs..."],
       "colorModes": { "bmad-llmstate": { "mode": "dynamic" } }
     },
-    { "widgets": [], "widgetOrder": ["...all 11 widget IDs..."], "colorModes": {} }
+    {
+      "widgets": ["bmad-contextpct"],
+      "widgetOrder": ["...all 12 widget IDs..."],
+      "colorModes": { "bmad-contextpct": { "mode": "dynamic", "thresholdLow": 0, "thresholdHigh": 100, "displayMode": "compact" } }
+    }
   ],
   "skillColors": {},
   "projectColors": {},
@@ -554,30 +630,34 @@ Read by: Reader (for `line N` command) and TUI (on launch)
 - `customSeparator` is a string, only used when `separator === "custom"`. Null otherwise.
 - `lines` is always length 3. Each line has `widgets`, `widgetOrder`, and `colorModes`.
 - `widgets` array contains only **visible** widgets in **display order**. A widget not in any line's `widgets` is hidden everywhere.
-- `widgetOrder` array contains **all 11 widget IDs** — controls the order widgets appear in the Edit Line screen (including hidden ones). Managed by `ensureWidgetOrder()` on load: prunes stale IDs, appends new widgets.
+- `widgetOrder` array contains **all 12 widget IDs** — controls the order widgets appear in the Edit Line screen (including hidden ones). Managed by `ensureWidgetOrder()` on load: prunes stale IDs, appends new widgets (e.g. `bmad-contextpct` is appended to existing pre-v1.2 configs on load).
 - `colorModes` contains entries for all widgets configured on this line (including hidden ones — preserves color across hide/show cycles).
-- `colorModes[id].mode` is `"dynamic"` (valid for `bmad-workflow`, `bmad-project`, `bmad-activeskill`, `bmad-llmstate`) or `"fixed"`. When `"fixed"`, `fixedColor` is an ANSI color name.
+- `colorModes[id].mode` is `"dynamic"` (valid for `bmad-workflow`, `bmad-project`, `bmad-activeskill`, `bmad-llmstate`, `bmad-contextpct`) or `"fixed"`. When `"fixed"`, `fixedColor` is an ANSI color name.
+- **Extended colorMode fields (widget-specific):**
+  - `bmad-story` colorMode may carry `displayMode` — passed to `formatStoryName(slug, displayMode)` (`'compact'` → number prefix only).
+  - `bmad-contextpct` colorMode carries `thresholdLow` (default 0), `thresholdHigh` (default 100), and `displayMode` (`'compact'` → `Ctx: X.X%` text; otherwise a 25-char gradient bar). Color is computed by `getGradientColor(pct, low, high)` — `fixedColor` is ignored for contextpct.
 - `skillColors` is a top-level object — maps workflow name (e.g. `"dev-story"`) to ANSI color name. Overrides hardcoded `WORKFLOW_COLORS`.
 - `projectColors` is a top-level object — maps project name to ANSI color name. Overrides `hashProjectColor()` deterministic default.
 - `presets` is always length 3. Each slot is null (empty) or a preset object `{ name, widgets, colorModes }`.
 
-**11 widgets (widget registry):**
+**12 widgets (widget registry — `src/tui/widget-registry.js` `INDIVIDUAL_WIDGETS`):**
 
 | Widget ID | Command | Name | Default Enabled | Default Color | Default Mode |
 |-----------|---------|------|----------------|---------------|-------------|
 | `bmad-llmstate` | `llmstate` | LLM State | true (line 1) | — | dynamic |
 | `bmad-project` | `project` | Project | true | — | dynamic |
 | `bmad-workflow` | `workflow` | Initial Skill | true | — | dynamic |
-| `bmad-activeskill` | `activeskill` | Active Skill | false | — | dynamic |
+| `bmad-activeskill` | `activeskill` | Active Skill | **true** | — | dynamic |
 | `bmad-story` | `story` | Story | true | magenta | fixed |
 | `bmad-docname` | `docname` | Document | false | brightYellow | fixed |
 | `bmad-progressstep` | `progressstep` | Step | true | brightCyan | fixed |
 | `bmad-nextstep` | `nextstep` | Next Step | false | yellow | fixed |
 | `bmad-fileread` | `fileread` | File Read | false | cyan | fixed |
 | `bmad-filewrite` | `filewrite` | File Edit/Write | false | brightRed | fixed |
+| `bmad-contextpct` | `contextpct` | Context % | **true (line 2)** | — | dynamic |
 | `bmad-timer` | `timer` | Timer | true | brightBlack | fixed |
 
-Default layout: Line 0 = [project, workflow, story, progressstep, timer]. Line 1 = [llmstate]. Line 2 = empty.
+Default layout (`createDefaultConfig()`): Line 0 = all default-enabled widgets **except** `bmad-llmstate` and `bmad-contextpct` (= [project, workflow, activeskill, story, progressstep, timer]). Line 1 = [llmstate]. Line 2 = [contextpct] (colorMode `{ mode: 'dynamic', thresholdLow: 0, thresholdHigh: 100, displayMode: 'compact' }`). `bmad-llmstate` and `bmad-contextpct` are deliberately segregated onto their own lines.
 
 ---
 
@@ -777,10 +857,18 @@ function canAppendHistory(sid) {
 12. Output to stdout
 
 **Color application in `line N`:**
+- **`bmad-llmstate` AND `bmad-contextpct` are excluded from generic fixed-color application** (line ~251) — both self-color inside their extractor. Never wrap them in `colorize(..., fixedColor)`.
 - `mode: "dynamic"` AND widget is `bmad-llmstate` → leave as-is (LLM badge has its own bg/fg coloring)
 - `mode: "dynamic"` AND widget is `bmad-workflow`/`bmad-project`/`bmad-activeskill` → extractor applies color internally via `getWorkflowColor()`/`getProjectColor()`
+- `bmad-contextpct` → extractor self-colors via `getGradientColor(pct, low, high)` regardless of mode
 - `mode: "fixed"` → `colorize(stripAnsi(value), fixedColor)` — strip any existing ANSI first
 - Special case: `bmad-fileread`/`bmad-filewrite` with fixed color → icon in white, path in fixedColor (split at first space)
+
+**`contextpct` extractor — reads from stdin, NOT the status file:**
+- Source is `stdin.context_window` (the JSON ccstatusline passes to the reader on stdin), not `status-{sid}.json`. This is the **only** extractor whose data comes from stdin rather than the status file.
+- `pct = cw.used_percentage` if present, else `(cw.current_usage / cw.context_window_size) * 100`. Returns empty string if `pct` is null/NaN/non-finite. Clamps negatives to 0.
+- `displayMode === 'compact'` → `Ctx: X.X%` (1 decimal). Otherwise a 25-char gradient bar (`█` filled / `░` empty) + percentage, each cell colored by its position via `getGradientColor()`.
+- `activeskill` extractor: returns empty when `active_skill === workflow` AND `bmad-workflow` is also visible on the same line (avoids duplicate display); falls back to `workflow` when `active_skill` absent.
 
 **Workflow color resolution:**
 1. Strip `bmad-` prefix for lookup
@@ -834,16 +922,25 @@ function canAppendHistory(sid) {
 
 ### Boundary 5: CLI Entry Point (dispatch only)
 
-- `bin/cli.js` — routes: `install`, `uninstall`, `clean`, `--help`, `monitor`, no-arg→TUI
+- `bin/cli.js` — routes: `install`, `uninstall`, `clean`, `doctor`, `--help`/`-h`, no-arg→TUI (lazy-imports `src/{command}.js` and calls its default export).
+- **`monitor` is NOT a CLI route** — the monitor is reached from inside the TUI (HomeScreen), not from the command line.
+- No-arg launch first checks the deployed reader exists; if absent, prints "not installed" + install hint and exits 1.
 - No business logic.
 
-### Boundary 6: Command Modules (install-time)
+### Boundary 6: Command Modules (install-time + diagnostics)
 
-- `src/install.js`, `src/uninstall.js`, `src/clean.js`
-- Each receives `paths` parameter (injected, testable)
+- `src/install.js`, `src/uninstall.js`, `src/clean.js`, `src/doctor.js`
+- Each receives `paths` parameter (injected, testable); `doctor` also injects `runStatusline`.
 - Install creates internal config + deploys bmad-line-0/1/2 + deploys shared-constants.cjs + workflow-colors.cjs
 - Uninstall removes bmad-line-N + deletes internal config
 - Clean removes cache dir
+- Doctor runs the 5-check health check + npx cache auto-repair (see Doctor / Health Check section)
+- All four import shared helpers from `src/cli-utils.js` (Boundary 10)
+
+### Boundary 10: CLI Utils (shared install-time helpers)
+
+- `src/cli-utils.js` (ESM) — ANSI color consts (`G/R/C/D/B/_`), log helpers (`logSuccess`/`logSkipped`/`logError`/`logSection`), JSON helpers (`readJsonFile`/`backupFile`/`writeJsonSafe`).
+- Single source for installer/doctor console output. Never re-declare these locally (supersedes the old local-helper convention in Pattern 6).
 
 ### Boundary 7: Defaults (shared data, install-time + runtime)
 
@@ -900,14 +997,18 @@ home
 ├── monitor                        (full-screen, own navigation)
 ├── editLine(lineIndex: 0|1|2)
 │   ├── colorPicker(widgetId)
+│   ├── contextPctConfig(widgetId) (thresholds + displayMode for bmad-contextpct)
 │   ├── presetSave
 │   └── presetLoad
 ├── reorderLines
 ├── separator
 ├── skillColors
 ├── projectColors
+├── healthCheck                    (runs doctor's runHealthCheck, read-only)
 └── ccstatusline                   (spawns external process)
 ```
+
+**Screens (`src/tui/screens/`):** HomeScreen, EditLineScreen, ColorPicker (within edit-line), ContextPctConfigScreen, SeparatorStyleScreen, ReorderLinesScreen, SkillColorsScreen, ProjectColorsScreen, PresetSaveScreen, PresetLoadScreen, **HealthCheckScreen** (v1.2). HealthCheckScreen takes a reduced read-only props shape — `{ config, previewOverride, goBack, isActive, paths, runHealthCheck }` — it never calls `updateConfig` (it diagnoses, it does not mutate config). Its `useEffect`/`useCallback` run the async health check (cancellable) — this is NOT a config read+write effect, so it does not violate the BF2 anti-pattern.
 
 `resetToOriginal` is an action from Home, not a screen.
 
@@ -933,7 +1034,7 @@ Three bugs from TUI v1 are eliminated by architectural decisions in v2. Document
 
 | Bug | Root Cause (v1) | Elimination (v2) |
 |-----|----------------|-------------------|
-| **BF1:** Hidden widgets can't be shown | `widgetOrder` derived from ccstatusline — hidden widgets absent | Edit Line renders all 11 widgets from `INDIVIDUAL_WIDGETS`. Visibility = presence in `config.lines[N].widgets`. |
+| **BF1:** Hidden widgets can't be shown | `widgetOrder` derived from ccstatusline — hidden widgets absent | Edit Line renders all 12 widgets from `INDIVIDUAL_WIDGETS`. Visibility = presence in `config.lines[N].widgets`. |
 | **BF2:** Reset causes infinite render loop | `setTuiState(snapshot)` triggers re-render → effect → write → re-render | No `useEffect` that reads+writes config. Write inside `setConfig` callback. `snapshot` via `useState` — never changes. |
 | **BF3:** Preview shows no colors | Color values not mapped to Ink `<Text>` props | `resolvePreviewColor()` (pattern 19) + `<Text color={resolved}>`. Centralized in `preview-utils.js`. |
 
@@ -952,14 +1053,15 @@ Three bugs from TUI v1 are eliminated by architectural decisions in v2. Document
 
 ```
 test/
-  hook.test.js                    # 8-signal hook: all event handlers, history, LLM state
-  reader.test.js                  # line N, color resolution, widget extractors, story formatting
+  hook.test.js                    # hook: all event handlers, history, LLM state, SessionStart npx heal
+  reader.test.js                  # line N, color resolution, widget extractors, story formatting, contextpct
   llmstate-widget.test.js         # LLM state badge rendering, 5-state model
   install.test.js                 # bmad-line-0/1/2 injection, hook config (13 events), upgrade v1→v2
   uninstall.test.js               # bmad-line-N removal, config cleanup
   clean.test.js                   # Cache dir cleanup
   defaults.test.js                # Widget definitions, hook config shape, shared constants bridge
-  cli.test.js                     # CLI command routing
+  doctor.test.js                  # 5-check health check, npx cache purge/repair, status values
+  cli.test.js                     # CLI command routing (install/uninstall/clean/doctor)
   tui-app.test.js                 # Multi-line state, config mutation, reset, lifecycle
   tui-config-loader.test.js       # Internal config loading, v1 migration, ensureWidgetOrder
   tui-config-writer.test.js       # Internal config writing, ccstatusline sync
@@ -976,8 +1078,12 @@ test/
   tui-monitor.test.js             # MonitorScreen polling, session grouping
   tui-monitor-components.test.js  # Monitor components: FileTree, BashSection, LlmBadge
   tui-monitor-detail.test.js      # MonitorDetailScreen, chronology, export
+  tui-health-check.test.js        # HealthCheckScreen: render checks, re-run, loading state
+  tui-context-pct-config.test.js  # ContextPctConfigScreen: thresholds, displayMode persistence
   fixtures/                       # JSON fixtures for config states, status files
 ```
+
+_27 test files as of v1.2.1._
 
 **Test patterns:**
 - Test file naming: `{module}.test.js` for core, `tui-{module}.test.js` for TUI
@@ -1111,6 +1217,16 @@ Detection (no version field — structure-based):
 - Screens receive data via standard props contract — never read global state directly (pattern 18)
 - Pass `isActive` to all `useInput()` hooks — prevents ghost input on unfocused screens
 - Use PID lifecycle (register/unregister/signal handlers) in any new TUI entry point (pattern 28)
+- `bmad-llmstate` and `bmad-contextpct` self-color in their extractors — never apply generic fixed-color wrapping to them
+- `bmad-contextpct` data comes from `stdin.context_window`, never from the status file — the hook does not track context usage
+
+**CLI / installer / doctor rules:**
+- Import all log + JSON helpers from `src/cli-utils.js` — never re-declare locally (pattern 6 updated)
+- `monitor` is not a CLI route — it is a TUI screen only
+- Keep `BMAD_NPX_CACHE_DIR` defaults identical between `src/doctor.js` (`defaultNpxCacheDir`) and the hook's inline `ccstatuslineNpxCacheDir()`
+- Match only `ccstatusline`/`ccstatusline@*` npx entries — never `ccstatusline-*`
+- Hook npx heal must respect the 60s `recentlyModified` anti-race guard (inline literal, not a const — TDZ) and the shim-missing structural check
+- Run the npx auto-heal at SessionStart **before** the `_bmad/` guard (status line is global)
 
 ---
 
@@ -1127,4 +1243,4 @@ Detection (no version field — structure-based):
 - Update when architecture decisions change
 - Remove rules that become obvious from the codebase over time
 
-Last Updated: 2026-04-09
+Last Updated: 2026-06-09 (synced to code as-built, v1.2.1 — added Context % widget, doctor health check, npx cache auto-heal)
