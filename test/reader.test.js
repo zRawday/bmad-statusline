@@ -787,3 +787,103 @@ describe('color maps sync', () => {
     }
   });
 });
+
+// --- Weekly-usage computation (Story 10.1, AC 2–10) — direct import, no process spawn ---
+
+describe('weekly-usage computation', () => {
+  const { computeWeeklyUsage, computeWeekDayTicks, WEEK_MS } = sharedConstants;
+
+  // Boundary recipe (timezone-independent epoch math): fix resets_at, derive nowMs so
+  // timePct === 50 exactly, then vary used_percentage to hit each locked boundary.
+  const resetsAtSec = 1_700_000_000;        // arbitrary fixed epoch seconds
+  const resetsMs = resetsAtSec * 1000;
+  const weekStartMs = resetsMs - WEEK_MS;
+  const nowAtHalf = weekStartMs + WEEK_MS / 2; // → timePct === 50
+
+  it('boundary time−5 belongs to sweet (AC2)', () => {
+    const r = computeWeeklyUsage({ used_percentage: 45, resets_at: resetsAtSec }, nowAtHalf);
+    assert.equal(r.timePct, 50);
+    assert.equal(r.zone, 'sweet');
+    assert.equal(r.status, 'SWEET SPOT');
+    assert.equal(r.color, 'blue');
+  });
+
+  it('just below sweet band is good (AC3)', () => {
+    const r = computeWeeklyUsage({ used_percentage: 44.999, resets_at: resetsAtSec }, nowAtHalf);
+    assert.equal(r.zone, 'good');
+    assert.equal(r.status, 'GOOD');
+    assert.equal(r.color, 'green');
+  });
+
+  it('boundary time belongs to high (AC4)', () => {
+    const r = computeWeeklyUsage({ used_percentage: 50, resets_at: resetsAtSec }, nowAtHalf);
+    assert.equal(r.zone, 'high');
+    assert.equal(r.status, 'TOO HIGH');
+    assert.equal(r.color, 'yellow');
+  });
+
+  it('boundary time+10 belongs to slowdown (AC5)', () => {
+    const r = computeWeeklyUsage({ used_percentage: 60, resets_at: resetsAtSec }, nowAtHalf);
+    assert.equal(r.zone, 'slowdown');
+    assert.equal(r.status, 'SLOW DOWN');
+    assert.equal(r.color, 'red');
+  });
+
+  it('usagePct 0 → good extreme', () => {
+    const r = computeWeeklyUsage({ used_percentage: 0, resets_at: resetsAtSec }, nowAtHalf);
+    assert.equal(r.zone, 'good');
+  });
+
+  it('usagePct 100 → slowdown extreme', () => {
+    const r = computeWeeklyUsage({ used_percentage: 100, resets_at: resetsAtSec }, nowAtHalf);
+    assert.equal(r.zone, 'slowdown');
+  });
+
+  it('timePct clamps low to 0 when now precedes week start (AC6)', () => {
+    const r = computeWeeklyUsage({ used_percentage: 0, resets_at: resetsAtSec }, weekStartMs - 1000);
+    assert.equal(r.timePct, 0);
+  });
+
+  it('timePct clamps high to 100 when now is past reset (AC6)', () => {
+    const r = computeWeeklyUsage({ used_percentage: 0, resets_at: resetsAtSec }, resetsMs + 1000);
+    assert.equal(r.timePct, 100);
+  });
+
+  it('populated result shape is exactly {usagePct,timePct,zone,status,color} (AC8)', () => {
+    const r = computeWeeklyUsage({ used_percentage: 45, resets_at: resetsAtSec }, nowAtHalf);
+    assert.deepEqual(Object.keys(r).sort(), ['color', 'status', 'timePct', 'usagePct', 'zone']);
+    assert.equal(r.usagePct, 45);
+  });
+
+  it('null snapshot → null (AC7)', () => {
+    assert.equal(computeWeeklyUsage(null, nowAtHalf), null);
+  });
+
+  it('missing used_percentage → null (AC7)', () => {
+    assert.equal(computeWeeklyUsage({ resets_at: resetsAtSec }, nowAtHalf), null);
+  });
+
+  it('missing resets_at → null (AC7)', () => {
+    assert.equal(computeWeeklyUsage({ used_percentage: 50 }, nowAtHalf), null);
+  });
+
+  it('NaN used_percentage → null (AC7)', () => {
+    assert.equal(computeWeeklyUsage({ used_percentage: NaN, resets_at: resetsAtSec }, nowAtHalf), null);
+  });
+
+  it('Infinity used_percentage → null (AC7)', () => {
+    assert.equal(computeWeeklyUsage({ used_percentage: Infinity, resets_at: resetsAtSec }, nowAtHalf), null);
+  });
+
+  it('day ticks: Friday-noon reset yields 7 local-midnight ticks labelled by starting day (AC9)', () => {
+    const ws = new Date(2026, 0, 1, 12, 0, 0, 0);            // local noon; walk forward to a Friday
+    while (ws.getDay() !== 5) ws.setDate(ws.getDate() + 1);   // 5 = Friday
+    const resetsAtSecFri = (ws.getTime() + WEEK_MS) / 1000;
+    const ticks = computeWeekDayTicks(resetsAtSecFri, Date.now());
+    assert.equal(ticks.length, 7, 'a full week should produce 7 day ticks');
+    assert.deepEqual(ticks.map(t => t.label), ['Sat', 'Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri']);
+    const expectedFirst = 100 * 12 / (7 * 24); // half-width first segment: 12h into a 168h window
+    assert.ok(Math.abs(ticks[0].positionPct - expectedFirst) < 0.001,
+      `first tick positionPct ${ticks[0].positionPct} should be ≈ ${expectedFirst}`);
+  });
+});

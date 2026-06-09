@@ -1,11 +1,22 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { createRequire } from 'node:module';
 import {
   getStatusLineConfig,
   getWidgetDefinitions,
   getHookConfig,
-  WORKFLOW_COLORS
+  WORKFLOW_COLORS,
+  WEEK_MS,
+  WEEKLY_USAGE_SWEET_BAND,
+  WEEKLY_USAGE_HIGH_BAND,
+  WEEKLY_USAGE_ZONES,
+  WEEKDAY_LABELS,
+  computeWeeklyUsage,
+  computeWeekDayTicks
 } from '../src/defaults.js';
+
+const _require = createRequire(import.meta.url);
+const _sc = _require('../src/reader/shared-constants.cjs');
 
 describe('src/defaults.js config templates', () => {
   it('getStatusLineConfig returns ccstatusline config object', () => {
@@ -104,5 +115,30 @@ describe('src/defaults.js config templates', () => {
   it('WORKFLOW_COLORS is an object', () => {
     assert.equal(typeof WORKFLOW_COLORS, 'object');
     assert.ok(WORKFLOW_COLORS !== null);
+  });
+});
+
+describe('src/defaults.js weekly-usage bridge (Story 10.1)', () => {
+  it('bridges all 7 weekly-usage symbols to the SAME references as shared-constants.cjs (AC11, AC12f)', () => {
+    assert.equal(WEEK_MS, _sc.WEEK_MS);
+    assert.equal(WEEKLY_USAGE_SWEET_BAND, _sc.WEEKLY_USAGE_SWEET_BAND);
+    assert.equal(WEEKLY_USAGE_HIGH_BAND, _sc.WEEKLY_USAGE_HIGH_BAND);
+    assert.equal(WEEKLY_USAGE_ZONES, _sc.WEEKLY_USAGE_ZONES);   // same object reference
+    assert.equal(WEEKDAY_LABELS, _sc.WEEKDAY_LABELS);           // same array reference
+    assert.equal(computeWeeklyUsage, _sc.computeWeeklyUsage);   // same function reference
+    assert.equal(computeWeekDayTicks, _sc.computeWeekDayTicks); // same function reference
+  });
+
+  it('bridged const values match the locked spec', () => {
+    assert.equal(WEEK_MS, 7 * 24 * 60 * 60 * 1000);
+    assert.equal(WEEKLY_USAGE_SWEET_BAND, 5);
+    assert.equal(WEEKLY_USAGE_HIGH_BAND, 10);
+    assert.deepEqual(WEEKDAY_LABELS, ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']);
+    assert.deepEqual(WEEKLY_USAGE_ZONES, {
+      good:     { status: 'GOOD',       color: 'green'  },
+      sweet:    { status: 'SWEET SPOT', color: 'blue'   },
+      high:     { status: 'TOO HIGH',   color: 'yellow' },
+      slowdown: { status: 'SLOW DOWN',  color: 'red'    },
+    });
   });
 });

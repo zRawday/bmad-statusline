@@ -77,6 +77,54 @@ function getGradientColor(percentage, thresholdLow, thresholdHigh) {
   return CONTEXT_GRADIENT_PALETTE[segmentIndex];
 }
 
+const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+
+// Fixed threshold POINTS (percentage points of the week) — LOCKED spec
+const WEEKLY_USAGE_SWEET_BAND = 5;   // blue band:   [time-5, time)
+const WEEKLY_USAGE_HIGH_BAND  = 10;  // yellow band: [time, time+10)
+
+// Zone → status word + semantic color name (each surface maps the name to its own renderer)
+const WEEKLY_USAGE_ZONES = {
+  good:     { status: 'GOOD',       color: 'green'  },
+  sweet:    { status: 'SWEET SPOT', color: 'blue'   },
+  high:     { status: 'TOO HIGH',   color: 'yellow' },
+  slowdown: { status: 'SLOW DOWN',  color: 'red'    },
+};
+
+const WEEKDAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+// snapshot = { used_percentage, resets_at(seconds) }; nowMs = Date.now()
+function computeWeeklyUsage(snapshot, nowMs) {
+  if (!snapshot || snapshot.used_percentage == null || snapshot.resets_at == null) return null;
+  const usagePct = snapshot.used_percentage;
+  if (typeof usagePct !== 'number' || !isFinite(usagePct)) return null;
+  const weekStartMs = snapshot.resets_at * 1000 - WEEK_MS;
+  // time% = clamp01( (now − (resets_at − 7d)) / 7d ) × 100
+  const timePct = Math.min(1, Math.max(0, (nowMs - weekStartMs) / WEEK_MS)) * 100;
+  let zone;
+  if (usagePct < timePct - WEEKLY_USAGE_SWEET_BAND)      zone = 'good';
+  else if (usagePct < timePct)                          zone = 'sweet';
+  else if (usagePct < timePct + WEEKLY_USAGE_HIGH_BAND)  zone = 'high';
+  else                                                   zone = 'slowdown';
+  return { usagePct, timePct, zone, status: WEEKLY_USAGE_ZONES[zone].status, color: WEEKLY_USAGE_ZONES[zone].color };
+}
+
+// Day-boundary tick marks for the TUI time bar.
+// Returns [{ positionPct, label }] for each LOCAL-midnight day boundary strictly inside the window.
+// label = the day that is STARTING.
+function computeWeekDayTicks(resetsAtSec, nowMs) {
+  const resetsMs = resetsAtSec * 1000;
+  const weekStartMs = resetsMs - WEEK_MS;
+  const ticks = [];
+  const d = new Date(weekStartMs);
+  d.setHours(24, 0, 0, 0); // first local midnight strictly after weekStart (DST-safe via setHours)
+  while (d.getTime() < resetsMs) {
+    ticks.push({ positionPct: ((d.getTime() - weekStartMs) / WEEK_MS) * 100, label: WEEKDAY_LABELS[d.getDay()] });
+    d.setHours(24, 0, 0, 0); // advance one local day (DST-safe — not a fixed +24h)
+  }
+  return ticks;
+}
+
 module.exports = {
   ALIVE_MAX_AGE_MS,
   STORY_WORKFLOWS,
@@ -90,4 +138,11 @@ module.exports = {
   formatStoryName,
   CONTEXT_GRADIENT_PALETTE,
   getGradientColor,
+  WEEK_MS,
+  WEEKLY_USAGE_SWEET_BAND,
+  WEEKLY_USAGE_HIGH_BAND,
+  WEEKLY_USAGE_ZONES,
+  WEEKDAY_LABELS,
+  computeWeeklyUsage,
+  computeWeekDayTicks,
 };

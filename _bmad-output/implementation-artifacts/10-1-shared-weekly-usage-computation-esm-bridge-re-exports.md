@@ -1,6 +1,6 @@
 # Story 10.1: Shared weekly-usage computation + ESM bridge re-exports
 
-Status: ready-for-dev
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -86,22 +86,22 @@ The feature lets a Claude subscriber see at a glance whether they're burning the
 
 ## Tasks / Subtasks
 
-- [ ] **Task 1 — Add constants + math to `shared-constants.cjs`** (AC: 1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
-  - [ ] 1.1 Add the consts `WEEK_MS`, `WEEKLY_USAGE_SWEET_BAND`, `WEEKLY_USAGE_HIGH_BAND`, `WEEKLY_USAGE_ZONES`, `WEEKDAY_LABELS` near the other top-level consts (e.g. after `CONTEXT_GRADIENT_PALETTE`).
-  - [ ] 1.2 Add `computeWeeklyUsage(snapshot, nowMs)` — copy the reference body verbatim (see Dev Notes). Guard clauses first (`null` returns), then `usagePct`/`weekStartMs`/`timePct`, then the 4-branch zone ladder, then the result object.
-  - [ ] 1.3 Add `computeWeekDayTicks(resetsAtSec, nowMs)` — copy the reference body verbatim. Use `d.setHours(24, 0, 0, 0)` for the initial midnight and every advance (DST-safe).
-  - [ ] 1.4 Add all 7 new symbols to the `module.exports` object.
-- [ ] **Task 2 — Bridge through `defaults.js`** (AC: 11)
-  - [ ] 2.1 Add 7 `export const X = _sc.X;` lines after the existing `getGradientColor` re-export, mirroring the existing bridge style.
-- [ ] **Task 3 — Math tests in `test/reader.test.js`** (AC: 12 a–e)
-  - [ ] 3.1 Add a `describe('weekly-usage computation', ...)` block. Use the already-imported `sharedConstants` handle (`test/reader.test.js:22`) — no new import needed.
-  - [ ] 3.2 Helper: build a snapshot whose `timePct` is a known value (see Dev Notes "Boundary test recipe") so boundary asserts are exact and timezone-independent.
-  - [ ] 3.3 Assert the three locked boundaries (`time−5`→sweet, `time`→high, `time+10`→slowdown), `good`/`slowdown` extremes (`usagePct` 0 → good, 100 → slowdown), clamp-low (weekStart in future → `timePct === 0`), clamp-high (now past reset → `timePct === 100`), and all four `null` cases.
-  - [ ] 3.4 Day-tick test for a Friday-noon reset: assert `ticks.length === 3+...` (expect **7**), `ticks.map(t => t.label)` equals `['Sat','Sun','Mon','Tue','Wed','Thu','Fri']`, and `ticks[0].positionPct` ≈ `100 * 12 / 168` (half-width first segment) within a small epsilon.
-- [ ] **Task 4 — Bridge test in `test/defaults.test.js`** (AC: 12 f)
-  - [ ] 4.1 Import the 7 new symbols from `../src/defaults.js` and the CJS source via `createRequire`; assert each bridged function/const `===` (same reference) the `shared-constants.cjs` export, and assert const values (`WEEK_MS`, band numbers, zone shape).
-- [ ] **Task 5 — Verify** (AC: 12)
-  - [ ] 5.1 Run `npm test` (full suite — `node --test test/*.test.js`). All green.
+- [x] **Task 1 — Add constants + math to `shared-constants.cjs`** (AC: 1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
+  - [x] 1.1 Add the consts `WEEK_MS`, `WEEKLY_USAGE_SWEET_BAND`, `WEEKLY_USAGE_HIGH_BAND`, `WEEKLY_USAGE_ZONES`, `WEEKDAY_LABELS` near the other top-level consts (e.g. after `CONTEXT_GRADIENT_PALETTE`).
+  - [x] 1.2 Add `computeWeeklyUsage(snapshot, nowMs)` — copy the reference body verbatim (see Dev Notes). Guard clauses first (`null` returns), then `usagePct`/`weekStartMs`/`timePct`, then the 4-branch zone ladder, then the result object.
+  - [x] 1.3 Add `computeWeekDayTicks(resetsAtSec, nowMs)` — copy the reference body verbatim. Use `d.setHours(24, 0, 0, 0)` for the initial midnight and every advance (DST-safe).
+  - [x] 1.4 Add all 7 new symbols to the `module.exports` object.
+- [x] **Task 2 — Bridge through `defaults.js`** (AC: 11)
+  - [x] 2.1 Add 7 `export const X = _sc.X;` lines after the existing `getGradientColor` re-export, mirroring the existing bridge style.
+- [x] **Task 3 — Math tests in `test/reader.test.js`** (AC: 12 a–e)
+  - [x] 3.1 Add a `describe('weekly-usage computation', ...)` block. Use the already-imported `sharedConstants` handle (`test/reader.test.js:22`) — no new import needed.
+  - [x] 3.2 Helper: build a snapshot whose `timePct` is a known value (see Dev Notes "Boundary test recipe") so boundary asserts are exact and timezone-independent.
+  - [x] 3.3 Assert the three locked boundaries (`time−5`→sweet, `time`→high, `time+10`→slowdown), `good`/`slowdown` extremes (`usagePct` 0 → good, 100 → slowdown), clamp-low (weekStart in future → `timePct === 0`), clamp-high (now past reset → `timePct === 100`), and all four `null` cases.
+  - [x] 3.4 Day-tick test for a Friday-noon reset: assert `ticks.length === 3+...` (expect **7**), `ticks.map(t => t.label)` equals `['Sat','Sun','Mon','Tue','Wed','Thu','Fri']`, and `ticks[0].positionPct` ≈ `100 * 12 / 168` (half-width first segment) within a small epsilon.
+- [x] **Task 4 — Bridge test in `test/defaults.test.js`** (AC: 12 f)
+  - [x] 4.1 Import the 7 new symbols from `../src/defaults.js` and the CJS source via `createRequire`; assert each bridged function/const `===` (same reference) the `shared-constants.cjs` export, and assert const values (`WEEK_MS`, band numbers, zone shape).
+- [x] **Task 5 — Verify** (AC: 12)
+  - [x] 5.1 Run `npm test` (full suite — `node --test test/*.test.js`). All green.
 
 ## Dev Notes
 
@@ -234,12 +234,27 @@ Per epics.md Epic 10 dependencies: **10.1 is first** (foundation — pure math +
 
 ### Agent Model Used
 
-{{agent_model_name_version}}
+claude-opus-4-8[1m] (Opus 4.8, 1M context)
 
 ### Debug Log References
+
+- `npm test` (full suite, `node --test --test-concurrency=4 test/*.test.js`): 695 pass / 0 fail / 0 skipped. 17 new weekly-usage tests included.
 
 ### Completion Notes List
 
 - Ultimate context engine analysis completed — comprehensive developer guide created.
+- Added the locked weekly-usage math + day-tick math to `src/reader/shared-constants.cjs` **verbatim** from Architecture Rev.7 (no improvisation on the zone ladder, clamp expression, or `setHours(24,0,0,0)` DST-safe advance). 7 new symbols exported.
+- Bridged all 7 symbols through `src/defaults.js` via the existing `_sc` (`createRequire`) bridge, mirroring the `getGradientColor` precedent (one `export const X = _sc.X;` per symbol).
+- Math tests live in `test/reader.test.js` (reused the existing `sharedConstants` handle at line 22 — no new test file); ESM-bridge same-reference assertions live in `test/defaults.test.js`. Boundary tests are timezone-independent (constructed `timePct === 50` via pure epoch math); the day-tick test builds a **local** Friday-noon window per the Dev Notes recipe and asserts `positionPct` with an epsilon.
+- Pure-plumbing story honored: no widget/registry, no reader extractor, no TUI, no installer, no empty-state/`rate_limits` handling, and `project-context.md` untouched (all reserved for stories 10.2–10.5). The `null` contract is the seam.
 
 ### File List
+
+- `src/reader/shared-constants.cjs` (modified — added 5 consts + `computeWeeklyUsage`/`computeWeekDayTicks` and extended `module.exports`)
+- `src/defaults.js` (modified — added 7 ESM bridge re-exports)
+- `test/reader.test.js` (modified — added `describe('weekly-usage computation')` block, 15 tests)
+- `test/defaults.test.js` (modified — added `createRequire` import + `describe('src/defaults.js weekly-usage bridge')` block, 2 tests)
+
+### Change Log
+
+- 2026-06-09 — Story 10.1 implemented: shared weekly-usage computation (`computeWeeklyUsage`, `computeWeekDayTicks` + 5 consts) added to `shared-constants.cjs`, re-exported via the `defaults.js` ESM bridge, locked down with 17 tests across `reader.test.js` and `defaults.test.js`. All ACs satisfied; full suite green (695/695).
