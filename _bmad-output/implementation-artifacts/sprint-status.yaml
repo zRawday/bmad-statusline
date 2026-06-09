@@ -178,7 +178,7 @@ development_status:
   # Epic 10: Weekly Usage — Plan Consumption Widget & TUI Screen (was: Context Window Percentage Widget)
   epic-10: in-progress
   10-1-context-window-percentage-widget: done
-  10-1-shared-weekly-usage-computation-esm-bridge-re-exports: ready-for-dev
+  10-1-shared-weekly-usage-computation-esm-bridge-re-exports: in-progress
   10-2-reader-weeklyusage-extractor-snapshot-persistence-self-color-exclusion: backlog
   10-3-widget-registry-entry-13th-widget-configurator-preview-integration: backlog
   10-4-tui-weekly-usage-screen-home-button-app-routing: backlog
