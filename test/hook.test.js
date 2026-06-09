@@ -795,6 +795,29 @@ describe('hook — 8-signal passive detection', () => {
     assert.equal(status.story_priority, 3, 'priority should be 3 (CANDIDATE)');
   });
 
+  // Read sprint-status with a bis-story (letter suffix on story number) in-progress → candidate
+  it('4.4: Read sprint-status candidate detects bis-story (1-1a)', () => {
+    seedStatus('sp-cand-bis', {
+      session_id: 'sp-cand-bis',
+      skill: 'bmad-dev-story',
+      workflow: 'dev-story',
+      story: null,
+      story_priority: null,
+      step: { total: null }
+    });
+    const sprintPath = path.join(tmpDir, '_bmad-output', 'implementation-artifacts', 'sprint-status.yaml').replace(/\\/g, '/');
+    const yamlContent = [
+      'development_status:',
+      '  1-1-package-scaffolding: done',
+      '  1-1a-extra-scaffolding: in-progress',
+      '  1-2-install-command: backlog'
+    ].join('\n');
+    execHook(makeReadPayload('sp-cand-bis', sprintPath, yamlContent));
+    const status = readStatusFile('sp-cand-bis');
+    assert.equal(status.story, '1-1a-extra-scaffolding', 'should set bis-story candidate from sprint-status');
+    assert.equal(status.story_priority, 3, 'priority should be 3 (CANDIDATE)');
+  });
+
   // 4.4 subtask 4.11: Read sprint-status with 2 in-progress stories → no candidate
   it('4.4: Read sprint-status with 2 in-progress → no candidate', () => {
     seedStatus('sp-multi', {
@@ -863,6 +886,11 @@ describe('hook — 8-signal passive detection', () => {
     assert.ok(regex.test('/17b-5-some-feature.md'), 'should match bis-epic story files');
     const bisMatch = '/17b-5-some-feature.md'.match(regex);
     assert.equal(bisMatch && bisMatch[1], '17b-5-some-feature', 'should capture bis-epic slug');
+
+    // Bis stories: story number with optional letter suffix (e.g., 1-1a, 1-1b)
+    assert.ok(regex.test('/1-1a-some-feature.md'), 'should match bis-story story files');
+    const bisStoryMatch = '/1-1a-some-feature.md'.match(regex);
+    assert.equal(bisStoryMatch && bisStoryMatch[1], '1-1a-some-feature', 'should capture bis-story slug');
   });
 
   // 4.4 subtask 4.15: story detection works with new regex on files outside /stories/

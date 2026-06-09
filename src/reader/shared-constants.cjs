@@ -58,7 +58,7 @@ function formatTimer(startedAt) {
 
 function formatStoryName(slug, displayMode) {
   if (!slug) return '';
-  const match = slug.match(/^(\d+[a-z]?-\d+)-(.+)$/);
+  const match = slug.match(/^(\d+[a-z]?-\d+[a-z]?)-(.+)$/);
   if (!match) return slug;
   if (displayMode === 'compact') return match[1];
   const title = match[2].split('-').filter(Boolean).map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');

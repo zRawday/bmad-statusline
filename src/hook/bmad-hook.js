@@ -13,7 +13,7 @@ const STORY_WORKFLOWS = ['create-story', 'dev-story', 'code-review'];
 const STORY_READ_WORKFLOWS = ['dev-story', 'code-review'];
 const STORY_WRITE_WORKFLOWS = ['create-story'];
 const STORY_PRIORITY = { SPRINT_STATUS: 1, STORY_FILE: 2, CANDIDATE: 3 };
-const STORY_FILE_REGEX = /\/(\d+[a-z]?-\d+-[a-zA-Z][\w-]*)\.md$/;
+const STORY_FILE_REGEX = /\/(\d+[a-z]?-\d+[a-z]?-[a-zA-Z][\w-]*)\.md$/;
 const SKILL_REGEX = /^\s*\/?((?:bmad|gds|wds)-[\w-]+)/;
 const LEGACY_COMMAND_REGEX = /^\s*\/?(bmad(?::[\w-]+)+)/;
 const STEP_REGEX = /\/steps(-[a-z])?\/step-(?:[a-z]-)?(\d+)[a-z]?-(.+)\.md$/;
@@ -402,7 +402,7 @@ function handleRead() {
         const activeStories = [];
         const lines = content.split('\n');
         for (const line of lines) {
-          const m = line.match(/^\s+(\d+[a-z]?-\d+-[\w-]+):\s*in-progress\s*(?:$|#)/);
+          const m = line.match(/^\s+(\d+[a-z]?-\d+[a-z]?-[\w-]+):\s*in-progress\s*(?:$|#)/);
           if (m) activeStories.push(m[1]);
         }
         if (activeStories.length === 1 && shouldUpdateStory(STORY_PRIORITY.CANDIDATE, status.story_priority)) {
@@ -495,7 +495,7 @@ function handleWrite() {
       if (typeof content === 'string') {
         const lines = content.split('\n');
         for (const line of lines) {
-          const m = line.match(/^\s+(\d+[a-z]?-\d+-[a-zA-Z][\w-]*):\s*(\S+)/);
+          const m = line.match(/^\s+(\d+[a-z]?-\d+[a-z]?-[a-zA-Z][\w-]*):\s*(\S+)/);
           if (m && m[2] !== 'backlog' && m[2] !== 'done') {
             if (shouldUpdateStory(STORY_PRIORITY.SPRINT_STATUS, status.story_priority)) {
               status.session_id = sessionId;
@@ -584,7 +584,7 @@ function handleEdit() {
     if (STORY_WORKFLOWS.includes(activeWorkflow)) {
       const newStr = payload.tool_input.new_string;
       const oldStr = payload.tool_input.old_string;
-      const storyKeyRegex = /(\d+[a-z]?-\d+-[a-zA-Z][\w-]*)/;
+      const storyKeyRegex = /(\d+[a-z]?-\d+[a-z]?-[a-zA-Z][\w-]*)/;
       const newMatch = typeof newStr === 'string' && newStr.match(storyKeyRegex);
       const oldMatch = typeof oldStr === 'string' && oldStr.match(storyKeyRegex);
       const storyKey = (newMatch && newMatch[1]) || (oldMatch && oldMatch[1]);
