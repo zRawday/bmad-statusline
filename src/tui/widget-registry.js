@@ -15,6 +15,7 @@ const INDIVIDUAL_WIDGETS = [
   { id: 'bmad-filewrite',    command: 'filewrite',    name: 'File Edit/Write', hint: 'Last file written or edited',          defaultEnabled: false, defaultColor: 'brightRed',   defaultMode: 'fixed' },
   { id: 'bmad-contextpct',   command: 'contextpct',   name: 'Context %',     hint: 'Context window usage',                    defaultEnabled: true,  defaultColor: null,          defaultMode: 'dynamic' },
   { id: 'bmad-timer',        command: 'timer',        name: 'Timer',         hint: 'Refreshes only while LLM is active',     defaultEnabled: true,  defaultColor: 'brightBlack', defaultMode: 'fixed' },
+  { id: 'bmad-weeklyusage',  command: 'weeklyusage',  name: 'Weekly Usage',  hint: 'Claude plan weekly consumption vs week elapsed (subscribers)', defaultEnabled: false, defaultColor: null,          defaultMode: 'dynamic' },
 ];
 
 export { SEPARATOR_VALUES };

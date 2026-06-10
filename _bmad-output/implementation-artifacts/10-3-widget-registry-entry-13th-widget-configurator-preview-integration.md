@@ -1,6 +1,6 @@
 # Story 10.3: Widget registry entry (13th widget) + configurator preview integration
 
-Status: ready-for-dev
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -71,24 +71,24 @@ Three small, surgical changes plus their tests:
 
 ## Tasks / Subtasks
 
-- [ ] **Task 1 — Append the 13th registry entry** (AC: 1, 2, 4)
-  - [ ] 1.1 In `src/tui/widget-registry.js`, append to `INDIVIDUAL_WIDGETS` (after the `bmad-timer` entry, as the final/13th element) the entry verbatim from the reference (Dev Notes). Keep the file's existing column-aligned object style (match the surrounding rows' formatting; exact whitespace alignment is cosmetic — correctness is the field values).
-  - [ ] 1.2 Do **not** modify `createDefaultConfig()` — `defaultEnabled: false` keeps it off default lines automatically, and `widgetOrder: [...allIds]` includes it automatically. Confirm by reading: no other change to `widget-registry.js` is needed.
-- [ ] **Task 2 — Preview sample + color** (AC: 5, 6)
-  - [ ] 2.1 In `src/tui/preview-utils.js`, add `'bmad-weeklyusage': 'Weekly usage : SWEET SPOT',` to the `SAMPLE_VALUES` object.
-  - [ ] 2.2 In `resolvePreviewColor()`, add `if (widgetId === 'bmad-weeklyusage') return 'blue';` next to the existing `bmad-llmstate` / `bmad-contextpct` early-return branches (before the generic `const mode = colorModes[widgetId];` block). Do **not** add a `getSampleValue()` special case (the widget has no `displayMode` variants — it falls through to `SAMPLE_VALUES` correctly).
-- [ ] **Task 3 — Verify `ensureWidgetOrder` requires no code change** (AC: 3)
-  - [ ] 3.1 Read `src/tui/config-loader.js:43-65` and confirm the `for (const id of allIds) { if (!line.widgetOrder.includes(id)) line.widgetOrder.push(id); }` loop already appends any new registry ID. Make **no** edit to `config-loader.js`. (The behavior is covered by the new test in Task 4.3.)
-- [ ] **Task 4 — Update `test/tui-widget-registry.test.js`** (AC: 7 a,b,c + existing-assertion surgery)
-  - [ ] 4.1 Update count assertions: the `getIndividualWidgets returns all 12…` test title + `assert.equal(widgets.length, 12)` → 13; the two `assert.equal(config.lines[N].widgetOrder.length, 12)` (lines ~128-129) → 13.
-  - [ ] 4.2 Update the new-widget metadata coverage: add `'bmad-weeklyusage': null` to the `expected` defaultColor map; add `|| w.id === 'bmad-weeklyusage'` to the dynamic-mode `if` condition in the defaultMode test; in the dynamic-widgets test change `dynamicWidgets.length` `5` → `6` and add `'bmad-weeklyusage'` to the sorted-id `deepStrictEqual` array (sorted position: after `bmad-project`, before `bmad-workflow`), and update that test's title to include the new widget.
-  - [ ] 4.3 Add a focused new entry-fields test asserting the 13th entry's exact fields (AC1), a `createDefaultConfig()` no-default-line test (AC2 — assert no line's `widgets` includes `bmad-weeklyusage`), and an `ensureWidgetOrder` legacy-append test (AC3 — import `loadConfig` from `config-loader.js`, write a legacy config via `BMAD_CONFIG_DIR`/a `paths.internalConfig` temp file whose lines' `widgetOrder` omit `bmad-weeklyusage`, load it, assert every line's `widgetOrder` now includes `bmad-weeklyusage` appended at the end). See Dev Notes "ensureWidgetOrder test recipe".
-- [ ] **Task 5 — Update `test/tui-preview-utils.test.js`** (AC: 7 d + existing-assertion surgery)
-  - [ ] 5.1 Add `'bmad-weeklyusage'` to the `expectedKeys` array; update the `has all 12 widget keys` title → 13 and the `has exactly 12 keys` → `assert.equal(Object.keys(SAMPLE_VALUES).length, 13)` + title.
-  - [ ] 5.2 Add a test asserting `SAMPLE_VALUES['bmad-weeklyusage'] === 'Weekly usage : SWEET SPOT'`.
-  - [ ] 5.3 Add a `resolvePreviewColor` test asserting `'blue'` for `bmad-weeklyusage` with both `{ 'bmad-weeklyusage': { mode: 'dynamic' } }` and `{ 'bmad-weeklyusage': { mode: 'fixed', fixedColor: 'red' } }` (regardless-of-mode).
-- [ ] **Task 6 — Verify** (AC: 7)
-  - [ ] 6.1 Run the full suite: `node --test --test-concurrency=4 --test-timeout=30000 test/*.test.js`. All green, zero failures. Pay special attention that nothing in `test/defaults.test.js` or `test/install.test.js` regressed (their `12 event types` assertions are about **hook event types**, not widgets — they must remain `12` and must NOT be touched).
+- [x] **Task 1 — Append the 13th registry entry** (AC: 1, 2, 4)
+  - [x] 1.1 In `src/tui/widget-registry.js`, append to `INDIVIDUAL_WIDGETS` (after the `bmad-timer` entry, as the final/13th element) the entry verbatim from the reference (Dev Notes). Keep the file's existing column-aligned object style (match the surrounding rows' formatting; exact whitespace alignment is cosmetic — correctness is the field values).
+  - [x] 1.2 Do **not** modify `createDefaultConfig()` — `defaultEnabled: false` keeps it off default lines automatically, and `widgetOrder: [...allIds]` includes it automatically. Confirm by reading: no other change to `widget-registry.js` is needed.
+- [x] **Task 2 — Preview sample + color** (AC: 5, 6)
+  - [x] 2.1 In `src/tui/preview-utils.js`, add `'bmad-weeklyusage': 'Weekly usage : SWEET SPOT',` to the `SAMPLE_VALUES` object.
+  - [x] 2.2 In `resolvePreviewColor()`, add `if (widgetId === 'bmad-weeklyusage') return 'blue';` next to the existing `bmad-llmstate` / `bmad-contextpct` early-return branches (before the generic `const mode = colorModes[widgetId];` block). Do **not** add a `getSampleValue()` special case (the widget has no `displayMode` variants — it falls through to `SAMPLE_VALUES` correctly).
+- [x] **Task 3 — Verify `ensureWidgetOrder` requires no code change** (AC: 3)
+  - [x] 3.1 Read `src/tui/config-loader.js:43-65` and confirm the `for (const id of allIds) { if (!line.widgetOrder.includes(id)) line.widgetOrder.push(id); }` loop already appends any new registry ID. Make **no** edit to `config-loader.js`. (The behavior is covered by the new test in Task 4.3.)
+- [x] **Task 4 — Update `test/tui-widget-registry.test.js`** (AC: 7 a,b,c + existing-assertion surgery)
+  - [x] 4.1 Update count assertions: the `getIndividualWidgets returns all 12…` test title + `assert.equal(widgets.length, 12)` → 13; the two `assert.equal(config.lines[N].widgetOrder.length, 12)` (lines ~128-129) → 13.
+  - [x] 4.2 Update the new-widget metadata coverage: add `'bmad-weeklyusage': null` to the `expected` defaultColor map; add `|| w.id === 'bmad-weeklyusage'` to the dynamic-mode `if` condition in the defaultMode test; in the dynamic-widgets test change `dynamicWidgets.length` `5` → `6` and add `'bmad-weeklyusage'` to the sorted-id `deepStrictEqual` array (sorted position: after `bmad-project`, before `bmad-workflow`), and update that test's title to include the new widget.
+  - [x] 4.3 Add a focused new entry-fields test asserting the 13th entry's exact fields (AC1), a `createDefaultConfig()` no-default-line test (AC2 — assert no line's `widgets` includes `bmad-weeklyusage`), and an `ensureWidgetOrder` legacy-append test (AC3 — import `loadConfig` from `config-loader.js`, write a legacy config via `BMAD_CONFIG_DIR`/a `paths.internalConfig` temp file whose lines' `widgetOrder` omit `bmad-weeklyusage`, load it, assert every line's `widgetOrder` now includes `bmad-weeklyusage` appended at the end). See Dev Notes "ensureWidgetOrder test recipe".
+- [x] **Task 5 — Update `test/tui-preview-utils.test.js`** (AC: 7 d + existing-assertion surgery)
+  - [x] 5.1 Add `'bmad-weeklyusage'` to the `expectedKeys` array; update the `has all 12 widget keys` title → 13 and the `has exactly 12 keys` → `assert.equal(Object.keys(SAMPLE_VALUES).length, 13)` + title.
+  - [x] 5.2 Add a test asserting `SAMPLE_VALUES['bmad-weeklyusage'] === 'Weekly usage : SWEET SPOT'`.
+  - [x] 5.3 Add a `resolvePreviewColor` test asserting `'blue'` for `bmad-weeklyusage` with both `{ 'bmad-weeklyusage': { mode: 'dynamic' } }` and `{ 'bmad-weeklyusage': { mode: 'fixed', fixedColor: 'red' } }` (regardless-of-mode).
+- [x] **Task 6 — Verify** (AC: 7)
+  - [x] 6.1 Run the full suite: `node --test --test-concurrency=4 --test-timeout=30000 test/*.test.js`. All green, zero failures. Pay special attention that nothing in `test/defaults.test.js` or `test/install.test.js` regressed (their `12 event types` assertions are about **hook event types**, not widgets — they must remain `12` and must NOT be touched).
 
 ## Dev Notes
 
@@ -192,12 +192,32 @@ Per epics.md Epic 10 dependencies: 10.1 (done) is the foundation. **10.2 (done) 
 
 ### Agent Model Used
 
-{{agent_model_name_version}}
+claude-opus-4-8 (Opus 4.8, 1M context)
 
 ### Debug Log References
 
+- Full suite (TDD RED) before source changes: the two `tui-*` test files failed exactly on the new/updated assertions (length 12→13, missing `bmad-weeklyusage` key/color) — confirming test correctness before implementation.
+- Full suite (GREEN) after the registry + preview edits surfaced 4 *unanticipated* regressions in `config-loader v2` (`internal-config-default.json` / `internal-config-multiline.json` fixtures still encoded a 12-id `widgetOrder`). Fixed the fixtures; final run `712 tests / 712 pass / 0 fail`.
+
 ### Completion Notes List
 
+- **Registry (AC1, AC2, AC4):** Appended the 13th `INDIVIDUAL_WIDGETS` entry `bmad-weeklyusage` verbatim from the architecture Rev.7 spec (`defaultEnabled: false`, `defaultColor: null`, `defaultMode: 'dynamic'`). `createDefaultConfig()` was left untouched — `defaultEnabled: false` keeps it off every default line's `widgets`, while `widgetOrder: [...allIds]` includes it automatically (now length 13). The plain `{ mode: 'dynamic' }` colorMode is an emergent property of the entry; no per-widget config screen / Edit Line routing was added (AC4).
+- **Preview (AC5, AC6):** Added `SAMPLE_VALUES['bmad-weeklyusage'] = 'Weekly usage : SWEET SPOT'` and a self-coloring `resolvePreviewColor` branch `if (widgetId === 'bmad-weeklyusage') return 'blue';`, placed alongside the `bmad-llmstate` / `bmad-contextpct` early returns (before the generic `const mode` logic), so it returns `'blue'` regardless of `colorModes`. `'blue'` is the SWEET SPOT zone color (`WEEKLY_USAGE_ZONES.sweet.color`, story 10.1 — verified in `shared-constants.cjs`). No `getSampleValue()` special case was added.
+- **config-loader (AC3):** No code change. Confirmed `ensureWidgetOrder()` (`src/tui/config-loader.js:51`) already appends any new registry ID via its `for (const id of allIds)` loop; behavior is covered by a new legacy-append test.
+- **Tests (AC7):** Updated count/metadata assertions in the two `tui-*` test files (12→13, 5→6 dynamic widgets, added `bmad-weeklyusage` to the defaultColor map / dynamic-id list / `SAMPLE_VALUES` key list) and added 5 new tests (AC1 exact-fields, AC2 no-default-line, AC3 legacy-append via temp `internalConfig`, AC5 sample text, AC6 `'blue'` for both dynamic & fixed modes).
+- **Necessary regression fix beyond the story's listed files:** adding the 13th registry ID also broke 4 `config-loader v2` tests whose fixtures hardcoded a 12-id `widgetOrder`. Appended `bmad-weeklyusage` to every `widgetOrder` in `test/fixtures/internal-config-default.json` (must equal `createDefaultConfig()`) and `test/fixtures/internal-config-multiline.json` (must equal the post-`ensureWidgetOrder` load). The story's Project-Structure note under-listed these fixtures; updating them is mandatory to honor the project's non-negotiable green-suite quality gate. `defaults.test.js` / `install.test.js` `12 event types` (hook event types) were left untouched, as instructed.
+
 ### File List
+
+- `src/tui/widget-registry.js` — appended the 13th `INDIVIDUAL_WIDGETS` entry (`bmad-weeklyusage`).
+- `src/tui/preview-utils.js` — added `SAMPLE_VALUES['bmad-weeklyusage']` + `resolvePreviewColor` self-coloring branch (`'blue'`).
+- `test/tui-widget-registry.test.js` — count/metadata assertion updates + 3 new tests (AC1/AC2/AC3).
+- `test/tui-preview-utils.test.js` — key-count/key-list updates + 2 new tests (AC5/AC6).
+- `test/fixtures/internal-config-default.json` — appended `bmad-weeklyusage` to each line's `widgetOrder` (regression fix).
+- `test/fixtures/internal-config-multiline.json` — appended `bmad-weeklyusage` to each line's `widgetOrder` (regression fix).
+
+### Change Log
+
+- 2026-06-10 — Story 10.3 implemented: registered `bmad-weeklyusage` as the 13th `INDIVIDUAL_WIDGETS` entry (`defaultEnabled: false`, `defaultMode: 'dynamic'`) and taught the configurator preview to sample/self-color it (`SAMPLE_VALUES` text + `resolvePreviewColor` returns `'blue'` regardless of mode). Purely additive TUI registry + preview; no reader/hook/installer/`config-loader.js` change. Updated the two `tui-*` test files (12→13 / 5→6 dynamic) and added 5 AC tests. Necessary fixture regression fix in `test/fixtures/internal-config-{default,multiline}.json` (12→13-id `widgetOrder`). Full suite green (712 pass / 0 fail).
 </content>
 </invoke>

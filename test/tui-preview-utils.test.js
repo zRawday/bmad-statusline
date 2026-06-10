@@ -10,11 +10,11 @@ import {
 
 describe('preview-utils', () => {
   describe('SAMPLE_VALUES', () => {
-    test('has all 12 widget keys', () => {
+    test('has all 13 widget keys', () => {
       const expectedKeys = [
         'bmad-llmstate', 'bmad-project', 'bmad-workflow', 'bmad-activeskill', 'bmad-nextstep',
         'bmad-progressstep', 'bmad-story', 'bmad-docname', 'bmad-timer',
-        'bmad-fileread', 'bmad-filewrite', 'bmad-contextpct',
+        'bmad-fileread', 'bmad-filewrite', 'bmad-contextpct', 'bmad-weeklyusage',
       ];
       for (const key of expectedKeys) {
         assert.ok(key in SAMPLE_VALUES, `missing key: ${key}`);
@@ -22,8 +22,12 @@ describe('preview-utils', () => {
       }
     });
 
-    test('has exactly 12 keys', () => {
-      assert.equal(Object.keys(SAMPLE_VALUES).length, 12);
+    test('has exactly 13 keys', () => {
+      assert.equal(Object.keys(SAMPLE_VALUES).length, 13);
+    });
+
+    test('bmad-weeklyusage sample is the SWEET SPOT zone text', () => {
+      assert.equal(SAMPLE_VALUES['bmad-weeklyusage'], 'Weekly usage : SWEET SPOT');
     });
   });
 
@@ -81,6 +85,17 @@ describe('preview-utils', () => {
     test('returns white for unknown widget with no colorModes entry', () => {
       const colorModes = {};
       assert.equal(resolvePreviewColor('bmad-unknown', colorModes), 'white');
+    });
+
+    test('returns blue for bmad-weeklyusage regardless of mode (self-colored)', () => {
+      assert.equal(
+        resolvePreviewColor('bmad-weeklyusage', { 'bmad-weeklyusage': { mode: 'dynamic' } }),
+        'blue'
+      );
+      assert.equal(
+        resolvePreviewColor('bmad-weeklyusage', { 'bmad-weeklyusage': { mode: 'fixed', fixedColor: 'red' } }),
+        'blue'
+      );
     });
   });
 });
