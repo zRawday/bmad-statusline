@@ -1,6 +1,6 @@
 # Story 10.2: Reader — `weeklyusage` extractor + snapshot persistence + self-color exclusion
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -260,3 +260,23 @@ claude-opus-4-8 (1M context)
 ### Change Log
 
 - 2026-06-10 — Story 10.2 implemented: `weeklyusage` reader extractor + account-global `weekly-usage.json` snapshot persistence (atomic write + content-change throttle) + `bmad-weeklyusage` self-color exclusion. Reader-only, additive. Full suite green (707 pass / 0 fail).
+
+## Review Findings
+
+**Code review 2026-06-10** (Blind Hunter + Edge Case Hunter + Acceptance Auditor). Acceptance Auditor verdict: **PASS** — all 10 ACs fully satisfied, verbatim-conformant to the Rev.7 reference bodies, no anti-patterns committed, scope clean (reader + test + this story-doc only), 707/707 tests green. Outcome: **1 decision-needed (resolved → deferred), 0 patches, 3 deferred, 4 dismissed.**
+
+### Decision-needed (resolved autonomously — technical)
+
+- [x] **[Review][Decision→Defer] Shared fixed `.tmp` filename defeats write-atomicity under concurrent renders** [`src/reader/bmad-sl-reader.js` `persistUsageSnapshot` ~L195-196] — `persistUsageSnapshot` writes to a single shared `weekly-usage.json.tmp` (not per-pid). Up to 3 concurrent `line N` readers + the standalone reader race on the same temp filename: interleaved `writeFileSync` can publish a torn snapshot, and the loser's `renameSync` throws ENOENT (swallowed). The Edge Case Hunter **empirically reproduced** the ENOENT cross-rename on this Windows host. This contradicts **AC7**'s claim that concurrent writes are torn-safe and "a torn read is impossible." **Latent today** — no code reads `weekly-usage.json` until story 10.4 (TUI screen). **Autonomous technical resolution: DEFER to story 10.5 (Rev.7 reconciliation).** Rationale: the dev faithfully implemented the locked verbatim reference body and AC4/AC6/AC7 exactly as written (Auditor confirmed character-for-character conformance) — the gap is in AC7's over-stated safety *reasoning*, not the implementation. Per the project's own convention (the 10.1-deferred `resets_at` finding) and the anti-pattern "Editing… reserved for story 10.5," spec-vs-hardening conflicts are reconciled in 10.5, not patched ad-hoc into the consumer story. **Fix recipe for 10.5:** per-pid temp name `USAGE_PATH + '.' + process.pid + '.tmp'` (mirrors the hook's session-scoped `status-<sid>.json.tmp`), and correct AC7's wording in `architecture.md`. _(Fred: if you'd prefer this patched now instead of deferred, say so and I'll apply the 1-line fix + re-run the suite.)_
+
+### Deferred
+
+- [x] [Review][Defer] **`weekly-usage.json.tmp` orphans never purged** [`src/reader/bmad-sl-reader.js` `purgeStale` / `src/clean.js`] — deferred. If a process dies between write and rename, the `.tmp` lingers; neither `purgeStale` (matches `.alive-*`) nor `clean.js` (matches `status-*.json`) removes it. Cosmetic with the current single fixed name (overwritten next run); becomes material only if the per-pid temp fix above lands (orphans then multiply per crashed pid). Bundle with the decision-needed finding in 10.5; fixing it here would touch `purgeStale`/`clean.js`, outside this story's locked scope.
+- [x] [Review][Defer] **Self-color exclusion is a growing `!==` chain** [`src/reader/bmad-sl-reader.js:276`] — deferred, pre-existing. The `widgetId !== 'bmad-llmstate' && … !== 'bmad-contextpct' && … !== 'bmad-weeklyusage'` chain predates this story (llmstate/contextpct already present); this change adds the third term per the locked reference. Refactoring to `SELF_COLORED_WIDGETS = new Set([...])` is a maintainability cleanup for a future pass, not this scope.
+
+### Dismissed (4 — noise/handled)
+
+- Extractor ignores `s`/`lc`; a fixed `colorMode` is silently discarded — **intended** self-color behavior (AC3, tested by AC10g), already commented at the call site.
+- Emptiness-guard asymmetry between helper (`== null`) and extractor (`!rl`) — Edge Case Hunter verified harmless: both paths reject the same empty states; `computeWeeklyUsage` validates the value; matches the `contextpct` precedent.
+- Snapshot has no schema/version field — speculative; contradicts the locked `{used_percentage, resets_at, captured_at}` schema story 10.4 is built around.
+- "throttle" comment wording — matches the spec's own "content-change throttle" / Pattern 29 terminology.
