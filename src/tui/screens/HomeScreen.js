@@ -8,6 +8,7 @@ const e = React.createElement;
 
 const HOME_OPTIONS = [
   { label: '\uD83D\uDDA5  Monitor', value: 'monitor' },
+  { label: '\uD83D\uDCC8 Weekly usage', value: 'weeklyUsage' },
   { label: '\u2500\u2500\u2500', value: '_sep0' },
   { label: '\uD83D\uDCDD Edit widget line 1', value: 'editLine1' },
   { label: '\uD83D\uDCDD Edit widget line 2', value: 'editLine2' },
@@ -62,6 +63,7 @@ export function HomeScreen({ config, previewOverride, navigate, resetToOriginal,
       else if (value === 'ccstatusline') onLaunchCcstatusline();
       else if (value === 'doctor') navigate('healthCheck');
       else if (value === 'monitor') navigate('monitor');
+      else if (value === 'weeklyUsage') navigate('weeklyUsage');
     }
   }, { isActive });
 

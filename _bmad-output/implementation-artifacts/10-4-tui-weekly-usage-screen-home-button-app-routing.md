@@ -1,6 +1,6 @@
 # Story 10.4: TUI "Weekly usage" screen + Home button + app routing
 
-Status: ready-for-dev
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -116,39 +116,39 @@ using the existing app-level `cachePath` const (`app.js:37`). It **must NOT** be
 
 ## Tasks / Subtasks
 
-- [ ] **Task 1 — Create `WeeklyUsageScreen.js`** (AC: 1, 2, 3, 4, 5, 6, 7)
-  - [ ] 1.1 New file `src/tui/screens/WeeklyUsageScreen.js`. ESM, JSX-less: `import React, { useState, useEffect } from 'react';`, `import { Box, Text, useInput } from 'ink';`, `import fs from 'node:fs';`, `import path from 'node:path';`, `import os from 'node:os';`, `import { ScreenLayout } from '../components/ScreenLayout.js';`, `import { toInkColor } from '../preview-utils.js';`, `import { computeWeeklyUsage, computeWeekDayTicks } from '../../defaults.js';`. `const e = React.createElement;`. (Import the compute fns from `defaults.js` — the ESM bridge — NEVER `require('../../reader/shared-constants.cjs')`.)
-  - [ ] 1.2 Signature: `export function WeeklyUsageScreen({ config, previewOverride, goBack, isActive, paths }) { … }`. Resolve `cacheDir` defensively (AC5 line) and `const usagePath = path.join(cacheDir, 'weekly-usage.json');`.
-  - [ ] 1.3 Read the snapshot synchronously into state: `const [snapshot, setSnapshot] = useState(() => readSnapshot(usagePath));` where `readSnapshot` does `try { return JSON.parse(fs.readFileSync(p, 'utf8')); } catch { return null; }` (Pattern 2). Compute `const u = computeWeeklyUsage(snapshot, Date.now());` on each render (recomputing `Date.now()` is what advances the time bar). `computeWeekDayTicks` only when `u` is non-null AND `snapshot.resets_at != null`.
-  - [ ] 1.4 60s refresh (AC6): in a `useEffect(() => { const id = setInterval(() => setSnapshot(readSnapshot(usagePath)), 60000); id.unref?.(); return () => clearInterval(id); }, [usagePath]);`. (`setSnapshot` re-renders even if the object is value-identical — a fresh object reference; that's the intended render-only refresh.)
-  - [ ] 1.5 Esc handling (AC7): `useInput((input, key) => { if (key.escape) goBack(); }, { isActive });`.
-  - [ ] 1.6 Render via `ScreenLayout` (`screenName: 'Weekly Usage'`, `screenColor: 'cyan'`, `config`, `previewOverride`, `shortcuts: [{ key: 'Esc', label: 'Back' }]`) so the screen is consistent with HealthCheck (header + 3-line preview + screen label + body + shortcut bar). Body = empty-state placeholder OR the two bars + zone status line.
-  - [ ] 1.7 Build the **usage bar** (AC1): a fixed-width row (suggest `const WIDTH = 40;`) of per-cell `e(Text, …, '█')` like `ContextPctConfigScreen.js:51-57`. `fill = Math.round((u.usagePct / 100) * WIDTH)`; cells `< fill` colored `toInkColor(u.color)`, the rest dim/empty (`'░'` with `dimColor`). Append the label `' ' + u.usagePct.toFixed(1) + '%'`.
-  - [ ] 1.8 Build the **time bar + day ticks** (AC1): same `WIDTH`. `timeFill = Math.round((u.timePct / 100) * WIDTH)`. Map each tick to a column `col = Math.round((ticks[i].positionPct / 100) * (WIDTH - 1))`. Render per-cell: a tick column gets `'│'` (`│`); other cells get `'█'` (filled, neutral/dim) if `< timeFill` else `'░'`/space. Below the bar, render a **label row**: a `WIDTH`-wide char buffer with each `ticks[i].label` placed left-aligned starting at its `col` (guard against running past `WIDTH`; if two labels would collide, last-write-wins is acceptable — prototype is indicative). Align the label row's left padding to the bar's left padding so ticks and labels line up.
-  - [ ] 1.9 **Status line** (AC2): `e(Text, { color: toInkColor(u.color) }, 'Weekly usage : ' + u.status)`.
-  - [ ] 1.10 **Empty state** (AC4): when `!u`, render a grey `░`-filled bar (`'░'.repeat(WIDTH)` in `gray`/`dimColor`), a `Weekly usage : --` line (dim), and `e(Text, { dimColor: true }, 'Waiting for usage data (subscribers only; appears after the first API response).')`. Do NOT call `computeWeekDayTicks` or `toInkColor(u.color)` in this branch (`u` is null).
-- [ ] **Task 2 — Home option + navigation** (AC: 8)
-  - [ ] 2.1 In `src/tui/screens/HomeScreen.js`, add `{ label: '📈 Weekly usage', value: 'weeklyUsage' }` to `HOME_OPTIONS` adjacent to the `monitor` entry (e.g. right after it). Match the existing escaped-unicode label style used in that file (📈 = `📈`).
-  - [ ] 2.2 In the `key.return` handler, add `else if (value === 'weeklyUsage') navigate('weeklyUsage');` alongside the existing `else if (value === 'monitor') navigate('monitor');`.
-- [ ] **Task 3 — app.js routing** (AC: 9)
-  - [ ] 3.1 Add `import { WeeklyUsageScreen } from './screens/WeeklyUsageScreen.js';` near the other screen imports (after `HealthCheckScreen`).
-  - [ ] 3.2 Add the router branch **with the corrected props** (place it near the `healthCheck`/`monitor` branches):
+- [x] **Task 1 — Create `WeeklyUsageScreen.js`** (AC: 1, 2, 3, 4, 5, 6, 7)
+  - [x] 1.1 New file `src/tui/screens/WeeklyUsageScreen.js`. ESM, JSX-less: `import React, { useState, useEffect } from 'react';`, `import { Box, Text, useInput } from 'ink';`, `import fs from 'node:fs';`, `import path from 'node:path';`, `import os from 'node:os';`, `import { ScreenLayout } from '../components/ScreenLayout.js';`, `import { toInkColor } from '../preview-utils.js';`, `import { computeWeeklyUsage, computeWeekDayTicks } from '../../defaults.js';`. `const e = React.createElement;`. (Import the compute fns from `defaults.js` — the ESM bridge — NEVER `require('../../reader/shared-constants.cjs')`.)
+  - [x] 1.2 Signature: `export function WeeklyUsageScreen({ config, previewOverride, goBack, isActive, paths }) { … }`. Resolve `cacheDir` defensively (AC5 line) and `const usagePath = path.join(cacheDir, 'weekly-usage.json');`.
+  - [x] 1.3 Read the snapshot synchronously into state: `const [snapshot, setSnapshot] = useState(() => readSnapshot(usagePath));` where `readSnapshot` does `try { return JSON.parse(fs.readFileSync(p, 'utf8')); } catch { return null; }` (Pattern 2). Compute `const u = computeWeeklyUsage(snapshot, Date.now());` on each render (recomputing `Date.now()` is what advances the time bar). `computeWeekDayTicks` only when `u` is non-null AND `snapshot.resets_at != null`.
+  - [x] 1.4 60s refresh (AC6): in a `useEffect(() => { const id = setInterval(() => setSnapshot(readSnapshot(usagePath)), 60000); id.unref?.(); return () => clearInterval(id); }, [usagePath]);`. (`setSnapshot` re-renders even if the object is value-identical — a fresh object reference; that's the intended render-only refresh.)
+  - [x] 1.5 Esc handling (AC7): `useInput((input, key) => { if (key.escape) goBack(); }, { isActive });`.
+  - [x] 1.6 Render via `ScreenLayout` (`screenName: 'Weekly Usage'`, `screenColor: 'cyan'`, `config`, `previewOverride`, `shortcuts: [{ key: 'Esc', label: 'Back' }]`) so the screen is consistent with HealthCheck (header + 3-line preview + screen label + body + shortcut bar). Body = empty-state placeholder OR the two bars + zone status line.
+  - [x] 1.7 Build the **usage bar** (AC1): a fixed-width row (suggest `const WIDTH = 40;`) of per-cell `e(Text, …, '█')` like `ContextPctConfigScreen.js:51-57`. `fill = Math.round((u.usagePct / 100) * WIDTH)`; cells `< fill` colored `toInkColor(u.color)`, the rest dim/empty (`'░'` with `dimColor`). Append the label `' ' + u.usagePct.toFixed(1) + '%'`.
+  - [x] 1.8 Build the **time bar + day ticks** (AC1): same `WIDTH`. `timeFill = Math.round((u.timePct / 100) * WIDTH)`. Map each tick to a column `col = Math.round((ticks[i].positionPct / 100) * (WIDTH - 1))`. Render per-cell: a tick column gets `'│'` (`│`); other cells get `'█'` (filled, neutral/dim) if `< timeFill` else `'░'`/space. Below the bar, render a **label row**: a `WIDTH`-wide char buffer with each `ticks[i].label` placed left-aligned starting at its `col` (guard against running past `WIDTH`; if two labels would collide, last-write-wins is acceptable — prototype is indicative). Align the label row's left padding to the bar's left padding so ticks and labels line up.
+  - [x] 1.9 **Status line** (AC2): `e(Text, { color: toInkColor(u.color) }, 'Weekly usage : ' + u.status)`.
+  - [x] 1.10 **Empty state** (AC4): when `!u`, render a grey `░`-filled bar (`'░'.repeat(WIDTH)` in `gray`/`dimColor`), a `Weekly usage : --` line (dim), and `e(Text, { dimColor: true }, 'Waiting for usage data (subscribers only; appears after the first API response).')`. Do NOT call `computeWeekDayTicks` or `toInkColor(u.color)` in this branch (`u` is null).
+- [x] **Task 2 — Home option + navigation** (AC: 8)
+  - [x] 2.1 In `src/tui/screens/HomeScreen.js`, add `{ label: '📈 Weekly usage', value: 'weeklyUsage' }` to `HOME_OPTIONS` adjacent to the `monitor` entry (e.g. right after it). Match the existing escaped-unicode label style used in that file (📈 = `📈`).
+  - [x] 2.2 In the `key.return` handler, add `else if (value === 'weeklyUsage') navigate('weeklyUsage');` alongside the existing `else if (value === 'monitor') navigate('monitor');`.
+- [x] **Task 3 — app.js routing** (AC: 9)
+  - [x] 3.1 Add `import { WeeklyUsageScreen } from './screens/WeeklyUsageScreen.js';` near the other screen imports (after `HealthCheckScreen`).
+  - [x] 3.2 Add the router branch **with the corrected props** (place it near the `healthCheck`/`monitor` branches):
     ```js
     if (screen === 'weeklyUsage') {
       return e(WeeklyUsageScreen, { ...screenProps, paths: { cachePath } });
     }
     ```
     Use the existing `cachePath` const (app.js:37). Do NOT forward the bare `paths` prop (it is `undefined` in production).
-- [ ] **Task 4 — Tests `test/tui-weekly-usage.test.js`** (AC: 10 a–e)
-  - [ ] 4.1 New file, mirroring `test/tui-health-check.test.js` harness: `import { describe, test, afterEach } from 'node:test';`, `import assert from 'node:assert/strict';`, `import React, { act } from 'react';` + `globalThis.IS_REACT_ACT_ENVIRONMENT = true;`, `import { render } from 'ink-testing-library';`, `import fs/os/path`, `import { WeeklyUsageScreen } from '../src/tui/screens/WeeklyUsageScreen.js';`, `import { createDefaultConfig } from '../src/tui/widget-registry.js';`. Add a `makeTmpDir()` + `afterEach` cleanup (copy from `tui-app.test.js:17-40`).
-  - [ ] 4.2 (a) Populated: write `weekly-usage.json` into a tmp cacheDir with the deterministic recipe (Dev Notes), render `e(WeeklyUsageScreen, { config: createDefaultConfig(), previewOverride: null, goBack(){}, isActive: true, paths: { cachePath: tmpDir } })`, assert the frame matches the expected zone status word + contains block glyphs + a weekday label.
-  - [ ] 4.3 (b) Empty: render against a tmpDir with **no** `weekly-usage.json` (or invalid JSON), assert the frame matches `/Waiting for usage data/` and `/Weekly usage : --/`.
-  - [ ] 4.4 (c) Esc: render with a `goBack` spy + `isActive: true`, `await act(async () => stdin.write('\x1B'))`, assert the spy fired.
-  - [ ] 4.5 (d) No write: render against a tmp `paths` and assert no config file is created in it (the screen reads cache only, never writes config). Optionally also pass an `updateConfig` spy and assert it is never called.
-  - [ ] 4.6 (e) Home + route: assert `HomeScreen` frame includes `Weekly usage` (render `HomeScreen` with a `navigate` spy; arrow to the new option, Enter, assert `navigate` called with `'weeklyUsage'`). Optionally render `App` with `BMAD_CACHE_DIR` set to a tmp dir and navigate to confirm the screen mounts without crashing (this exercises the AC9 `paths: { cachePath }` wiring end-to-end).
-- [ ] **Task 5 — Verify** (AC: 10)
-  - [ ] 5.1 Run the full suite: `node --test --test-concurrency=4 --test-timeout=30000 test/*.test.js`. All green, zero failures.
-  - [ ] 5.2 Fix any `tui-app.test.js` down-arrow navigation counts that shifted because the new Home option moved the targets (see "Existing-test impact"). Do NOT touch unrelated `12`-count assertions (those are hook event types / widget counts owned by other stories).
+- [x] **Task 4 — Tests `test/tui-weekly-usage.test.js`** (AC: 10 a–e)
+  - [x] 4.1 New file, mirroring `test/tui-health-check.test.js` harness: `import { describe, test, afterEach } from 'node:test';`, `import assert from 'node:assert/strict';`, `import React, { act } from 'react';` + `globalThis.IS_REACT_ACT_ENVIRONMENT = true;`, `import { render } from 'ink-testing-library';`, `import fs/os/path`, `import { WeeklyUsageScreen } from '../src/tui/screens/WeeklyUsageScreen.js';`, `import { createDefaultConfig } from '../src/tui/widget-registry.js';`. Add a `makeTmpDir()` + `afterEach` cleanup (copy from `tui-app.test.js:17-40`).
+  - [x] 4.2 (a) Populated: write `weekly-usage.json` into a tmp cacheDir with the deterministic recipe (Dev Notes), render `e(WeeklyUsageScreen, { config: createDefaultConfig(), previewOverride: null, goBack(){}, isActive: true, paths: { cachePath: tmpDir } })`, assert the frame matches the expected zone status word + contains block glyphs + a weekday label.
+  - [x] 4.3 (b) Empty: render against a tmpDir with **no** `weekly-usage.json` (or invalid JSON), assert the frame matches `/Waiting for usage data/` and `/Weekly usage : --/`.
+  - [x] 4.4 (c) Esc: render with a `goBack` spy + `isActive: true`, `await act(async () => stdin.write('\x1B'))`, assert the spy fired.
+  - [x] 4.5 (d) No write: render against a tmp `paths` and assert no config file is created in it (the screen reads cache only, never writes config). Optionally also pass an `updateConfig` spy and assert it is never called.
+  - [x] 4.6 (e) Home + route: assert `HomeScreen` frame includes `Weekly usage` (render `HomeScreen` with a `navigate` spy; arrow to the new option, Enter, assert `navigate` called with `'weeklyUsage'`). Optionally render `App` with `BMAD_CACHE_DIR` set to a tmp dir and navigate to confirm the screen mounts without crashing (this exercises the AC9 `paths: { cachePath }` wiring end-to-end).
+- [x] **Task 5 — Verify** (AC: 10)
+  - [x] 5.1 Run the full suite: `node --test --test-concurrency=4 --test-timeout=30000 test/*.test.js`. All green, zero failures.
+  - [x] 5.2 Fix any `tui-app.test.js` down-arrow navigation counts that shifted because the new Home option moved the targets (see "Existing-test impact"). Do NOT touch unrelated `12`-count assertions (those are hook event types / widget counts owned by other stories).
 
 ## Dev Notes
 
@@ -279,10 +279,32 @@ Per epics.md Epic 10: 10.1/10.2/10.3 are **done**. **10.4 (this story) depends o
 
 ### Agent Model Used
 
-{{agent_model_name_version}}
+claude-opus-4-8[1m] (Opus 4.8, 1M context)
 
 ### Debug Log References
 
+- Full suite: `node --test --test-concurrency=4 --test-timeout=30000 test/*.test.js` → 718 tests, 718 pass, 0 fail.
+- New file alone + tui-app: `node --test --test-timeout=30000 test/tui-weekly-usage.test.js test/tui-app.test.js` → 21 pass, 0 fail. (The `act(...)` console warnings are pre-existing ink-testing-library noise shared by the HomeScreen/App tests; they are not failures.)
+
 ### Completion Notes List
 
+- **WeeklyUsageScreen.js (NEW)** — read-only dashboard mirroring `HealthCheckScreen`'s reduced props shape `{ config, previewOverride, goBack, isActive, paths }`. Reads `weekly-usage.json` synchronously (Pattern 2, try/catch → `null`), computes `u = computeWeeklyUsage(snapshot, Date.now())` each render (advances the time bar) and `ticks = computeWeekDayTicks(...)` only when `u` and `snapshot.resets_at` are non-null. Renders a zone-colored **usage bar** (filled to `usagePct`, `WIDTH=40`, `toFixed(1)+'%'` label), a dim **time bar** with `│` day-tick glyphs overlaid at each tick column, an aligned **day-label row** (short `WEEKDAY_LABELS`), and a `Weekly usage : <status>` line in the zone color. Empty state = grey `░` bar + `Weekly usage : --` + waiting message, with no tick/`toInkColor(u.color)` calls on null. 60s `setInterval` refresh is `.unref()`'d and cleared on unmount (BF2-exempt render-only effect). No `updateConfig`/`setConfig`/`writeInternalConfig` — pure read-only.
+- **HomeScreen.js (MOD)** — added `{ label: '📈 Weekly usage', value: 'weeklyUsage' }` immediately after Monitor (both read-only dashboards), using the file's escaped-unicode style (`📈`); added `else if (value === 'weeklyUsage') navigate('weeklyUsage');`. `SELECTABLE_INDICES`/separator machinery handles the new non-`_sep` entry automatically.
+- **app.js (MOD)** — imported `WeeklyUsageScreen`; added router branch `if (screen === 'weeklyUsage') return e(WeeklyUsageScreen, { ...screenProps, paths: { cachePath } });`. **Passes `paths: { cachePath }`, NOT the bare `paths`** (DISASTER-PREVENTION #1: `bin/cli.js:34` calls `launchTui()` with no args → top-level `paths` is `undefined` in production; bare forwarding would throw `undefined.cachePath`). Mirrors the MonitorScreen wiring; the screen also resolves a defensive fallback (AC5) for belt-and-suspenders.
+- **tui-weekly-usage.test.js (NEW)** — 6 tests: (a) populated render (deterministic `resets_at` → SWEET SPOT, asserts both bars/`47.0%`/a weekday label), (b) empty state, (b2) invalid-JSON → empty state, (c) Esc→`goBack()`, (d) no config writer called + no config file written, (e) Home lists "Weekly usage" + routes to `weeklyUsage`.
+- **tui-app.test.js (MOD)** — bumped the four Home down-arrow navigation counts (+1 each) since `weeklyUsage` sits right after Monitor: editLine (1→2), Reset (6→7), separator (5→6), Reset-in-restore (6→7). No other assertions touched (12-count hook/widget assertions left untouched — owned by other stories).
+- **Scope discipline:** no changes to the reader, `defaults.js`, `shared-constants.cjs`, widget-registry, preview-utils, installer, the snapshot writer, README, project-context.md, or the 12/13-widget / Boundary-2 / intentional-asymmetry prose (all owned by 10.1/10.2/10.3-done or the 10.5 sweep).
+
 ### File List
+
+- `src/tui/screens/WeeklyUsageScreen.js` (new)
+- `src/tui/screens/HomeScreen.js` (modified)
+- `src/tui/app.js` (modified)
+- `test/tui-weekly-usage.test.js` (new)
+- `test/tui-app.test.js` (modified — down-arrow navigation counts)
+
+## Change Log
+
+| Date       | Version | Description                                                                                          | Author |
+| ---------- | ------- | ---------------------------------------------------------------------------------------------------- | ------ |
+| 2026-06-10 | 1.0     | Implemented TUI "Weekly usage" read-only screen + Home option + app routing + tests. Story → review. | Amelia |

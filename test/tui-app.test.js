@@ -112,7 +112,8 @@ describe('HomeScreen v2', () => {
       onQuit: () => {},
       isActive: true,
     }));
-    // First option is Monitor, arrow down to Edit widget line 1
+    // Monitor → Weekly usage → Edit widget line 1 (2 arrow-downs, seps skipped)
+    await act(async () => { stdin.write('\x1B[B'); });
     await act(async () => { stdin.write('\x1B[B'); });
     await act(async () => { stdin.write('\r'); });
     assert.equal(navigatedTo, 'editLine');
@@ -129,8 +130,8 @@ describe('HomeScreen v2', () => {
       onQuit: () => {},
       isActive: true,
     }));
-    // Navigate down to Reset (6 arrow-downs: Monitor→edit1→2→3→reorder→separator→reset, seps skipped)
-    for (let i = 0; i < 6; i++) {
+    // Navigate down to Reset (7 arrow-downs: Monitor→weeklyUsage→edit1→2→3→reorder→separator→reset, seps skipped)
+    for (let i = 0; i < 7; i++) {
       await act(async () => { stdin.write('\x1B[B'); });
     }
     await act(async () => { stdin.write('\r'); });
@@ -183,8 +184,8 @@ describe('App v2 — state model', () => {
     const paths = makePathsWithConfig(config);
     const { stdin, lastFrame, unmount } = render(e(App, { paths }));
 
-    // Navigate to separator (5 downs: Monitor→editLine1→2→3→reorder→separator, seps skipped)
-    for (let i = 0; i < 5; i++) {
+    // Navigate to separator (6 downs: Monitor→weeklyUsage→editLine1→2→3→reorder→separator, seps skipped)
+    for (let i = 0; i < 6; i++) {
       await act(async () => { stdin.write('\x1B[B'); });
     }
     await act(async () => { stdin.write('\r'); });
@@ -201,8 +202,8 @@ describe('App v2 — state model', () => {
     const afterChange = JSON.parse(fs.readFileSync(paths.internalConfig, 'utf8'));
     assert.equal(afterChange.separator, 'large', 'separator changed');
 
-    // Select Reset (6 downs: Monitor→editLine1→2→3→reorder→separator→reset, seps skipped)
-    for (let i = 0; i < 6; i++) {
+    // Select Reset (7 downs: Monitor→weeklyUsage→editLine1→2→3→reorder→separator→reset, seps skipped)
+    for (let i = 0; i < 7; i++) {
       await act(async () => { stdin.write('\x1B[B'); });
     }
     await act(async () => { stdin.write('\r'); });
@@ -221,8 +222,8 @@ describe('App v2 — state model', () => {
     const paths = makePathsWithConfig(config);
     const { stdin, lastFrame, unmount } = render(e(App, { paths }));
 
-    // Navigate to separator (5 downs: Monitor → Edit1 → Edit2 → Edit3 → Reorder → Separator)
-    for (let i = 0; i < 5; i++) {
+    // Navigate to separator (6 downs: Monitor → weeklyUsage → Edit1 → Edit2 → Edit3 → Reorder → Separator)
+    for (let i = 0; i < 6; i++) {
       await act(async () => { stdin.write('\x1B[B'); });
     }
     await act(async () => { stdin.write('\r'); });

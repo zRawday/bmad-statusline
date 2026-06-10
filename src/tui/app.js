@@ -15,6 +15,7 @@ import { SkillColorsScreen } from './screens/SkillColorsScreen.js';
 import { ProjectColorsScreen } from './screens/ProjectColorsScreen.js';
 import { ContextPctConfigScreen } from './screens/ContextPctConfigScreen.js';
 import { HealthCheckScreen } from './screens/HealthCheckScreen.js';
+import { WeeklyUsageScreen } from './screens/WeeklyUsageScreen.js';
 import { MonitorScreen } from './monitor/MonitorScreen.js';
 import { registerPid, unregisterPid, setupSignalHandlers, startTtyWatch, stopTtyWatch } from './tui-lifecycle.js';
 import { ALIVE_MAX_AGE_MS } from '../defaults.js';
@@ -155,6 +156,10 @@ export function App({ paths }) {
 
   if (screen === 'healthCheck') {
     return e(HealthCheckScreen, { ...screenProps, paths });
+  }
+
+  if (screen === 'weeklyUsage') {
+    return e(WeeklyUsageScreen, { ...screenProps, paths: { cachePath } });
   }
 
   if (screen === 'monitor') {
