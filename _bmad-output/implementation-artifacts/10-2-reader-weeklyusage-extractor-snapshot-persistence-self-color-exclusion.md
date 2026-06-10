@@ -1,6 +1,6 @@
 # Story 10.2: Reader — `weeklyusage` extractor + snapshot persistence + self-color exclusion
 
-Status: ready-for-dev
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -88,25 +88,25 @@ This is the **reader-side consumer story of Epic 10** (Weekly Usage). Story 10.1
 
 ## Tasks / Subtasks
 
-- [ ] **Task 1 — Import `computeWeeklyUsage` + add `USAGE_PATH` const** (AC: 1, 4)
-  - [ ] 1.1 Extend the destructured `require('./shared-constants.cjs')` at `src/reader/bmad-sl-reader.js:16` to also pull in `computeWeeklyUsage`. (Only `computeWeeklyUsage` is needed in the reader — `computeWeekDayTicks`/`WEEKDAY_LABELS` are TUI-only, story 10.4.)
-  - [ ] 1.2 Add `const USAGE_PATH = path.join(CACHE_DIR, 'weekly-usage.json');` near the existing `CACHE_DIR` const (line 8). Reuse the existing `CACHE_DIR` — do **not** recompute the cache path.
-- [ ] **Task 2 — Add `COMMANDS.weeklyusage` extractor** (AC: 1, 2)
-  - [ ] 2.1 Add a `weeklyusage: (s, lc, stdin) => { … }` entry to the `COMMANDS` object (alongside `contextpct`, ~line 312). Copy the reference body verbatim (see Dev Notes). Guard `rate_limits.seven_day` absence → `''`; `computeWeeklyUsage(...) === null` → `''`; else `colorize('Weekly usage : ' + u.status, COLOR_CODES[u.color])`.
-- [ ] **Task 3 — Add `persistUsageSnapshot(stdin)` helper** (AC: 4, 5, 6, 7, 8)
-  - [ ] 3.1 Add the function (place it near the other cache helpers, e.g. after `purgeStale()` ~line 174, or just above the `COMMANDS` block — anywhere module-scope, before the call sites). Copy the reference body verbatim (see Dev Notes): guard empty state → return; read previous snapshot in a nested `try/catch`; content-change throttle on `used_percentage` + `resets_at`; atomic `.tmp`→rename; whole body wrapped in `try { … } catch {}`.
-- [ ] **Task 4 — Wire call sites** (AC: 9)
-  - [ ] 4.1 In `handleLineCommand()` insert `persistUsageSnapshot(stdin);` immediately after `const stdin = readStdin();` (line 226) — i.e. **before** the `if (!stdin || !stdin.session_id)` guard (227) and the `if (!status) return` guard (232). This guarantees capture even with no session / no status file.
-  - [ ] 4.2 In `main()` insert `persistUsageSnapshot(stdin);` immediately after `const stdin = readStdin();` (line 377), before the `if (!stdin || !stdin.session_id)` guard (378). Do **not** add it to the `line`-routing shortcut (lines 360-367) — that delegates to `handleLineCommand`, which already persists.
-- [ ] **Task 5 — Extend self-color exclusion** (AC: 3)
-  - [ ] 5.1 At `handleLineCommand()` line 251, add `&& widgetId !== 'bmad-weeklyusage'` to the exclusion condition, alongside the existing `bmad-llmstate`/`bmad-contextpct` checks.
-- [ ] **Task 6 — Tests in `test/reader.test.js`** (AC: 10 a–g)
-  - [ ] 6.1 Add a `describe('weekly-usage reader', …)` block (separate from the 10.1 `'weekly-usage computation'` block).
-  - [ ] 6.2 Extractor zone tests (a) + empty state (b): direct-import via `reader.COMMANDS.weeklyusage({}, {}, stdin)` — build a stdin with a known `timePct` (see Dev Notes "Zone fixture recipe") and assert the status word + ANSI color for all 4 zones; assert `''` for `rate_limits` absent and `stdin` null.
-  - [ ] 6.3 Snapshot tests (c)(d)(e)(f): **spawn** the reader as a subprocess with `BMAD_CACHE_DIR: tmpDir` and a stdin payload that includes `rate_limits.seven_day` (the in-process `reader` handle captured `CACHE_DIR` at require time from the ambient env — direct-import would write to the real home cache dir). Add a spawn helper that accepts a custom stdin object (the existing `execReader` only sends `{ session_id }`). Assert `weekly-usage.json` schema (c); render twice with identical values and assert `captured_at` unchanged (d); `line N` with `rate_limits` but no `status-{sid}.json` written → snapshot still present (e); for (f), simulate a write error path (e.g. assert the reader still exits 0 / emits normal output — silent-fail is satisfied by the `try/catch`; a hard fault injection is optional).
-  - [ ] 6.4 Exclusion test (g): spawn `line N` with a config where the line has `bmad-weeklyusage` and `colorModes['bmad-weeklyusage'] = { mode: 'fixed', fixedColor: 'magenta' }`, a status file present, and stdin producing the **sweet** zone (color `blue`); assert the output contains the blue zone code (`\x1b[34m`) and does **not** contain the magenta fixed code (`\x1b[35m`).
-- [ ] **Task 7 — Verify** (AC: 10)
-  - [ ] 7.1 Run `npm test` (full suite — `node --test --test-concurrency=4 --test-timeout=30000 test/*.test.js`). All green, including the 10.1 weekly-usage block.
+- [x] **Task 1 — Import `computeWeeklyUsage` + add `USAGE_PATH` const** (AC: 1, 4)
+  - [x] 1.1 Extend the destructured `require('./shared-constants.cjs')` at `src/reader/bmad-sl-reader.js:16` to also pull in `computeWeeklyUsage`. (Only `computeWeeklyUsage` is needed in the reader — `computeWeekDayTicks`/`WEEKDAY_LABELS` are TUI-only, story 10.4.)
+  - [x] 1.2 Add `const USAGE_PATH = path.join(CACHE_DIR, 'weekly-usage.json');` near the existing `CACHE_DIR` const (line 8). Reuse the existing `CACHE_DIR` — do **not** recompute the cache path.
+- [x] **Task 2 — Add `COMMANDS.weeklyusage` extractor** (AC: 1, 2)
+  - [x] 2.1 Add a `weeklyusage: (s, lc, stdin) => { … }` entry to the `COMMANDS` object (alongside `contextpct`, ~line 312). Copy the reference body verbatim (see Dev Notes). Guard `rate_limits.seven_day` absence → `''`; `computeWeeklyUsage(...) === null` → `''`; else `colorize('Weekly usage : ' + u.status, COLOR_CODES[u.color])`.
+- [x] **Task 3 — Add `persistUsageSnapshot(stdin)` helper** (AC: 4, 5, 6, 7, 8)
+  - [x] 3.1 Add the function (place it near the other cache helpers, e.g. after `purgeStale()` ~line 174, or just above the `COMMANDS` block — anywhere module-scope, before the call sites). Copy the reference body verbatim (see Dev Notes): guard empty state → return; read previous snapshot in a nested `try/catch`; content-change throttle on `used_percentage` + `resets_at`; atomic `.tmp`→rename; whole body wrapped in `try { … } catch {}`.
+- [x] **Task 4 — Wire call sites** (AC: 9)
+  - [x] 4.1 In `handleLineCommand()` insert `persistUsageSnapshot(stdin);` immediately after `const stdin = readStdin();` (line 226) — i.e. **before** the `if (!stdin || !stdin.session_id)` guard (227) and the `if (!status) return` guard (232). This guarantees capture even with no session / no status file.
+  - [x] 4.2 In `main()` insert `persistUsageSnapshot(stdin);` immediately after `const stdin = readStdin();` (line 377), before the `if (!stdin || !stdin.session_id)` guard (378). Do **not** add it to the `line`-routing shortcut (lines 360-367) — that delegates to `handleLineCommand`, which already persists.
+- [x] **Task 5 — Extend self-color exclusion** (AC: 3)
+  - [x] 5.1 At `handleLineCommand()` line 251, add `&& widgetId !== 'bmad-weeklyusage'` to the exclusion condition, alongside the existing `bmad-llmstate`/`bmad-contextpct` checks.
+- [x] **Task 6 — Tests in `test/reader.test.js`** (AC: 10 a–g)
+  - [x] 6.1 Add a `describe('weekly-usage reader', …)` block (separate from the 10.1 `'weekly-usage computation'` block).
+  - [x] 6.2 Extractor zone tests (a) + empty state (b): direct-import via `reader.COMMANDS.weeklyusage({}, {}, stdin)` — build a stdin with a known `timePct` (see Dev Notes "Zone fixture recipe") and assert the status word + ANSI color for all 4 zones; assert `''` for `rate_limits` absent and `stdin` null.
+  - [x] 6.3 Snapshot tests (c)(d)(e)(f): **spawn** the reader as a subprocess with `BMAD_CACHE_DIR: tmpDir` and a stdin payload that includes `rate_limits.seven_day` (the in-process `reader` handle captured `CACHE_DIR` at require time from the ambient env — direct-import would write to the real home cache dir). Add a spawn helper that accepts a custom stdin object (the existing `execReader` only sends `{ session_id }`). Assert `weekly-usage.json` schema (c); render twice with identical values and assert `captured_at` unchanged (d); `line N` with `rate_limits` but no `status-{sid}.json` written → snapshot still present (e); for (f), simulate a write error path (e.g. assert the reader still exits 0 / emits normal output — silent-fail is satisfied by the `try/catch`; a hard fault injection is optional).
+  - [x] 6.4 Exclusion test (g): spawn `line N` with a config where the line has `bmad-weeklyusage` and `colorModes['bmad-weeklyusage'] = { mode: 'fixed', fixedColor: 'magenta' }`, a status file present, and stdin producing the **sweet** zone (color `blue`); assert the output contains the blue zone code (`\x1b[34m`) and does **not** contain the magenta fixed code (`\x1b[35m`).
+- [x] **Task 7 — Verify** (AC: 10)
+  - [x] 7.1 Run `npm test` (full suite — `node --test --test-concurrency=4 --test-timeout=30000 test/*.test.js`). All green, including the 10.1 weekly-usage block.
 
 ## Dev Notes
 
@@ -234,12 +234,29 @@ Per epics.md Epic 10 dependencies: 10.1 (done) is the foundation. **10.2 and 10.
 
 ### Agent Model Used
 
-{{agent_model_name_version}}
+claude-opus-4-8 (1M context)
 
 ### Debug Log References
 
+- Baseline `test/reader.test.js`: 97 pass / 0 fail before changes.
+- After implementation `test/reader.test.js`: 109 pass / 0 fail (12 new weekly-usage reader tests).
+- Full suite `node --test --test-concurrency=4 --test-timeout=30000 test/*.test.js`: 707 pass / 0 fail — no regressions.
+
 ### Completion Notes List
+
+- **AC1/AC2** — Added `COMMANDS.weeklyusage(s, lc, stdin)` verbatim from the locked spec: reads `stdin.rate_limits.seven_day`, computes the zone via the shared `computeWeeklyUsage(..., Date.now())`, returns `colorize('Weekly usage : ' + u.status, COLOR_CODES[u.color])`; returns `''` on any miss (rate_limits/seven_day absent, stdin null, or `computeWeeklyUsage` → null) — matching the `contextpct` precedent.
+- **AC3** — Extended the self-color exclusion guard in `handleLineCommand()` with `&& widgetId !== 'bmad-weeklyusage'` so the generic fixed-color wrapper never re-colors the self-colored zone output.
+- **AC4/AC5/AC6/AC7/AC8** — Added module-scope `persistUsageSnapshot(stdin)` (verbatim reference body) plus a single module-top `USAGE_PATH = path.join(CACHE_DIR, 'weekly-usage.json')` const (declared once, near `CACHE_DIR`; not redeclared inside the helper). Empty-state guard returns early; content-change throttle compares only `used_percentage` + `resets_at`; atomic `.tmp`→`renameSync` (Pattern 8); whole body wrapped in `try {} catch {}` (Pattern 1, silent). Concurrency safety (AC7) is an emergent property of atomic-rename + throttle — no extra locking added.
+- **AC9** — Wired `persistUsageSnapshot(stdin)` once per entry path: in `handleLineCommand()` immediately after `readStdin()` (before the `session_id` and `if (!status) return` guards) and in `main()`'s individual-command path immediately after `readStdin()`. The `line`-routing shortcut in `main()` was intentionally left untouched (it delegates to `handleLineCommand`, which already persists — avoids double-persist).
+- **AC10** — Added a dedicated `describe('weekly-usage reader', …)` block in `test/reader.test.js` (separate from the 10.1 computation block) with its own tmpDir + spawn helper (`execReaderStdin`, honoring `BMAD_CACHE_DIR`): (a) all 4 zones via direct import, (b) empty states, (c) snapshot schema, (d) throttle, (e) snapshot persisted via the `line` path with no status file, (f) silent-fail on a forced `EISDIR` write error, (g) self-color exclusion keeps the zone color over a fixed `magenta` colorMode.
+- **Zone fixture note** — Used safe-margin `used_percentage` values (`30`/`47`/`55`/`65`) instead of the boundary values (`45`/`50`) the recipe loosely cited, because the `Date.now()`-driven extractor lands `timePct` *slightly above* 50 (epoch floor + call drift), which would flip exact-boundary inputs. The chosen values land squarely in each band, satisfying AC10(a) deterministically.
+- **Scope discipline** — Confined to `src/reader/bmad-sl-reader.js` + `test/reader.test.js`. No widget registry, TUI screen, preview-utils, installer, defaults.js, project-context.md, or zone-math changes (those are stories 10.3/10.4/10.5). The deferred 10.1 `resets_at` type-guard was intentionally NOT added (followed the verbatim reference, per Dev Notes).
 
 ### File List
 
+- `src/reader/bmad-sl-reader.js` (modified) — `computeWeeklyUsage` import; `USAGE_PATH` const; `persistUsageSnapshot` helper; `COMMANDS.weeklyusage` extractor; 2 call sites (`handleLineCommand`, `main`); self-color exclusion guard extended.
+- `test/reader.test.js` (modified) — new `describe('weekly-usage reader')` block (12 tests) + `execReaderStdin` spawn helper.
+
 ### Change Log
+
+- 2026-06-10 — Story 10.2 implemented: `weeklyusage` reader extractor + account-global `weekly-usage.json` snapshot persistence (atomic write + content-change throttle) + `bmad-weeklyusage` self-color exclusion. Reader-only, additive. Full suite green (707 pass / 0 fail).

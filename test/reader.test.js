@@ -887,3 +887,189 @@ describe('weekly-usage computation', () => {
       `first tick positionPct ${ticks[0].positionPct} should be ≈ ${expectedFirst}`);
   });
 });
+
+// --- Weekly-usage reader (Story 10.2, AC1–AC10) ---
+// Extractor zone output + empty state via direct import; snapshot persistence,
+// content-change throttle, no-status capture, silent-fail, and self-color exclusion via spawn.
+
+describe('weekly-usage reader', () => {
+  const { WEEK_MS } = sharedConstants;
+  let tmpDir;
+
+  before(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'bmad-wu-'));
+  });
+
+  after(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  // resets_at chosen so timePct lands ≈ 50 (slightly above) when the extractor calls Date.now().
+  // weekStart = resets_at*1000 − WEEK_MS ≈ now − WEEK_MS/2 ⇒ timePct ≈ 50.
+  function resetsAtHalfWeek() {
+    return Math.floor((Date.now() + WEEK_MS / 2) / 1000);
+  }
+
+  function stdinWithUsage(usedPct, extra = {}) {
+    return { ...extra, rate_limits: { seven_day: { used_percentage: usedPct, resets_at: resetsAtHalfWeek() } } };
+  }
+
+  function writeStatus(sessionId, statusObj) {
+    fs.writeFileSync(path.join(tmpDir, `status-${sessionId}.json`), JSON.stringify(statusObj));
+  }
+
+  function execReaderStdin(args, stdinObj, extraEnv = {}) {
+    return execSync(`node "${READER_PATH}" ${args}`, {
+      input: JSON.stringify(stdinObj),
+      encoding: 'utf8',
+      env: { ...process.env, BMAD_CACHE_DIR: tmpDir, ...extraEnv },
+    });
+  }
+
+  const snapPath = () => path.join(tmpDir, 'weekly-usage.json');
+  function cleanSnapshot() {
+    fs.rmSync(snapPath(), { recursive: true, force: true });
+    fs.rmSync(snapPath() + '.tmp', { recursive: true, force: true });
+  }
+
+  // --- (a) extractor zone output: correct status word + ANSI color for all 4 zones ---
+
+  it('(a) extractor renders GOOD/green zone', () => {
+    assert.equal(
+      reader.COMMANDS.weeklyusage({}, {}, stdinWithUsage(30)),
+      `${ESC}32mWeekly usage : GOOD${RESET}`
+    );
+  });
+
+  it('(a) extractor renders SWEET SPOT/blue zone', () => {
+    assert.equal(
+      reader.COMMANDS.weeklyusage({}, {}, stdinWithUsage(47)),
+      `${ESC}34mWeekly usage : SWEET SPOT${RESET}`
+    );
+  });
+
+  it('(a) extractor renders TOO HIGH/yellow zone', () => {
+    assert.equal(
+      reader.COMMANDS.weeklyusage({}, {}, stdinWithUsage(55)),
+      `${ESC}33mWeekly usage : TOO HIGH${RESET}`
+    );
+  });
+
+  it('(a) extractor renders SLOW DOWN/red zone', () => {
+    assert.equal(
+      reader.COMMANDS.weeklyusage({}, {}, stdinWithUsage(65)),
+      `${ESC}31mWeekly usage : SLOW DOWN${RESET}`
+    );
+  });
+
+  // --- (b) extractor empty state → '' ---
+
+  it('(b) extractor returns empty when rate_limits absent', () => {
+    assert.equal(reader.COMMANDS.weeklyusage({}, {}, {}), '');
+  });
+
+  it('(b) extractor returns empty when stdin is null', () => {
+    assert.equal(reader.COMMANDS.weeklyusage({}, {}, null), '');
+  });
+
+  it('(b) extractor returns empty when seven_day absent', () => {
+    assert.equal(reader.COMMANDS.weeklyusage({}, {}, { rate_limits: {} }), '');
+  });
+
+  // --- (c) snapshot atomic write produces the correct schema ---
+
+  it('(c) persists weekly-usage.json with {used_percentage, resets_at, captured_at}', () => {
+    cleanSnapshot();
+    const resetsAt = resetsAtHalfWeek();
+    writeStatus('us1', { project: 'Toulou' });
+    execReaderStdin('weeklyusage', {
+      session_id: 'us1',
+      rate_limits: { seven_day: { used_percentage: 42.5, resets_at: resetsAt } },
+    });
+    assert.ok(fs.existsSync(snapPath()), 'snapshot file should exist');
+    const snap = JSON.parse(fs.readFileSync(snapPath(), 'utf8'));
+    assert.deepEqual(Object.keys(snap).sort(), ['captured_at', 'resets_at', 'used_percentage']);
+    assert.equal(snap.used_percentage, 42.5);
+    assert.equal(snap.resets_at, resetsAt);
+    assert.equal(typeof snap.captured_at, 'string');
+    assert.ok(!Number.isNaN(Date.parse(snap.captured_at)), 'captured_at is a valid ISO timestamp');
+  });
+
+  // --- (d) content-change throttle skips an unchanged write ---
+
+  it('(d) content-change throttle skips an unchanged second write', () => {
+    cleanSnapshot();
+    const stdinObj = {
+      session_id: 'us2',
+      rate_limits: { seven_day: { used_percentage: 33.3, resets_at: resetsAtHalfWeek() } },
+    };
+    writeStatus('us2', { project: 'X' });
+    execReaderStdin('weeklyusage', stdinObj);
+    const first = JSON.parse(fs.readFileSync(snapPath(), 'utf8')).captured_at;
+    // Second identical render — values unchanged, throttle must skip the write.
+    execReaderStdin('weeklyusage', stdinObj);
+    const second = JSON.parse(fs.readFileSync(snapPath(), 'utf8')).captured_at;
+    assert.equal(second, first, 'captured_at unchanged ⇒ second write was throttled');
+  });
+
+  // --- (e) snapshot written even when NO status file exists (TUI-without-session path) ---
+
+  it('(e) persists snapshot via line path before the no-status early-return', () => {
+    cleanSnapshot();
+    const configDir = fs.mkdtempSync(path.join(os.tmpdir(), 'bmad-cfg-'));
+    const config = { separator: 'serre', lines: [{ widgets: ['bmad-weeklyusage'], colorModes: {} }] };
+    fs.writeFileSync(path.join(configDir, 'config.json'), JSON.stringify(config));
+    // Deliberately NO status-us3.json → handleLineCommand returns '' before rendering,
+    // but persistUsageSnapshot runs first (placed before the status guard).
+    execReaderStdin(
+      'line 0',
+      { session_id: 'us3', rate_limits: { seven_day: { used_percentage: 55, resets_at: resetsAtHalfWeek() } } },
+      { BMAD_CONFIG_DIR: configDir }
+    );
+    assert.ok(fs.existsSync(snapPath()), 'snapshot persisted even with no status file');
+    assert.equal(JSON.parse(fs.readFileSync(snapPath(), 'utf8')).used_percentage, 55);
+    fs.rmSync(configDir, { recursive: true, force: true });
+  });
+
+  // --- (f) silent-fail on a write error — reader still emits its normal output ---
+
+  it('(f) silent-fails on snapshot write error and still renders', () => {
+    cleanSnapshot();
+    // Force EISDIR on the atomic .tmp write by occupying the .tmp path with a directory.
+    fs.mkdirSync(snapPath() + '.tmp', { recursive: true });
+    writeStatus('us4', { project: 'SilentFail' });
+    // execSync throws if the reader exits non-zero — a clean return proves silent-fail (exit 0).
+    const out = execReaderStdin('project', {
+      session_id: 'us4',
+      rate_limits: { seven_day: { used_percentage: 70, resets_at: resetsAtHalfWeek() } },
+    });
+    assert.ok(out.includes('SilentFail'), 'reader emits normal project output despite snapshot write error');
+    assert.ok(!fs.existsSync(snapPath()), 'no snapshot file written when the write path errors');
+    cleanSnapshot();
+  });
+
+  // --- (g) bmad-weeklyusage excluded from generic fixed-color wrapping ---
+
+  it('(g) line render keeps the zone color, ignoring a fixed colorMode (self-color exclusion)', () => {
+    cleanSnapshot();
+    const configDir = fs.mkdtempSync(path.join(os.tmpdir(), 'bmad-cfg-'));
+    const config = {
+      separator: 'serre',
+      lines: [{
+        widgets: ['bmad-weeklyusage'],
+        colorModes: { 'bmad-weeklyusage': { mode: 'fixed', fixedColor: 'magenta' } },
+      }],
+    };
+    fs.writeFileSync(path.join(configDir, 'config.json'), JSON.stringify(config));
+    writeStatus('us5', { project: 'X' }); // status present so the line render proceeds
+    const out = execReaderStdin(
+      'line 0',
+      { session_id: 'us5', rate_limits: { seven_day: { used_percentage: 47, resets_at: resetsAtHalfWeek() } } },
+      { BMAD_CONFIG_DIR: configDir }
+    );
+    assert.ok(out.includes(`${ESC}34m`), 'emits the blue (sweet) zone color from the extractor');
+    assert.ok(!out.includes(`${ESC}35m`), 'does NOT emit the magenta fixed color (excluded from generic wrap)');
+    assert.ok(out.includes('Weekly usage : SWEET SPOT'), 'renders the sweet zone status word');
+    fs.rmSync(configDir, { recursive: true, force: true });
+  });
+});

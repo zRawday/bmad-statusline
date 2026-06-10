@@ -6,6 +6,7 @@ const path = require('path');
 const os = require('os');
 
 const CACHE_DIR = process.env.BMAD_CACHE_DIR || path.join(os.homedir(), '.cache', 'bmad-status');
+const USAGE_PATH = path.join(CACHE_DIR, 'weekly-usage.json');
 const CONFIG_DIR = process.env.BMAD_CONFIG_DIR || path.join(os.homedir(), '.config', 'bmad-statusline');
 const CONFIG_PATH = path.join(CONFIG_DIR, 'config.json');
 const FRESH_THRESHOLD_MS = 60 * 1000;   // 60 seconds
@@ -13,7 +14,7 @@ const STALE_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes
 
 // --- Shared constants ---
 
-const { ALIVE_MAX_AGE_MS, SEPARATOR_VALUES: READER_SEPARATORS, isValidSessionId, hashProjectColor, computeDisplayState: computeLlmDisplayState, formatTimer, formatStoryName, getGradientColor } = require('./shared-constants.cjs');
+const { ALIVE_MAX_AGE_MS, SEPARATOR_VALUES: READER_SEPARATORS, isValidSessionId, hashProjectColor, computeDisplayState: computeLlmDisplayState, formatTimer, formatStoryName, getGradientColor, computeWeeklyUsage } = require('./shared-constants.cjs');
 
 // --- Color maps ---
 
@@ -173,6 +174,29 @@ function purgeStale() {
   } catch {}
 }
 
+// --- Weekly-usage snapshot persistence (Pattern 29) ---
+// Account-global cache bookkeeping: the live usage data only ever reaches the reader
+// (via stdin). The standalone TUI screen has no stdin, so the reader persists a snapshot
+// it can read. Write-only side effect here; the widget itself computes live from stdin.
+
+function persistUsageSnapshot(stdin) {
+  try {
+    const rl = stdin && stdin.rate_limits && stdin.rate_limits.seven_day;
+    if (!rl || rl.used_percentage == null || rl.resets_at == null) return; // empty state — nothing to persist
+    let prev = null;
+    try { prev = JSON.parse(fs.readFileSync(USAGE_PATH, 'utf8')); } catch {}
+    // Content-change throttle: skip write if value unchanged (avoids writing on every render)
+    if (prev && prev.used_percentage === rl.used_percentage && prev.resets_at === rl.resets_at) return;
+    const snap = {
+      used_percentage: rl.used_percentage,
+      resets_at: rl.resets_at,
+      captured_at: new Date().toISOString(),
+    };
+    fs.writeFileSync(USAGE_PATH + '.tmp', JSON.stringify(snap, null, 2) + '\n'); // atomic (Pattern 8)
+    fs.renameSync(USAGE_PATH + '.tmp', USAGE_PATH);
+  } catch { /* silent — Pattern 1 */ }
+}
+
 // --- Internal config support ---
 
 // READER_SEPARATORS aliased from SEPARATOR_VALUES in shared-constants.cjs
@@ -224,6 +248,7 @@ function resolveSeparator(style, custom) {
 function handleLineCommand(lineIndex) {
   ensureCacheDir();
   const stdin = readStdin();
+  persistUsageSnapshot(stdin); // account-global; capture even with no session/status file (Pattern 29)
   if (!stdin || !stdin.session_id) { process.stdout.write(''); return; }
   const sessionId = stdin.session_id;
   touchAlive(sessionId);
@@ -248,7 +273,7 @@ function handleLineCommand(lineIndex) {
       let value = extractor(status, lineConfig, stdin);
       if (!value) continue;
       const colorMode = lineConfig.colorModes[widgetId];
-      if (widgetId !== 'bmad-llmstate' && widgetId !== 'bmad-contextpct' && colorMode && colorMode.mode === 'fixed' && colorMode.fixedColor) {
+      if (widgetId !== 'bmad-llmstate' && widgetId !== 'bmad-contextpct' && widgetId !== 'bmad-weeklyusage' && colorMode && colorMode.mode === 'fixed' && colorMode.fixedColor) {
         const code = COLOR_CODES[colorMode.fixedColor];
         if (widgetId === 'bmad-fileread' || widgetId === 'bmad-filewrite') {
           const plain = stripAnsi(value);
@@ -341,6 +366,13 @@ const COMMANDS = {
     }
     return bar + ' ' + colorize(pct.toFixed(1) + '%', COLOR_CODES[getGradientColor(pct, low, high)]);
   },
+  weeklyusage:  (s, lc, stdin) => {
+    const rl = stdin && stdin.rate_limits && stdin.rate_limits.seven_day;
+    if (!rl) return ''; // empty state → no widget output (matches contextpct precedent)
+    const u = computeWeeklyUsage({ used_percentage: rl.used_percentage, resets_at: rl.resets_at }, Date.now());
+    if (!u) return '';
+    return colorize('Weekly usage : ' + u.status, COLOR_CODES[u.color]);
+  },
   health:       (s) => {
     const updatedAt = s.updated_at;
     if (!updatedAt) return colorize('\u25CB', COLOR_CODES.brightBlack);
@@ -375,6 +407,7 @@ function main() {
   ensureCacheDir();
 
   const stdin = readStdin();
+  persistUsageSnapshot(stdin); // account-global snapshot for the standalone TUI (Pattern 29)
   if (!stdin || !stdin.session_id) {
     process.stdout.write('');
     return;
