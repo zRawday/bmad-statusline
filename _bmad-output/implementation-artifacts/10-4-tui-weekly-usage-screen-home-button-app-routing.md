@@ -1,6 +1,6 @@
 # Story 10.4: TUI "Weekly usage" screen + Home button + app routing
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -149,6 +149,12 @@ using the existing app-level `cachePath` const (`app.js:37`). It **must NOT** be
 - [x] **Task 5 — Verify** (AC: 10)
   - [x] 5.1 Run the full suite: `node --test --test-concurrency=4 --test-timeout=30000 test/*.test.js`. All green, zero failures.
   - [x] 5.2 Fix any `tui-app.test.js` down-arrow navigation counts that shifted because the new Home option moved the targets (see "Existing-test impact"). Do NOT touch unrelated `12`-count assertions (those are hook event types / widget counts owned by other stories).
+
+### Review Findings
+
+_Code review 2026-06-10 (adversarial: Blind Hunter + Edge Case Hunter + Acceptance Auditor). All 10 ACs PASS; full suite green (718/718). 0 decision-needed, 0 patch, 1 deferred, 9 dismissed as noise. The two "High" items from the diff-only Blind Hunter (`WIDTH` vs `WIDTH-1` scaling; ticks overwriting fill) were both downgraded to correct-by-design / spec-compliant by the two context-aware layers after reading `shared-constants.cjs` + `preview-utils.js`._
+
+- [x] [Review][Defer] Out-of-range `used_percentage` (>100 or negative) not clamped in the usage-bar fill [src/tui/screens/WeeklyUsageScreen.js:65] — deferred, Low. Cosmetic only, never crashes (loop bounded by `i < WIDTH`); >100 saturates the bar while the label reads e.g. `150.0%`, negative renders an empty bar + a misleading green GOOD status. Root cause is upstream in the locked 10.1 `computeWeeklyUsage` (clamps `timePct` but not `usagePct`, and computes the zone/status color), which this story must not touch. Real-world API `rate_limits` data is 0–100, so this is corrupt-data-only. Belongs to the 10.5 Rev.7 reconciliation / a future upstream hardening — see deferred-work.md.
 
 ## Dev Notes
 

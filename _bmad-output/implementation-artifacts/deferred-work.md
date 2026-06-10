@@ -1,5 +1,9 @@
 # Deferred Work
 
+## Deferred from: code review of 10-4-tui-weekly-usage-screen-home-button-app-routing (2026-06-10)
+
+- **Out-of-range `used_percentage` not clamped in the usage-bar fill** (Low, cosmetic, corrupt-data-only) — `src/tui/screens/WeeklyUsageScreen.js:65` computes `usageFill = Math.round((u.usagePct / 100) * WIDTH)` with no `[0, WIDTH]` clamp. `usagePct > 100` saturates the bar (loop bounded by `i < WIDTH`, so no overflow/crash) while the label still reads e.g. `150.0%`; a negative `usagePct` makes `usageFill` negative → an entirely empty bar plus a misleading green **GOOD** status line. Never crashes. Root cause is upstream in the **locked 10.1** `computeWeeklyUsage` (in `shared-constants.cjs`), which clamps `timePct` to [0,100] but not `usagePct`, and which also derives the zone `color`/`status` — so the misleading status color can't be fixed screen-side either. This story must not touch 10.1. Real-world `rate_limits` data from the API is 0–100, so the path is only reachable with corrupt/out-of-range data. Harden upstream (mirror the `usagePct` finding deferred from 10.1) or address in the 10.5 Rev.7 reconciliation sweep. Raised Low by Blind Hunter + Edge Case Hunter; Acceptance Auditor confirmed all 10 ACs otherwise pass with a green suite.
+
 ## Deferred from: code review of 10-2-reader-weeklyusage-extractor-snapshot-persistence-self-color-exclusion (2026-06-10)
 
 > Note: the shared-`.tmp` concurrency finding and the `.tmp`-orphan finding were **fixed during review** (per-pid temp + unlink-on-failure in `persistUsageSnapshot`), not deferred. Only the items below remain.
