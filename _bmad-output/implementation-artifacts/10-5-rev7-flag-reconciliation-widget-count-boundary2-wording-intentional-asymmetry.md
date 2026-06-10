@@ -1,6 +1,6 @@
 # Story 10.5: Rev.7 flag reconciliation — widget count, Boundary 2 wording, intentional asymmetry
 
-Status: ready-for-dev
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -75,32 +75,32 @@ This is a "make the docs tell the truth" story. Each edit below was checked agai
 
 ## Tasks / Subtasks
 
-- [ ] **Task 1 — Widget count → 13 in project-context.md + README** (AC: 1)
-  - [ ] 1.1 `project-context.md` line ~643: `**12 widgets (widget registry — \`src/tui/widget-registry.js\` \`INDIVIDUAL_WIDGETS\`):**` → `**13 widgets …`.
-  - [ ] 1.2 `project-context.md` widget table (ends with the `bmad-timer` row, ~line 658): **append a 13th row** immediately after the `bmad-timer` row (registry order — `weeklyusage` is the last `INDIVIDUAL_WIDGETS` entry, index 12):
+- [x] **Task 1 — Widget count → 13 in project-context.md + README** (AC: 1)
+  - [x] 1.1 `project-context.md` line ~643: `**12 widgets (widget registry — \`src/tui/widget-registry.js\` \`INDIVIDUAL_WIDGETS\`):**` → `**13 widgets …`.
+  - [x] 1.2 `project-context.md` widget table (ends with the `bmad-timer` row, ~line 658): **append a 13th row** immediately after the `bmad-timer` row (registry order — `weeklyusage` is the last `INDIVIDUAL_WIDGETS` entry, index 12):
     `| \`bmad-weeklyusage\` | \`weeklyusage\` | Weekly Usage | false | — | dynamic |`
-  - [ ] 1.3 `project-context.md` lines ~602, ~613, ~618: change each `"...all 12 widget IDs..."` JSON comment to `"...all 13 widget IDs..."` (3 occurrences).
-  - [ ] 1.4 `project-context.md` line ~633: `- \`widgetOrder\` array contains **all 12 widget IDs**` → `**all 13 widget IDs**`. (Optional, recommended: in the trailing parenthetical, add that `bmad-weeklyusage` is likewise appended to pre-Rev.7 configs by `ensureWidgetOrder()` — this matches `tui-widget-registry.test.js`'s AC3 "appends bmad-weeklyusage to a legacy config" test.)
-  - [ ] 1.5 `project-context.md` line ~1037 (BF1 row): `Edit Line renders all 12 widgets from \`INDIVIDUAL_WIDGETS\`.` → `all 13 widgets`.
-  - [ ] 1.6 (Recommended, AC1 consistency) `project-context.md` line ~635: the `colorModes[id].mode` "dynamic" valid list `(valid for bmad-workflow, bmad-project, bmad-activeskill, bmad-llmstate, bmad-contextpct)` → add `bmad-weeklyusage` (its `defaultMode` is `dynamic`/self-colored).
-  - [ ] 1.7 (Optional, AC3 tie-in) `project-context.md` line ~660 default-layout note: add a clause that `bmad-weeklyusage` is registered but `defaultEnabled: false`, so it is selectable via `widgetOrder` yet appears on **no default line** (sets up the intentional-asymmetry note).
-  - [ ] 1.8 `README.md` line ~20: `- **11 configurable widgets across 3 lines** — LLM State, Project, Initial Skill, Active Skill, Story, Step, Next Step, Document, File Read, File Write/Edit, Timer` → `- **13 configurable widgets across 3 lines** — LLM State, Project, Initial Skill, Active Skill, Story, Step, Next Step, Document, File Read, File Write/Edit, Context %, Timer, Weekly Usage` (count → 13; add the two missing names `Context %` and `Weekly Usage`).
-  - [ ] 1.9 **Verify, do NOT edit:** `test/tui-widget-registry.test.js` (`widgets.length === 13`) and `test/tui-preview-utils.test.js` (`Object.keys(SAMPLE_VALUES).length === 13`) are already at 13. Do **not** touch the `12`-count **event-type** assertions in `test/defaults.test.js` / `test/install.test.js`.
-- [ ] **Task 2 — Boundary 2 wording (project-context.md)** (AC: 2)
-  - [ ] 2.1 In "Boundary 2: Reader (runtime, standalone) — THE CONSUMER" (line ~902), reconcile the "read-only" framing. Keep the heading, but make the body state the narrower truth: **read-only w.r.t. `config.json` & the status file; owns cache-dir bookkeeping (alive files + the `weekly-usage.json` usage snapshot)**. Concretely, augment the bullet `- Piggybacking cleanup: alive touch + stale purge on every invocation` to also mention the usage-snapshot write and cite Pattern 29 (e.g. add a bullet: `- Cache-dir bookkeeping (Pattern 29): writes \`.alive-*\` files and the account-global \`weekly-usage.json\` snapshot — never \`config.json\` (Pattern 20) and never the status file (Boundary 1).`).
-  - [ ] 2.2 Leave Pattern 20 (line ~363 `Reader NEVER writes to config.json — read-only consumer.`) **unchanged** — it is already correctly scoped to `config.json`.
-- [ ] **Task 3 — Intentional asymmetry doc** (AC: 3)
-  - [ ] 3.1 Add a concise note in `project-context.md` (natural spot: right after the widget table's default-layout note ~660, or in the `line N` extractor area). Text intent: *"Intentional asymmetry (Rev.7): the `bmad-weeklyusage` **widget** renders only inside a tracked BMAD session (the `line N` reader returns `''` with no `status-<sid>.json`), but the **TUI "Weekly usage" screen** works anywhere because the reader persists `weekly-usage.json` **before** the `line N` no-status early-return. Deliberate — not a bug."*
-  - [ ] 3.2 (Optional) Mirror a one-line version of the same note in `README.md` if/where the Weekly Usage widget is described. README currently does not describe the widget beyond the list; a short note is fine but not required by the AC.
-- [ ] **Task 4 — Pattern 29 reference (project-context.md)** (AC: 4)
-  - [ ] 4.1 Add a short **Pattern 29 — Reader Usage-Snapshot Cache** reference where reader cache-dir duties are described — the cleanest spot is right after the "Reader piggybacking cleanup" bullet block (~886) and/or folded into the Boundary 2 bullet from Task 2.1. Describe: the reader writes the account-global `weekly-usage.json` (`{ used_percentage, resets_at, captured_at }`) to the cache dir via atomic per-pid `.tmp`→rename with a content-change throttle; it is a side effect for the standalone TUI; the widget itself computes live from stdin and never reads the snapshot.
-  - [ ] 4.2 (Optional, flag #4 housekeeping) Bump the front-matter `existing_patterns_found: 28` → `29` if you add the Pattern 29 reference as a named pattern. Also optional: reconcile the pre-existing doc-version caption (`architecture.md (Rev.5)` on line ~14 and the line ~23 "Architecture Rev.5 … v1.2.1" caption) toward Rev.7 — this is flag #4 (pre-existing drift); keep the touch light and do not rewrite the front-matter wholesale.
-- [ ] **Task 5 — Self-coloring exclusion prose (project-context.md)** (AC: 5)
-  - [ ] 5.1 Line ~860: `- **\`bmad-llmstate\` AND \`bmad-contextpct\` are excluded from generic fixed-color application** (line ~251) — both self-color inside their extractor.` → list all three: `**\`bmad-llmstate\`, \`bmad-contextpct\`, AND \`bmad-weeklyusage\` are excluded …** (line ~286)` (also correct the stale `~251` → `~286`, the as-built guard line).
-  - [ ] 5.2 Line ~1220 (DO/DON'T summary): `- \`bmad-llmstate\` and \`bmad-contextpct\` self-color in their extractors — never apply generic fixed-color wrapping to them` → add `bmad-weeklyusage` to the list.
-  - [ ] 5.3 (Optional) Line ~863 self-color bullets: add a `bmad-weeklyusage` line mirroring the `bmad-contextpct` one (extractor self-colors via the zone color from `computeWeeklyUsage`).
-- [ ] **Task 6 — architecture.md `.tmp` per-pid reconciliation (carry-in)** (AC: 7)
-  - [ ] 6.1 In `_bmad-output/planning-artifacts/architecture.md` "Snapshot file — … I/O contract", update the `persistUsageSnapshot` reference body (the `fs.writeFileSync(USAGE_PATH + '.tmp', …)` / `fs.renameSync(USAGE_PATH + '.tmp', USAGE_PATH)` lines, ~2304-2305) to the **as-built per-process temp** form:
+  - [x] 1.3 `project-context.md` lines ~602, ~613, ~618: change each `"...all 12 widget IDs..."` JSON comment to `"...all 13 widget IDs..."` (3 occurrences).
+  - [x] 1.4 `project-context.md` line ~633: `- \`widgetOrder\` array contains **all 12 widget IDs**` → `**all 13 widget IDs**`. (Optional, recommended: in the trailing parenthetical, add that `bmad-weeklyusage` is likewise appended to pre-Rev.7 configs by `ensureWidgetOrder()` — this matches `tui-widget-registry.test.js`'s AC3 "appends bmad-weeklyusage to a legacy config" test.)
+  - [x] 1.5 `project-context.md` line ~1037 (BF1 row): `Edit Line renders all 12 widgets from \`INDIVIDUAL_WIDGETS\`.` → `all 13 widgets`.
+  - [x] 1.6 (Recommended, AC1 consistency) `project-context.md` line ~635: the `colorModes[id].mode` "dynamic" valid list `(valid for bmad-workflow, bmad-project, bmad-activeskill, bmad-llmstate, bmad-contextpct)` → add `bmad-weeklyusage` (its `defaultMode` is `dynamic`/self-colored).
+  - [x] 1.7 (Optional, AC3 tie-in) `project-context.md` line ~660 default-layout note: add a clause that `bmad-weeklyusage` is registered but `defaultEnabled: false`, so it is selectable via `widgetOrder` yet appears on **no default line** (sets up the intentional-asymmetry note).
+  - [x] 1.8 `README.md` line ~20: `- **11 configurable widgets across 3 lines** — LLM State, Project, Initial Skill, Active Skill, Story, Step, Next Step, Document, File Read, File Write/Edit, Timer` → `- **13 configurable widgets across 3 lines** — LLM State, Project, Initial Skill, Active Skill, Story, Step, Next Step, Document, File Read, File Write/Edit, Context %, Timer, Weekly Usage` (count → 13; add the two missing names `Context %` and `Weekly Usage`).
+  - [x] 1.9 **Verify, do NOT edit:** `test/tui-widget-registry.test.js` (`widgets.length === 13`) and `test/tui-preview-utils.test.js` (`Object.keys(SAMPLE_VALUES).length === 13`) are already at 13. Do **not** touch the `12`-count **event-type** assertions in `test/defaults.test.js` / `test/install.test.js`.
+- [x] **Task 2 — Boundary 2 wording (project-context.md)** (AC: 2)
+  - [x] 2.1 In "Boundary 2: Reader (runtime, standalone) — THE CONSUMER" (line ~902), reconcile the "read-only" framing. Keep the heading, but make the body state the narrower truth: **read-only w.r.t. `config.json` & the status file; owns cache-dir bookkeeping (alive files + the `weekly-usage.json` usage snapshot)**. Concretely, augment the bullet `- Piggybacking cleanup: alive touch + stale purge on every invocation` to also mention the usage-snapshot write and cite Pattern 29 (e.g. add a bullet: `- Cache-dir bookkeeping (Pattern 29): writes \`.alive-*\` files and the account-global \`weekly-usage.json\` snapshot — never \`config.json\` (Pattern 20) and never the status file (Boundary 1).`).
+  - [x] 2.2 Leave Pattern 20 (line ~363 `Reader NEVER writes to config.json — read-only consumer.`) **unchanged** — it is already correctly scoped to `config.json`.
+- [x] **Task 3 — Intentional asymmetry doc** (AC: 3)
+  - [x] 3.1 Add a concise note in `project-context.md` (natural spot: right after the widget table's default-layout note ~660, or in the `line N` extractor area). Text intent: *"Intentional asymmetry (Rev.7): the `bmad-weeklyusage` **widget** renders only inside a tracked BMAD session (the `line N` reader returns `''` with no `status-<sid>.json`), but the **TUI "Weekly usage" screen** works anywhere because the reader persists `weekly-usage.json` **before** the `line N` no-status early-return. Deliberate — not a bug."*
+  - [x] 3.2 (Optional) Mirror a one-line version of the same note in `README.md` if/where the Weekly Usage widget is described. README currently does not describe the widget beyond the list; a short note is fine but not required by the AC.
+- [x] **Task 4 — Pattern 29 reference (project-context.md)** (AC: 4)
+  - [x] 4.1 Add a short **Pattern 29 — Reader Usage-Snapshot Cache** reference where reader cache-dir duties are described — the cleanest spot is right after the "Reader piggybacking cleanup" bullet block (~886) and/or folded into the Boundary 2 bullet from Task 2.1. Describe: the reader writes the account-global `weekly-usage.json` (`{ used_percentage, resets_at, captured_at }`) to the cache dir via atomic per-pid `.tmp`→rename with a content-change throttle; it is a side effect for the standalone TUI; the widget itself computes live from stdin and never reads the snapshot.
+  - [x] 4.2 (Optional, flag #4 housekeeping) Bump the front-matter `existing_patterns_found: 28` → `29` if you add the Pattern 29 reference as a named pattern. Also optional: reconcile the pre-existing doc-version caption (`architecture.md (Rev.5)` on line ~14 and the line ~23 "Architecture Rev.5 … v1.2.1" caption) toward Rev.7 — this is flag #4 (pre-existing drift); keep the touch light and do not rewrite the front-matter wholesale.
+- [x] **Task 5 — Self-coloring exclusion prose (project-context.md)** (AC: 5)
+  - [x] 5.1 Line ~860: `- **\`bmad-llmstate\` AND \`bmad-contextpct\` are excluded from generic fixed-color application** (line ~251) — both self-color inside their extractor.` → list all three: `**\`bmad-llmstate\`, \`bmad-contextpct\`, AND \`bmad-weeklyusage\` are excluded …** (line ~286)` (also correct the stale `~251` → `~286`, the as-built guard line).
+  - [x] 5.2 Line ~1220 (DO/DON'T summary): `- \`bmad-llmstate\` and \`bmad-contextpct\` self-color in their extractors — never apply generic fixed-color wrapping to them` → add `bmad-weeklyusage` to the list.
+  - [x] 5.3 (Optional) Line ~863 self-color bullets: add a `bmad-weeklyusage` line mirroring the `bmad-contextpct` one (extractor self-colors via the zone color from `computeWeeklyUsage`).
+- [x] **Task 6 — architecture.md `.tmp` per-pid reconciliation (carry-in)** (AC: 7)
+  - [x] 6.1 In `_bmad-output/planning-artifacts/architecture.md` "Snapshot file — … I/O contract", update the `persistUsageSnapshot` reference body (the `fs.writeFileSync(USAGE_PATH + '.tmp', …)` / `fs.renameSync(USAGE_PATH + '.tmp', USAGE_PATH)` lines, ~2304-2305) to the **as-built per-process temp** form:
     ```js
     // Per-process temp: weekly-usage.json is account-global, so concurrent line N /
     // native readers must not share one .tmp (they would tear each other's write).
@@ -114,10 +114,10 @@ This is a "make the docs tell the truth" story. Each edit below was checked agai
       throw e;
     }
     ```
-  - [ ] 6.2 Update the concurrency prose just below (~2310): the "atomic `.tmp`→rename … the first writes, the rest see 'unchanged' and skip, and a torn read is impossible" sentence should reflect that **each writer owns a private per-pid temp** (so even non-identical concurrent writes can't tear each other), and only the final `renameSync` is shared and atomic.
-- [ ] **Task 7 — Verify** (AC: 6)
-  - [ ] 7.1 Run the full suite: `node --test --test-concurrency=4 --test-timeout=30000 test/*.test.js`. Expect **all green, zero failures** (doc edits don't affect tests; this confirms you didn't accidentally touch code/tests).
-  - [ ] 7.2 Final grep for stragglers: no remaining `11 widgets` / `12 widgets` / `all 12 widget IDs` / two-widget self-color wording in `project-context.md` or `README.md`. (Ignore the legitimate `12 event types` strings — those are not widget counts.)
+  - [x] 6.2 Update the concurrency prose just below (~2310): the "atomic `.tmp`→rename … the first writes, the rest see 'unchanged' and skip, and a torn read is impossible" sentence should reflect that **each writer owns a private per-pid temp** (so even non-identical concurrent writes can't tear each other), and only the final `renameSync` is shared and atomic.
+- [x] **Task 7 — Verify** (AC: 6)
+  - [x] 7.1 Run the full suite: `node --test --test-concurrency=4 --test-timeout=30000 test/*.test.js`. Expect **all green, zero failures** (doc edits don't affect tests; this confirms you didn't accidentally touch code/tests).
+  - [x] 7.2 Final grep for stragglers: no remaining `11 widgets` / `12 widgets` / `all 12 widget IDs` / two-widget self-color wording in `project-context.md` or `README.md`. (Ignore the legitimate `12 event types` strings — those are not widget counts.)
 
 ## Dev Notes
 
@@ -194,10 +194,38 @@ Per epics.md Epic 10, **10.5 runs after 10.1–10.4** (all done) — it "sweeps 
 
 ### Agent Model Used
 
-{{agent_model_name_version}}
+claude-opus-4-8[1m] (Claude Opus 4.8, 1M context)
 
 ### Debug Log References
 
+- Full suite (`npm test` = `node --test --test-concurrency=4 --test-timeout=30000 test/*.test.js`): **718 pass / 0 fail / 123 suites** — identical to the 10.4 baseline (718/718), confirming the doc-only edits changed no test outcome and no `src/`/`test/` file was touched.
+- Straggler grep over `project-context.md` and `README.md` for `11 widget` / `12 widget` / `all 12 widget IDs` / two-widget self-color wording → **no matches** (the legitimate `12 event types` assertions were intentionally left untouched).
+
 ### Completion Notes List
 
+Documentation + reconciliation sweep only — **no production code or test changes** (verified by the unchanged 718/718 suite). All edits checked against live code on 2026-06-10.
+
+**AC1 — widget count → 13 (flag #1):** `project-context.md` heading `12 widgets` → `13 widgets`; appended the 13th table row `bmad-weeklyusage | weeklyusage | Weekly Usage | false | — | dynamic` after `bmad-timer` (registry index 12, source `src/tui/widget-registry.js:18`); the three `"...all 12 widget IDs..."` JSON comments → `13`; the `widgetOrder` "all 12 widget IDs" rule → `13` (+ noted `ensureWidgetOrder()` appends `bmad-weeklyusage` to pre-Rev.7 configs); BF1 "all 12 widgets" → `13`; dynamic-mode valid list gained `bmad-weeklyusage`. `README.md` feature bullet → "13 configurable widgets…" with `Context %` and `Weekly Usage` added to the list. Test widget-counts confirmed already at 13 (no test edit); the `12 event types` assertions left untouched.
+
+**AC2 — Boundary 2 wording (flag #2):** Boundary 2 reframed from blanket "read-only consumer" to "read-only w.r.t. `config.json` (Pattern 20) and the status file (Boundary 1), but owns cache-dir bookkeeping" — now consistent with the reader's `persistUsageSnapshot` write. Pattern 20 (line ~363, `config.json`-scoped) left unchanged as instructed.
+
+**AC3 — intentional asymmetry (flag #3):** added a "deliberate, not a bug" note after the widget-table default-layout note: the widget renders only inside a tracked BMAD session (`line N` returns `''` with no `status-<sid>.json`), while the TUI screen works anywhere because `persistUsageSnapshot(stdin)` runs **before** the no-status early-return (`bmad-sl-reader.js:261`).
+
+**AC4 — Pattern 29 reference:** added a "Reader cache-dir bookkeeping (Pattern 29)" bullet describing the account-global `weekly-usage.json` atomic per-pid `.tmp`→rename + content-change throttle, write-only side effect for the TUI; folded the same reference into Boundary 2. Bumped front-matter `existing_patterns_found: 28 → 29`.
+
+**AC5 — self-color exclusion (flag #1 corollary):** the exclusion-list prose (`line ~286`, corrected from the stale `~251`) and the DO/DON'T summary line now list all three self-coloring widgets — `bmad-llmstate`, `bmad-contextpct`, `bmad-weeklyusage` — matching the as-built guard at `bmad-sl-reader.js:286`; added the matching self-color bullet for `bmad-weeklyusage`.
+
+**AC6 — suite green:** 718/718, zero failures.
+
+**AC7 — architecture.md `.tmp` per-pid reconciliation (carry-in from 10.2 review):** the `persistUsageSnapshot` reference body in `architecture.md` now shows the as-built per-process temp form (`USAGE_PATH + '.' + process.pid + '.tmp'` with unlink-on-failure + rethrow), and the concurrency prose now states each writer owns a private per-pid temp (so even non-identical concurrent writes can't tear each other) with only the atomic `renameSync` shared.
+
+**Optional sub-tasks — scoping decisions (transparency):**
+- Task 3.2 (mirror the asymmetry note into `README.md`): README has **no dedicated Weekly Usage description section** to mirror into, and AC3 explicitly does not require it — intentionally left out to keep the README touch surgical.
+- Task 4.2 second clause (reconcile the pre-existing `architecture.md (Rev.5)` doc-version captions toward Rev.7, flag #4): intentionally left light per the task's own "keep the touch light / do not rewrite the front-matter wholesale" guidance; only the well-justified `existing_patterns_found` bump (28→29, because Pattern 29 is now a named reference) was applied.
+
 ### File List
+
+- `_bmad-output/project-context.md` (modified — widget-count sweep, Boundary 2 reconciliation, Pattern 29 reference, intentional-asymmetry note, self-color exclusion prose, front-matter `existing_patterns_found` bump)
+- `README.md` (modified — Features bullet widget count 11→13 + added `Context %` and `Weekly Usage`)
+- `_bmad-output/planning-artifacts/architecture.md` (modified — `persistUsageSnapshot` reference body + concurrency prose reconciled to the as-built per-pid temp)
+- `_bmad-output/implementation-artifacts/sprint-status.yaml` (modified — story status ready-for-dev → in-progress → review)

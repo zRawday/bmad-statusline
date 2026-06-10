@@ -17,7 +17,7 @@ Custom widget pack for [ccstatusline](https://github.com/sirmalloc/ccstatusline)
 
 - **Passive detection via hooks** — 8 signals intercepted from the Claude Code lifecycle (prompts, reads, writes, bash, permissions, errors…). Zero manual action required.
 - **Interactive TUI configurator** — full visual editor to customize the display, colors, separators, and widget order
-- **11 configurable widgets across 3 lines** — LLM State, Project, Initial Skill, Active Skill, Story, Step, Next Step, Document, File Read, File Write/Edit, Timer
+- **13 configurable widgets across 3 lines** — LLM State, Project, Initial Skill, Active Skill, Story, Step, Next Step, Document, File Read, File Write/Edit, Context %, Timer, Weekly Usage
 - **Semantic colors** — each workflow and project has its own color (cyan = dev, green = planning, yellow = product, magenta = architecture…), individually customizable
 - **Real-time Monitor** — built-in multi-session dashboard to follow all active BMAD sessions live, with file read/write/edit history, command tracking, and auto-allow permission control (see [Monitor](#monitor) section)
 - **Presets** — 3 slots to save and load complete layouts

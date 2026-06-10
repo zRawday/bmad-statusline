@@ -2301,13 +2301,22 @@ function persistUsageSnapshot(stdin) {
       resets_at: rl.resets_at,
       captured_at: new Date().toISOString(),
     };
-    fs.writeFileSync(USAGE_PATH + '.tmp', JSON.stringify(snap, null, 2) + '\n'); // atomic (Pattern 8)
-    fs.renameSync(USAGE_PATH + '.tmp', USAGE_PATH);
+    // Per-process temp: weekly-usage.json is account-global, so concurrent line N /
+    // native readers must not share one .tmp (they would tear each other's write).
+    // Scope the temp by pid; only the rename is shared, and rename is atomic.
+    const tmp = USAGE_PATH + '.' + process.pid + '.tmp';
+    try {
+      fs.writeFileSync(tmp, JSON.stringify(snap, null, 2) + '\n'); // atomic (Pattern 8)
+      fs.renameSync(tmp, USAGE_PATH);
+    } catch (e) {
+      try { fs.unlinkSync(tmp); } catch {} // don't leak our temp on failure
+      throw e;
+    }
   } catch { /* silent — Pattern 1 */ }
 }
 ```
 
-**Call sites:** invoked once right after `readStdin()` in **both** reader entry paths — `handleLineCommand()` (call it **before** the `if (!status) return` early-return so usage is captured even outside a BMAD project / before any status file exists) and the individual-command path in `main()`. Up to 3 `line N` reader processes plus native-widget reader processes run concurrently per render; the **content-change throttle + atomic `.tmp`→rename** make concurrent identical writes safe — the first writes, the rest see "unchanged" and skip, and a torn read is impossible.
+**Call sites:** invoked once right after `readStdin()` in **both** reader entry paths — `handleLineCommand()` (call it **before** the `if (!status) return` early-return so usage is captured even outside a BMAD project / before any status file exists) and the individual-command path in `main()`. Up to 3 `line N` reader processes plus native-widget reader processes run concurrently per render; each writer owns a **private per-pid temp** (`USAGE_PATH + '.' + process.pid + '.tmp'`, unlinked on failure) so even **non-identical** concurrent writes can't tear each other — only the final `renameSync` onto the shared `USAGE_PATH` is shared, and rename is atomic. The **content-change throttle** further skips redundant writes (the first writes, the rest see "unchanged" and skip), and a torn read is impossible.
 
 **Reader consumer (the widget):** does **not** read `weekly-usage.json`. It has the live data on stdin and computes the zone directly (like `contextpct`). The snapshot write is purely a side effect for the TUI.
 

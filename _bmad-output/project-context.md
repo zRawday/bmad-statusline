@@ -5,7 +5,7 @@ date: '2026-06-09'
 sections_completed: ['technology_stack', 'critical_rules_patterns_0_13', 'tui_v2_patterns_14_20', 'hook_architecture', 'status_file_contract', 'internal_config_schema', 'reader_multiline', 'architectural_boundaries', 'tui_state_model', 'bug_fix_architecture', 'testing_conventions', 'code_conventions', 'installer_deployment', 'llm_state_model', 'shared_constants', 'tui_lifecycle', 'history_arrays', 'contextpct_widget', 'doctor_healthcheck', 'npx_cache_autoheal', 'cli_utils']
 status: 'complete'
 completedAt: '2026-06-09'
-existing_patterns_found: 28
+existing_patterns_found: 29
 rule_count: 92
 optimized_for_llm: true
 source_documents:
@@ -599,7 +599,7 @@ Read by: Reader (for `line N` command) and TUI (on launch)
   "lines": [
     {
       "widgets": ["bmad-project", "bmad-workflow", "bmad-story", "bmad-progressstep", "bmad-timer"],
-      "widgetOrder": ["bmad-project", "bmad-workflow", "bmad-story", "...all 12 widget IDs..."],
+      "widgetOrder": ["bmad-project", "bmad-workflow", "bmad-story", "...all 13 widget IDs..."],
       "colorModes": {
         "bmad-project": { "mode": "dynamic" },
         "bmad-workflow": { "mode": "dynamic" },
@@ -610,12 +610,12 @@ Read by: Reader (for `line N` command) and TUI (on launch)
     },
     {
       "widgets": ["bmad-llmstate"],
-      "widgetOrder": ["...all 12 widget IDs..."],
+      "widgetOrder": ["...all 13 widget IDs..."],
       "colorModes": { "bmad-llmstate": { "mode": "dynamic" } }
     },
     {
       "widgets": ["bmad-contextpct"],
-      "widgetOrder": ["...all 12 widget IDs..."],
+      "widgetOrder": ["...all 13 widget IDs..."],
       "colorModes": { "bmad-contextpct": { "mode": "dynamic", "thresholdLow": 0, "thresholdHigh": 100, "displayMode": "compact" } }
     }
   ],
@@ -630,9 +630,9 @@ Read by: Reader (for `line N` command) and TUI (on launch)
 - `customSeparator` is a string, only used when `separator === "custom"`. Null otherwise.
 - `lines` is always length 3. Each line has `widgets`, `widgetOrder`, and `colorModes`.
 - `widgets` array contains only **visible** widgets in **display order**. A widget not in any line's `widgets` is hidden everywhere.
-- `widgetOrder` array contains **all 12 widget IDs** — controls the order widgets appear in the Edit Line screen (including hidden ones). Managed by `ensureWidgetOrder()` on load: prunes stale IDs, appends new widgets (e.g. `bmad-contextpct` is appended to existing pre-v1.2 configs on load).
+- `widgetOrder` array contains **all 13 widget IDs** — controls the order widgets appear in the Edit Line screen (including hidden ones). Managed by `ensureWidgetOrder()` on load: prunes stale IDs, appends new widgets (e.g. `bmad-contextpct` is appended to existing pre-v1.2 configs on load; `bmad-weeklyusage` is likewise appended to pre-Rev.7 configs).
 - `colorModes` contains entries for all widgets configured on this line (including hidden ones — preserves color across hide/show cycles).
-- `colorModes[id].mode` is `"dynamic"` (valid for `bmad-workflow`, `bmad-project`, `bmad-activeskill`, `bmad-llmstate`, `bmad-contextpct`) or `"fixed"`. When `"fixed"`, `fixedColor` is an ANSI color name.
+- `colorModes[id].mode` is `"dynamic"` (valid for `bmad-workflow`, `bmad-project`, `bmad-activeskill`, `bmad-llmstate`, `bmad-contextpct`, `bmad-weeklyusage`) or `"fixed"`. When `"fixed"`, `fixedColor` is an ANSI color name.
 - **Extended colorMode fields (widget-specific):**
   - `bmad-story` colorMode may carry `displayMode` — passed to `formatStoryName(slug, displayMode)` (`'compact'` → number prefix only).
   - `bmad-contextpct` colorMode carries `thresholdLow` (default 0), `thresholdHigh` (default 100), and `displayMode` (`'compact'` → `Ctx: X.X%` text; otherwise a 25-char gradient bar). Color is computed by `getGradientColor(pct, low, high)` — `fixedColor` is ignored for contextpct.
@@ -640,7 +640,7 @@ Read by: Reader (for `line N` command) and TUI (on launch)
 - `projectColors` is a top-level object — maps project name to ANSI color name. Overrides `hashProjectColor()` deterministic default.
 - `presets` is always length 3. Each slot is null (empty) or a preset object `{ name, widgets, colorModes }`.
 
-**12 widgets (widget registry — `src/tui/widget-registry.js` `INDIVIDUAL_WIDGETS`):**
+**13 widgets (widget registry — `src/tui/widget-registry.js` `INDIVIDUAL_WIDGETS`):**
 
 | Widget ID | Command | Name | Default Enabled | Default Color | Default Mode |
 |-----------|---------|------|----------------|---------------|-------------|
@@ -656,8 +656,11 @@ Read by: Reader (for `line N` command) and TUI (on launch)
 | `bmad-filewrite` | `filewrite` | File Edit/Write | false | brightRed | fixed |
 | `bmad-contextpct` | `contextpct` | Context % | **true (line 2)** | — | dynamic |
 | `bmad-timer` | `timer` | Timer | true | brightBlack | fixed |
+| `bmad-weeklyusage` | `weeklyusage` | Weekly Usage | false | — | dynamic |
 
-Default layout (`createDefaultConfig()`): Line 0 = all default-enabled widgets **except** `bmad-llmstate` and `bmad-contextpct` (= [project, workflow, activeskill, story, progressstep, timer]). Line 1 = [llmstate]. Line 2 = [contextpct] (colorMode `{ mode: 'dynamic', thresholdLow: 0, thresholdHigh: 100, displayMode: 'compact' }`). `bmad-llmstate` and `bmad-contextpct` are deliberately segregated onto their own lines.
+Default layout (`createDefaultConfig()`): Line 0 = all default-enabled widgets **except** `bmad-llmstate` and `bmad-contextpct` (= [project, workflow, activeskill, story, progressstep, timer]). Line 1 = [llmstate]. Line 2 = [contextpct] (colorMode `{ mode: 'dynamic', thresholdLow: 0, thresholdHigh: 100, displayMode: 'compact' }`). `bmad-llmstate` and `bmad-contextpct` are deliberately segregated onto their own lines. `bmad-weeklyusage` is registered but `defaultEnabled: false`, so it appears on **no default line** — it is selectable via `widgetOrder` and can be added to any line by the user.
+
+**Intentional asymmetry (Rev.7 — deliberate, not a bug):** the `bmad-weeklyusage` **statusline widget** renders only inside a tracked BMAD session — the `line N` reader returns `''` when there is no `status-<sid>.json` for the session (consistent with every other widget). But the **TUI "Weekly usage" screen** works anywhere, because the reader calls `persistUsageSnapshot(stdin)` to write the account-global `weekly-usage.json` **before** the `line N` no-status early-return (`bmad-sl-reader.js:261`). Do not "fix" the widget to render outside a session, and do not move the snapshot write after the early-return.
 
 ---
 
@@ -857,10 +860,11 @@ function canAppendHistory(sid) {
 12. Output to stdout
 
 **Color application in `line N`:**
-- **`bmad-llmstate` AND `bmad-contextpct` are excluded from generic fixed-color application** (line ~251) — both self-color inside their extractor. Never wrap them in `colorize(..., fixedColor)`.
+- **`bmad-llmstate`, `bmad-contextpct`, AND `bmad-weeklyusage` are excluded from generic fixed-color application** (line ~286) — all self-color inside their extractor. Never wrap them in `colorize(..., fixedColor)`.
 - `mode: "dynamic"` AND widget is `bmad-llmstate` → leave as-is (LLM badge has its own bg/fg coloring)
 - `mode: "dynamic"` AND widget is `bmad-workflow`/`bmad-project`/`bmad-activeskill` → extractor applies color internally via `getWorkflowColor()`/`getProjectColor()`
 - `bmad-contextpct` → extractor self-colors via `getGradientColor(pct, low, high)` regardless of mode
+- `bmad-weeklyusage` → extractor self-colors via the zone color from `computeWeeklyUsage` regardless of mode
 - `mode: "fixed"` → `colorize(stripAnsi(value), fixedColor)` — strip any existing ANSI first
 - Special case: `bmad-fileread`/`bmad-filewrite` with fixed color → icon in white, path in fixedColor (split at first space)
 
@@ -881,9 +885,10 @@ function canAppendHistory(sid) {
 1. Check `projectColors` (custom overrides from internal config) → return if found
 2. `hashProjectColor(name)` → deterministic hash from `PROJECT_COLOR_PALETTE` (12 colors)
 
-**Reader piggybacking cleanup:**
+**Reader cache-dir bookkeeping (the reader owns the cache dir — Pattern 29):**
 - `touchAlive()` — on first call per session: detect Claude ancestor PID via `wmic` (Windows), write to alive file. Same-PID cleanup: delete alive files from old sessions of the same Claude process.
 - `purgeStale()` — delete `.alive-*` files older than `ALIVE_MAX_AGE_MS` (7 days). Status files preserved — orphan cleanup handles those separately.
+- `persistUsageSnapshot()` (**Pattern 29 — Reader Usage-Snapshot Cache**) — writes the account-global `weekly-usage.json` (`{ used_percentage, resets_at, captured_at }`) to the cache dir via an atomic per-pid `.tmp`→rename, with a content-change throttle (skips the write when the value is unchanged). Write-only side effect so the standalone TUI "Weekly usage" screen has data to read; the widget itself computes live from stdin and never reads the snapshot. Never touches `config.json` (Pattern 20) or the status file (Boundary 1).
 
 **Removed commands:** `compact`, `full`, `minimal`, `agent`, `request`, `document` — all return empty string. Unknown commands fall through to empty output.
 
@@ -905,7 +910,7 @@ function canAppendHistory(sid) {
 - CommonJS, zero dependencies except local CJS modules
 - Imports from `shared-constants.cjs` and `workflow-colors.cjs` (deployed alongside)
 - `line N` command reads internal config for widget layout + color modes
-- Piggybacking cleanup: alive touch + stale purge on every invocation
+- **Read-only w.r.t. `config.json` (Pattern 20) and the status file (Boundary 1) — but it owns cache-dir bookkeeping**, not a blanket read-only consumer. On every invocation it writes `.alive-*` files (alive touch + stale purge) and the account-global `weekly-usage.json` usage snapshot (**Pattern 29**). It never writes `config.json` and never writes the per-session status file (the hook is the sole status writer).
 
 ### Boundary 3: Shared Constants (runtime, CJS) — THE BRIDGE
 
@@ -1034,7 +1039,7 @@ Three bugs from TUI v1 are eliminated by architectural decisions in v2. Document
 
 | Bug | Root Cause (v1) | Elimination (v2) |
 |-----|----------------|-------------------|
-| **BF1:** Hidden widgets can't be shown | `widgetOrder` derived from ccstatusline — hidden widgets absent | Edit Line renders all 12 widgets from `INDIVIDUAL_WIDGETS`. Visibility = presence in `config.lines[N].widgets`. |
+| **BF1:** Hidden widgets can't be shown | `widgetOrder` derived from ccstatusline — hidden widgets absent | Edit Line renders all 13 widgets from `INDIVIDUAL_WIDGETS`. Visibility = presence in `config.lines[N].widgets`. |
 | **BF2:** Reset causes infinite render loop | `setTuiState(snapshot)` triggers re-render → effect → write → re-render | No `useEffect` that reads+writes config. Write inside `setConfig` callback. `snapshot` via `useState` — never changes. |
 | **BF3:** Preview shows no colors | Color values not mapped to Ink `<Text>` props | `resolvePreviewColor()` (pattern 19) + `<Text color={resolved}>`. Centralized in `preview-utils.js`. |
 
@@ -1217,7 +1222,7 @@ Detection (no version field — structure-based):
 - Screens receive data via standard props contract — never read global state directly (pattern 18)
 - Pass `isActive` to all `useInput()` hooks — prevents ghost input on unfocused screens
 - Use PID lifecycle (register/unregister/signal handlers) in any new TUI entry point (pattern 28)
-- `bmad-llmstate` and `bmad-contextpct` self-color in their extractors — never apply generic fixed-color wrapping to them
+- `bmad-llmstate`, `bmad-contextpct`, and `bmad-weeklyusage` self-color in their extractors — never apply generic fixed-color wrapping to them
 - `bmad-contextpct` data comes from `stdin.context_window`, never from the status file — the hook does not track context usage
 
 **CLI / installer / doctor rules:**
