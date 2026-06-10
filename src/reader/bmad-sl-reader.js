@@ -192,8 +192,18 @@ function persistUsageSnapshot(stdin) {
       resets_at: rl.resets_at,
       captured_at: new Date().toISOString(),
     };
-    fs.writeFileSync(USAGE_PATH + '.tmp', JSON.stringify(snap, null, 2) + '\n'); // atomic (Pattern 8)
-    fs.renameSync(USAGE_PATH + '.tmp', USAGE_PATH);
+    // Per-process temp: weekly-usage.json is account-global (unlike the hook's
+    // session-scoped status-<sid>.json.tmp), so concurrent line N / native readers
+    // would otherwise share one .tmp and tear each other's write. Scope it by pid so
+    // each writer owns a private temp; only the rename is shared, and rename is atomic.
+    const tmp = USAGE_PATH + '.' + process.pid + '.tmp';
+    try {
+      fs.writeFileSync(tmp, JSON.stringify(snap, null, 2) + '\n'); // atomic (Pattern 8)
+      fs.renameSync(tmp, USAGE_PATH);
+    } catch (e) {
+      try { fs.unlinkSync(tmp); } catch {} // don't leak our temp on write/rename failure
+      throw e;
+    }
   } catch { /* silent — Pattern 1 */ }
 }
 

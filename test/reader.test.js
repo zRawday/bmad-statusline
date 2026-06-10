@@ -993,6 +993,8 @@ describe('weekly-usage reader', () => {
     assert.equal(snap.resets_at, resetsAt);
     assert.equal(typeof snap.captured_at, 'string');
     assert.ok(!Number.isNaN(Date.parse(snap.captured_at)), 'captured_at is a valid ISO timestamp');
+    const orphans = fs.readdirSync(tmpDir).filter((f) => f.startsWith('weekly-usage.json.') && f.endsWith('.tmp'));
+    assert.equal(orphans.length, 0, 'per-pid temp consumed by rename — no .tmp leftover');
   });
 
   // --- (d) content-change throttle skips an unchanged write ---
@@ -1035,8 +1037,9 @@ describe('weekly-usage reader', () => {
 
   it('(f) silent-fails on snapshot write error and still renders', () => {
     cleanSnapshot();
-    // Force EISDIR on the atomic .tmp write by occupying the .tmp path with a directory.
-    fs.mkdirSync(snapPath() + '.tmp', { recursive: true });
+    // Force a rename failure independent of the per-pid temp name: occupy the FINAL
+    // snapshot path with a directory so renameSync(tmp → USAGE_PATH) throws (EISDIR/EPERM).
+    fs.mkdirSync(snapPath(), { recursive: true });
     writeStatus('us4', { project: 'SilentFail' });
     // execSync throws if the reader exits non-zero — a clean return proves silent-fail (exit 0).
     const out = execReaderStdin('project', {
@@ -1044,7 +1047,10 @@ describe('weekly-usage reader', () => {
       rate_limits: { seven_day: { used_percentage: 70, resets_at: resetsAtHalfWeek() } },
     });
     assert.ok(out.includes('SilentFail'), 'reader emits normal project output despite snapshot write error');
-    assert.ok(!fs.existsSync(snapPath()), 'no snapshot file written when the write path errors');
+    assert.ok(fs.statSync(snapPath()).isDirectory(), 'final path untouched — the snapshot write silently failed');
+    const orphans = fs.readdirSync(tmpDir).filter((f) => f.startsWith('weekly-usage.json.') && f.endsWith('.tmp'));
+    assert.equal(orphans.length, 0, 'no per-pid .tmp orphan left behind on write error');
+    fs.rmSync(snapPath(), { recursive: true, force: true });
     cleanSnapshot();
   });
 
