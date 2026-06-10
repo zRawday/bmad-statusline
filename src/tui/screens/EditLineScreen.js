@@ -27,7 +27,7 @@ const GRAB_SHORTCUTS = [
 ];
 
 function getColorOptions(widgetId) {
-  if (widgetId === 'bmad-llmstate' || widgetId === 'bmad-contextpct') return [];
+  if (widgetId === 'bmad-llmstate' || widgetId === 'bmad-contextpct' || widgetId === 'bmad-weeklyusage') return [];
   if (widgetId === 'bmad-workflow' || widgetId === 'bmad-project' || widgetId === 'bmad-activeskill') return ['dynamic', ...ANSI_COLORS];
   return ANSI_COLORS;
 }

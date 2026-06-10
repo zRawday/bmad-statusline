@@ -1,6 +1,6 @@
 # Story 10.3: Widget registry entry (13th widget) + configurator preview integration
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -219,5 +219,19 @@ claude-opus-4-8 (Opus 4.8, 1M context)
 ### Change Log
 
 - 2026-06-10 — Story 10.3 implemented: registered `bmad-weeklyusage` as the 13th `INDIVIDUAL_WIDGETS` entry (`defaultEnabled: false`, `defaultMode: 'dynamic'`) and taught the configurator preview to sample/self-color it (`SAMPLE_VALUES` text + `resolvePreviewColor` returns `'blue'` regardless of mode). Purely additive TUI registry + preview; no reader/hook/installer/`config-loader.js` change. Updated the two `tui-*` test files (12→13 / 5→6 dynamic) and added 5 AC tests. Necessary fixture regression fix in `test/fixtures/internal-config-{default,multiline}.json` (12→13-id `widgetOrder`). Full suite green (712 pass / 0 fail).
+
+## Review Findings
+
+### Review Findings (code-review 2026-06-10)
+
+Adversarial review (Blind Hunter + Edge Case Hunter + Acceptance Auditor). Acceptance Auditor: **all 7 ACs satisfied, no scope creep, suite 712/712 green**. One decision-needed surfaced; 4 findings dismissed as noise/by-design.
+
+- [x] [Review][Patch] **(FIXED 2026-06-10)** Self-colored `bmad-weeklyusage` still exposes a no-op, mode-trapping color control in the Edit Line screen — `getColorOptions()` (`src/tui/screens/EditLineScreen.js:29-32`) returns `[]` (disables the ←→ color control) for the other self-colored widgets `bmad-llmstate` and `bmad-contextpct`, but `bmad-weeklyusage` is missing from that early-return and falls through to `return ANSI_COLORS`. Consequences: (1) the Edit Line screen offers a fixed-color picker for a widget the spec declares has "no user-settable color" — cycling it has **zero effect** (the reader self-colors it per 10.2; `resolvePreviewColor` always returns `'blue'`); (2) on the first ←→ press the widget's `colorMode` flips from `{ mode: 'dynamic' }` to `{ mode: 'fixed', fixedColor: … }` and can **never return to dynamic**, because `'dynamic'` is absent from the cycle list (`indexOf('dynamic') === -1` → jumps to index 0). This is the **third** self-coloring surface (alongside the reader exclusion guard and `resolvePreviewColor`); the story added the preview surface but the Edit Line surface was overlooked. Unambiguous fix: add `|| widgetId === 'bmad-weeklyusage'` to the line-30 early-return so it returns `[]`. **Decision (Fred, 2026-06-10): fix now.** Applied the one-line fix at `src/tui/screens/EditLineScreen.js:30` — added `|| widgetId === 'bmad-weeklyusage'` to the self-colored early-return so `getColorOptions()` returns `[]` (no color control), matching `bmad-llmstate`/`bmad-contextpct`. This aligns the third self-coloring surface with the reader exclusion guard + `resolvePreviewColor`, and honors the spec's "no user-settable color" intent. Full suite re-run: **712 pass / 0 fail**. (source: edge)
+
+**Dismissed (noise / by-design — recorded, not actioned):**
+- `SAMPLE_VALUES['bmad-weeklyusage']` ` : ` spacing looks unusual (blind) — spec-locked verbatim value, AC5 mandates the exact string `'Weekly usage : SWEET SPOT'`.
+- AC3 test can't distinguish append-vs-reset because its legacy order equals canonical order (blind) — the custom-order preservation IS covered by the existing config-loader test against the non-registry-order `internal-config-multiline.json` fixture.
+- Preview `'blue'` only matches 1 of the 4 runtime zones (edge) — by design per AC6 (fixed representative SWEET-SPOT sample; the live reader still computes the true zone color).
+- `bmad-weeklyusage: null` added at the end of the `expected` defaultColor map rather than grouped (auditor) — cosmetic; the test iterates widgets and looks up by id (order-independent).
 </content>
 </invoke>
