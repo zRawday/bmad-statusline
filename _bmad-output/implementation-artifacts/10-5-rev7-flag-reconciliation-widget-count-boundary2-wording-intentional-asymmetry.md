@@ -1,6 +1,6 @@
 # Story 10.5: Rev.7 flag reconciliation — widget count, Boundary 2 wording, intentional asymmetry
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
