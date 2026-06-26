@@ -392,6 +392,15 @@ Load config from `{project-root}/_bmad/bmm/config.yaml` and resolve:
 
     **The developer now has everything needed for flawless implementation!**
   </output>
+
+  <action>Print a ready-to-paste mini-prompt for the next logical workflow (dev-story for the story just created). Render the command inside a fenced code block so it is one-click copy-pasteable.</action>
+  <output>
+    ➡️ **Next workflow** — copy-paste to continue with implementation:
+
+    ```
+    /bmad-dev-story {{epic_num}}-{{story_num}}
+    ```
+  </output>
 </step>
 
 </workflow>

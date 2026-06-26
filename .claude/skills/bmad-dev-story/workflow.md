@@ -480,6 +480,15 @@ Load config from `{project-root}/_bmad/bmm/config.yaml` and resolve:
       <action>Suggest checking sprint-status to see project progress</action>
     </check>
     <action>Remain flexible - allow user to choose their own path or ask for other assistance</action>
+
+    <action>Print a ready-to-paste mini-prompt for the next logical workflow (code-review of the story just implemented). Substitute this story's epic-story number (short `epic-story` form, e.g. `10-2`, derived from {{story_key}}) and render the command inside a fenced code block so it is one-click copy-pasteable.</action>
+    <output>
+      ➡️ **Next workflow** — copy-paste to run peer review (ideally with a different LLM):
+
+      ```
+      /bmad-code-review {{epic_num}}-{{story_num}}
+      ```
+    </output>
   </step>
 
 </workflow>

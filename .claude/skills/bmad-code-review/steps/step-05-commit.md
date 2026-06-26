@@ -47,4 +47,10 @@ Present follow-up options:
 > 2. **Re-run code review** — review again after additional changes
 > 3. **Done** — end the workflow
 
+Then determine the next logical story to create: read `sprint-status.yaml` and find the first story still in `backlog` (the create-story default target). Print a ready-to-paste mini-prompt inside a fenced code block so it is one-click copy-pasteable. Substitute that story's epic-story number (short `epic-story` form, e.g. `10-3`); if no `backlog` story remains, emit the bare `/bmad-create-story` command instead.
+
+```
+/bmad-create-story <next-epic>-<next-story>
+```
+
 **HALT** — waiting for user choice.
