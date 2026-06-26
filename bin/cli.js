@@ -3,7 +3,8 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { R, C, B, _ } from '../src/cli-utils.js';
+import { R, C, B, D, _ } from '../src/cli-utils.js';
+import { isDeployStale, syncDeploy, getPackageVersion, getDeployedVersion } from '../src/deploy.js';
 
 const USAGE = `bmad-statusline — BMAD workflow status line for ccstatusline
 
@@ -30,6 +31,18 @@ if (!command) {
     console.log(`    ${C}${B}npx bmad-statusline install${_}\n`);
     process.exit(1);
   }
+  // Self-heal: npx refreshes the package cache but not the deploy dir, so the
+  // reader/hook ccstatusline runs can lag behind npm after a version bump. When the
+  // running package is newer than what was last deployed, re-copy now — so a plain
+  // `npx bmad-statusline` propagates updates without an explicit `install`.
+  try {
+    const pkgVer = getPackageVersion();
+    if (isDeployStale(configDir, pkgVer)) {
+      const prev = getDeployedVersion(configDir);
+      syncDeploy(configDir, pkgVer);
+      console.log(`  ${D}↻ updated deployed reader ${prev ? 'v' + prev : '(unstamped)'} → v${pkgVer}${_}`);
+    }
+  } catch { /* never block the TUI on a sync hiccup */ }
   const { default: launchTui } = await import('../src/tui/app.js');
   await launchTui();
 } else if (command === '--help' || command === '-h') {

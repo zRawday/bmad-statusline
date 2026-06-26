@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { G, R, D, B, _, logSuccess, logError, logSection } from './cli-utils.js';
+import { getPackageVersion, getDeployedVersion, syncDeploy } from './deploy.js';
 
 const home = os.homedir();
 
@@ -164,6 +165,23 @@ export async function runHealthCheck(paths = defaultPaths, runStatusline = defau
       checks.push(run.ok
         ? { id: 'npx', label: 'ccstatusline runs via npx', status: 'repaired', detail: `purged ${purged.length} broken npx cache entr${purged.length === 1 ? 'y' : 'ies'}; npx now runs` }
         : { id: 'npx', label: 'ccstatusline runs via npx', status: 'fail', detail: `purged cache but still failing — ${INSTALL_HINT}. ${truncate(run.error)}` });
+    }
+  }
+
+  // 6. Deployed reader matches the running package version (auto-resync if stale).
+  // Skipped when reader files are missing — check 1 already covers that case.
+  if (missingReader.length === 0) {
+    try {
+      const pkgVer = getPackageVersion();
+      const deployedVer = getDeployedVersion(paths.readerDir);
+      if (deployedVer === pkgVer) {
+        checks.push({ id: 'version', label: 'Reader up to date', status: 'ok', detail: `v${pkgVer}` });
+      } else {
+        syncDeploy(paths.readerDir, pkgVer);
+        checks.push({ id: 'version', label: 'Reader up to date', status: 'repaired', detail: `re-synced ${deployedVer ? 'v' + deployedVer : 'unstamped'} → v${pkgVer}` });
+      }
+    } catch (err) {
+      checks.push({ id: 'version', label: 'Reader up to date', status: 'fail', detail: `version check failed — ${truncate(String(err && err.message || err))}` });
     }
   }
 

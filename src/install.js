@@ -3,6 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { getStatusLineConfig, getWidgetDefinitions, getHookConfig } from './defaults.js';
+import { getPackageVersion, VERSION_STAMP } from './deploy.js';
 import { createDefaultConfig } from './tui/widget-registry.js';
 import { G, R, D, B, _, logSuccess, logSkipped, logError, logSection, readJsonFile, backupFile, writeJsonSafe } from './cli-utils.js';
 
@@ -136,6 +137,10 @@ function installTarget3(paths) {
     fs.copyFileSync(readerSource, paths.readerDest);
     fs.copyFileSync(workflowColorsSource, path.join(paths.readerDir, 'workflow-colors.cjs'));
     fs.copyFileSync(sharedConstantsSource, path.join(paths.readerDir, 'shared-constants.cjs'));
+    // Stamp the deploy dir with the package version so `npx bmad-statusline` can
+    // later detect a stale deployment and auto-resync (see src/deploy.js).
+    const ver = getPackageVersion();
+    if (ver) fs.writeFileSync(path.join(paths.readerDir, VERSION_STAMP), ver + '\n');
     logSuccess(target, existed ? 'updated' : 'installed');
   } catch (err) {
     logError(target, err.message);
