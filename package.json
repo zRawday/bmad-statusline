@@ -1,6 +1,6 @@
 {
   "name": "bmad-statusline",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "description": "BMAD workflow status line integration for ccstatusline",
   "type": "module",
   "bin": {
