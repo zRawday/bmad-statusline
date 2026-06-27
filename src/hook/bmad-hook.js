@@ -27,6 +27,17 @@ function isSafeId(id) { return typeof id === 'string' && /^[a-zA-Z0-9_-]+$/.test
 const MAX_HISTORY = 500;
 function trimHistory(arr) { if (arr.length > MAX_HISTORY) arr.splice(0, arr.length - MAX_HISTORY); }
 
+// Synchronous backoff for transient FS contention (the hook is sync-only by design).
+function sleepSync(ms) {
+  try { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms); } catch (_) {}
+}
+
+// Set when readStatus finds an EXISTING status file it cannot read this process
+// (caught mid-write torn JSON, or locked by a concurrent rename on Windows). Guards
+// writeStatus from clobbering the last-good file with default (null) values. Safe as
+// module state: each hook invocation handles exactly one event, then exits.
+let _statusReadUnsafe = false;
+
 function shouldUpdateStory(incomingPriority, currentPriority) {
   if (incomingPriority === STORY_PRIORITY.SPRINT_STATUS) return true;
   if (incomingPriority === STORY_PRIORITY.STORY_FILE && (!currentPriority || currentPriority === STORY_PRIORITY.CANDIDATE)) return true;
@@ -853,67 +864,96 @@ function canAppendHistory(sid) {
 }
 
 // ─── Status helpers ───────────────────────────────────────────────────────────
-function readStatus(sid) {
-  if (!isSafeId(sid)) return {
-    session_id: null, project: null, skill: null, workflow: null,
-    active_skill: null, story: null, story_priority: null,
+function defaultStatus(sid) {
+  return {
+    session_id: sid ?? null,
+    project: null,
+    skill: null,
+    workflow: null,
+    active_skill: null,
+    story: null,
+    story_priority: null,
     step: { current: null, current_name: null, next: null, next_name: null, total: null, track: null },
-    last_read: null, last_write: null, last_write_op: null, document_name: null,
-    started_at: null, updated_at: null,
-    llm_state: null, llm_state_since: null,
-    subagent_type: null, error_type: null,
-    reads: [], writes: [], commands: []
+    last_read: null,
+    last_write: null,
+    last_write_op: null,
+    document_name: null,
+    started_at: null,
+    updated_at: null,
+    llm_state: null,
+    llm_state_since: null,
+    subagent_type: null,
+    error_type: null,
+    reads: [],
+    writes: [],
+    commands: []
   };
-  try {
-    const fp = path.join(CACHE_DIR, 'status-' + sid + '.json');
-    const raw = fs.readFileSync(fp, 'utf8');
-    const status = JSON.parse(raw);
-    status.subagent_type = status.subagent_type ?? null;
-    status.error_type = status.error_type ?? null;
-    return status;
-  } catch (e) {
-    return {
-      session_id: sid,
-      project: null,
-      skill: null,
-      workflow: null,
-      active_skill: null,
-      story: null,
-      story_priority: null,
-      step: {
-        current: null,
-        current_name: null,
-        next: null,
-        next_name: null,
-        total: null,
-        track: null
-      },
-      last_read: null,
-      last_write: null,
-      last_write_op: null,
-      document_name: null,
-      started_at: null,
-      updated_at: null,
-      llm_state: null,
-      llm_state_since: null,
-      subagent_type: null,
-      error_type: null,
-      reads: [],
-      writes: [],
-      commands: []
-    };
+}
+
+function readStatus(sid) {
+  _statusReadUnsafe = false; // reset per read — only the latest read gates the next write
+  if (!isSafeId(sid)) return defaultStatus(null);
+  const fp = path.join(CACHE_DIR, 'status-' + sid + '.json');
+  let sawError = false;
+  let sawParseError = false;
+  for (let attempt = 0; attempt < 5; attempt++) {
+    try {
+      const raw = fs.readFileSync(fp, 'utf8');
+      const status = JSON.parse(raw);
+      status.subagent_type = status.subagent_type ?? null;
+      status.error_type = status.error_type ?? null;
+      return status;
+    } catch (e) {
+      // Genuinely no file on the first look → brand-new session, defaults are correct.
+      if (e && e.code === 'ENOENT' && !sawError) return defaultStatus(sid);
+      sawError = true;
+      // A completed read that won't parse = corrupt content (only possible from a
+      // legacy pre-fix torn write, since writes are now atomic). A read that throws =
+      // the file is locked mid-rename (EBUSY/EACCES/EPERM on Windows) — transient.
+      if (e instanceof SyntaxError) sawParseError = true;
+      if (attempt < 4) sleepSync(8 * (attempt + 1)); // no wasted sleep after the last try
+    }
+  }
+  // Unreadable after retries. Preserve the last-good file ONLY when it is locked
+  // (transient) — persisting defaults would clobber a live session. A persistently
+  // corrupt file must instead be allowed through so writeStatus can REPAIR it, else the
+  // status line stays blank forever for anyone carrying a torn file from the old bug.
+  if (!sawParseError) _statusReadUnsafe = true;
+  return defaultStatus(sid);
+}
+
+// Windows can fail rename when the destination is briefly open by a concurrent reader
+// (the statusline) — EPERM/EACCES/EBUSY. Retry a few times before giving up.
+function renameWithRetry(tmp, fp) {
+  for (let attempt = 0; attempt < 5; attempt++) {
+    try { fs.renameSync(tmp, fp); return; }
+    catch (e) {
+      if (attempt === 4) throw e;
+      sleepSync(8 * (attempt + 1));
+    }
   }
 }
 
 function writeStatus(sid, status) {
   if (!isSafeId(sid)) return;
+  // Preserve the last-good file: if the current state could not be safely read this
+  // process, writing would clobber a real session with default (null) values.
+  if (_statusReadUnsafe) return;
   try {
     fs.mkdirSync(CACHE_DIR, { recursive: true });
     status.updated_at = new Date().toISOString();
     const fp = path.join(CACHE_DIR, 'status-' + sid + '.json');
-    const tmpPath = fp + '.tmp';
-    fs.writeFileSync(tmpPath, JSON.stringify(status, null, 2) + '\n');
-    fs.renameSync(tmpPath, fp);
+    // Per-process temp: concurrent hooks (many parallel subagents) must not share one
+    // temp or they tear each other's write. Each writer owns a private temp; only the
+    // rename is shared, and rename is atomic. (Mirrors the weekly-usage.json fix.)
+    const tmpPath = fp + '.' + process.pid + '.tmp';
+    try {
+      fs.writeFileSync(tmpPath, JSON.stringify(status, null, 2) + '\n');
+      renameWithRetry(tmpPath, fp);
+    } catch (e) {
+      try { fs.unlinkSync(tmpPath); } catch (_) {} // don't leak our temp on failure
+      throw e;
+    }
   } catch (e) {
     // Silent — never interfere with Claude Code
   }

@@ -90,14 +90,26 @@ function readStdin() {
 
 // isValidSessionId imported from shared-constants.cjs
 
+// Synchronous backoff for transient FS contention (only hit on the error path).
+function sleepSync(ms) {
+  try { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms); } catch (_) {}
+}
+
 function readStatusFile(sessionId) {
-  try {
-    if (!isValidSessionId(sessionId)) return null;
-    const filePath = path.join(CACHE_DIR, `status-${sessionId}.json`);
-    return JSON.parse(fs.readFileSync(filePath, 'utf8'));
-  } catch {
-    return null;
+  if (!isValidSessionId(sessionId)) return null;
+  const filePath = path.join(CACHE_DIR, `status-${sessionId}.json`);
+  // Retry transient failures so a render that lands mid-rename (Windows lock) or on a
+  // torn write doesn't blank the whole status line. ENOENT = no session → blank is right.
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      return JSON.parse(fs.readFileSync(filePath, 'utf8'));
+    } catch (e) {
+      if (e && e.code === 'ENOENT') return null;
+      if (attempt === 2) return null; // give up — never stall the render
+      sleepSync(5 * (attempt + 1));
+    }
   }
+  return null;
 }
 
 // --- PID detection (mirrors hook's findClaudeAncestorPid) ---
@@ -162,6 +174,14 @@ function purgeStale() {
     const entries = fs.readdirSync(CACHE_DIR);
     const now = Date.now();
     for (const entry of entries) {
+      // Reap abandoned write temps: a hook/reader killed mid-write can't clean up its
+      // own per-PID temp (status-<sid>.json.<pid>.tmp / weekly-usage.json.<pid>.tmp).
+      // A write completes in ms, so any .tmp older than 60s is orphaned.
+      if (entry.endsWith('.tmp')) {
+        const tp = path.join(CACHE_DIR, entry);
+        try { if (now - fs.statSync(tp).mtimeMs > 60 * 1000) fs.unlinkSync(tp); } catch {}
+        continue;
+      }
       if (!entry.startsWith('.alive-')) continue;
       const filePath = path.join(CACHE_DIR, entry);
       let stat;
