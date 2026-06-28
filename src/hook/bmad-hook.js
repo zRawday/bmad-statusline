@@ -16,6 +16,11 @@ const STORY_PRIORITY = { SPRINT_STATUS: 1, STORY_FILE: 2, CANDIDATE: 3 };
 const STORY_FILE_REGEX = /\/(\d+[a-z]?-\d+[a-z]?-[a-zA-Z][\w-]*)\.md$/;
 const SKILL_REGEX = /^\s*\/?((?:bmad|gds|wds)-[\w-]+)/;
 const LEGACY_COMMAND_REGEX = /^\s*\/?(bmad(?::[\w-]+)+)/;
+// Story id typed in a prompt (after stripping any leading skill command). Group 1
+// captures an optional leading "story" keyword (an explicit signal); group 2 is the
+// epic-story id ("2-4", bis "1-1a", or full slug "2-4-export-csv"). Numbers capped at
+// 1–3 digits so 4-digit years ("2024-01") don't match (2-digit pairs stay ambiguous).
+const PROMPT_STORY_REGEX = /^[\s:]*(story\s+)?(\d{1,3}[a-z]?-\d{1,3}[a-z]?(?:-[a-zA-Z][\w-]*)?)\b/i;
 const STEP_REGEX = /\/steps(-[a-z])?\/step-(?:[a-z]-)?(\d+)[a-z]?-(.+)\.md$/;
 
 function normalize(p) {
@@ -233,16 +238,14 @@ function handleUserPrompt() {
   if (prompt) {
     let skillName, workflowName;
     const match = prompt.match(SKILL_REGEX);
+    const legacyMatch = match ? null : prompt.match(LEGACY_COMMAND_REGEX);
     if (match) {
       skillName = match[1];
       workflowName = skillName.slice(skillName.indexOf('-') + 1);
-    } else {
-      const legacyMatch = prompt.match(LEGACY_COMMAND_REGEX);
-      if (legacyMatch) {
-        skillName = legacyMatch[1];
-        const parts = skillName.split(':');
-        workflowName = parts[parts.length - 1];
-      }
+    } else if (legacyMatch) {
+      skillName = legacyMatch[1];
+      const parts = skillName.split(':');
+      workflowName = parts[parts.length - 1];
     }
 
     if (skillName) {
@@ -263,6 +266,26 @@ function handleUserPrompt() {
       }
       status.skill = skillName;
       status.workflow = workflowName;
+    }
+
+    // Prompt-based story detection (create-story / dev-story / code-review):
+    // "/bmad-dev-story 2-4 ..." in this prompt, or a follow-up "2-4 ..." /
+    // "story 2-4 ..." once the workflow is already active. Explicit signals (a skill
+    // command bearing the id, or the "story" keyword) LOCK at STORY_FILE priority; a
+    // bare follow-up id is only a CANDIDATE, so a later real story-file Read can correct
+    // or enrich it (e.g. a prose "5-6 errors" false positive is recoverable).
+    if (STORY_WORKFLOWS.includes(status.workflow)) {
+      const cmd = match || legacyMatch;
+      const rest = cmd ? prompt.slice(cmd[0].length) : prompt;
+      const sm = rest.match(PROMPT_STORY_REGEX);
+      if (sm) {
+        const explicit = !!cmd || !!sm[1];
+        const priority = explicit ? STORY_PRIORITY.STORY_FILE : STORY_PRIORITY.CANDIDATE;
+        if (shouldUpdateStory(priority, status.story_priority)) {
+          status.story = sm[2];
+          status.story_priority = priority;
+        }
+      }
     }
   }
 

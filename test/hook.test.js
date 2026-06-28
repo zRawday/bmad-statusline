@@ -306,6 +306,189 @@ describe('hook — 8-signal passive detection', () => {
     assert.equal(status.workflow, null, 'workflow should remain null');
   });
 
+  // ─── Prompt-based story detection (create-story / dev-story / code-review) ───
+
+  it('prompt-story: command + id in same prompt → story locked prio 2', () => {
+    execHook(makeUserPromptPayload('ps1', '/bmad-dev-story 2-4 do it'));
+    const status = readStatusFile('ps1');
+    assert.equal(status.workflow, 'dev-story');
+    assert.equal(status.story, '2-4');
+    assert.equal(status.story_priority, 2);
+  });
+
+  it('prompt-story: create-story command + id', () => {
+    execHook(makeUserPromptPayload('ps2', '/bmad-create-story 1-3'));
+    const status = readStatusFile('ps2');
+    assert.equal(status.story, '1-3');
+    assert.equal(status.story_priority, 2);
+  });
+
+  it('prompt-story: code-review (gds prefix) command + id', () => {
+    execHook(makeUserPromptPayload('ps3', '/gds-code-review 5-2 review'));
+    const status = readStatusFile('ps3');
+    assert.equal(status.workflow, 'code-review');
+    assert.equal(status.story, '5-2');
+    assert.equal(status.story_priority, 2);
+  });
+
+  it('prompt-story: follow-up bare id is a CANDIDATE (prio 3), not a lock', () => {
+    seedStatus('ps4', {
+      session_id: 'ps4',
+      skill: 'bmad-dev-story',
+      workflow: 'dev-story',
+      story: null,
+      story_priority: null,
+      step: { total: null }
+    });
+    execHook(makeUserPromptPayload('ps4', '2-4 implement'));
+    const status = readStatusFile('ps4');
+    assert.equal(status.story, '2-4');
+    assert.equal(status.story_priority, 3, 'bare follow-up id is correctable, so CANDIDATE');
+  });
+
+  it('prompt-story: follow-up with "story" keyword', () => {
+    seedStatus('ps5', {
+      session_id: 'ps5',
+      skill: 'bmad-dev-story',
+      workflow: 'dev-story',
+      story: null,
+      story_priority: null,
+      step: { total: null }
+    });
+    execHook(makeUserPromptPayload('ps5', 'story 2-4 please'));
+    const status = readStatusFile('ps5');
+    assert.equal(status.story, '2-4');
+    assert.equal(status.story_priority, 2);
+  });
+
+  it('prompt-story: full slug captured verbatim', () => {
+    execHook(makeUserPromptPayload('ps6', '/bmad-dev-story 2-4-export-csv'));
+    const status = readStatusFile('ps6');
+    assert.equal(status.story, '2-4-export-csv');
+    assert.equal(status.story_priority, 2);
+  });
+
+  it('prompt-story: bis-story suffix (1-1a)', () => {
+    execHook(makeUserPromptPayload('ps7', '/bmad-dev-story 1-1a'));
+    const status = readStatusFile('ps7');
+    assert.equal(status.story, '1-1a');
+    assert.equal(status.story_priority, 2);
+  });
+
+  it('prompt-story: command with no id leaves story null', () => {
+    execHook(makeUserPromptPayload('ps8', '/bmad-dev-story'));
+    const status = readStatusFile('ps8');
+    assert.equal(status.workflow, 'dev-story');
+    assert.equal(status.story, null);
+    assert.equal(status.story_priority, null);
+  });
+
+  it('prompt-story: already-locked story is not overridden by a prompt', () => {
+    seedStatus('ps9', {
+      session_id: 'ps9',
+      skill: 'bmad-dev-story',
+      workflow: 'dev-story',
+      story: '3-1',
+      story_priority: 2,
+      step: { total: null }
+    });
+    execHook(makeUserPromptPayload('ps9', '2-4 switch'));
+    const status = readStatusFile('ps9');
+    assert.equal(status.story, '3-1', 'lock honored');
+    assert.equal(status.story_priority, 2);
+  });
+
+  it('prompt-story: non-story workflow does not set story', () => {
+    execHook(makeUserPromptPayload('ps10', '/bmad-create-architecture 2-4'));
+    const status = readStatusFile('ps10');
+    assert.equal(status.workflow, 'create-architecture');
+    assert.equal(status.story, null);
+  });
+
+  it('prompt-story: bare id with no active story workflow is ignored', () => {
+    execHook(makeUserPromptPayload('ps11', '2-4 hi'));
+    const status = readStatusFile('ps11');
+    assert.equal(status.workflow, null);
+    assert.equal(status.story, null);
+  });
+
+  it('prompt-story: date-like start (>3 digits) does not match', () => {
+    seedStatus('ps12', {
+      session_id: 'ps12',
+      skill: 'bmad-dev-story',
+      workflow: 'dev-story',
+      story: null,
+      story_priority: null,
+      step: { total: null }
+    });
+    execHook(makeUserPromptPayload('ps12', '2024-01 deadline'));
+    const status = readStatusFile('ps12');
+    assert.equal(status.story, null);
+  });
+
+  it('prompt-story: mid-sentence id is not detected', () => {
+    seedStatus('ps13', {
+      session_id: 'ps13',
+      skill: 'bmad-dev-story',
+      workflow: 'dev-story',
+      story: null,
+      story_priority: null,
+      step: { total: null }
+    });
+    execHook(makeUserPromptPayload('ps13', 'fix the 2-4 thing'));
+    const status = readStatusFile('ps13');
+    assert.equal(status.story, null);
+  });
+
+  it('prompt-story: prose false-positive candidate is corrected by real story-file Read', () => {
+    seedStatus('ps14', {
+      session_id: 'ps14',
+      skill: 'bmad-dev-story',
+      workflow: 'dev-story',
+      story: null,
+      story_priority: null,
+      step: { total: null }
+    });
+    execHook(makeUserPromptPayload('ps14', '5-6 errors in the build'));
+    let status = readStatusFile('ps14');
+    assert.equal(status.story, '5-6');
+    assert.equal(status.story_priority, 3, 'prose match is only a candidate');
+    const storyPath = path.join(tmpDir, '_bmad-output', 'implementation-artifacts', 'stories', '7-7-real-story.md').replace(/\\/g, '/');
+    execHook(makeReadPayload('ps14', storyPath));
+    status = readStatusFile('ps14');
+    assert.equal(status.story, '7-7-real-story', 'real file read corrects the false positive');
+    assert.equal(status.story_priority, 2);
+  });
+
+  it('prompt-story: bare follow-up candidate is enriched to full slug by its file Read', () => {
+    seedStatus('ps15', {
+      session_id: 'ps15',
+      skill: 'bmad-dev-story',
+      workflow: 'dev-story',
+      story: null,
+      story_priority: null,
+      step: { total: null }
+    });
+    execHook(makeUserPromptPayload('ps15', '2-4 implement'));
+    const storyPath = path.join(tmpDir, '_bmad-output', 'implementation-artifacts', 'stories', '2-4-export-csv.md').replace(/\\/g, '/');
+    execHook(makeReadPayload('ps15', storyPath));
+    const status = readStatusFile('ps15');
+    assert.equal(status.story, '2-4-export-csv', 'candidate enriched to full slug');
+    assert.equal(status.story_priority, 2);
+  });
+
+  it('prompt-story: explicit command lock is NOT enriched by a later file Read', () => {
+    execHook(makeUserPromptPayload('ps16', '/bmad-dev-story 2-4'));
+    let status = readStatusFile('ps16');
+    assert.equal(status.story, '2-4');
+    assert.equal(status.story_priority, 2);
+    const storyPath = path.join(tmpDir, '_bmad-output', 'implementation-artifacts', 'stories', '2-4-export-csv.md').replace(/\\/g, '/');
+    execHook(makeReadPayload('ps16', storyPath));
+    status = readStatusFile('ps16');
+    assert.equal(status.story, '2-4', 'explicit lock holds — bare id kept');
+    assert.equal(status.story_priority, 2);
+  });
+
   // ─── AC #7: cwd scoping (outside) ───────────────────────────────────────────
 
   it('AC #7: Read outside cwd is ignored', () => {
