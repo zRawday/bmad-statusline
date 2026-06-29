@@ -937,28 +937,50 @@ describe('weekly-usage reader', () => {
   it('(a) extractor renders GOOD/green zone', () => {
     assert.equal(
       reader.COMMANDS.weeklyusage({}, {}, stdinWithUsage(30)),
-      `${ESC}32mWeekly usage : GOOD${RESET}`
+      `${ESC}32mWeekly: GOOD${RESET}`
     );
   });
 
   it('(a) extractor renders SWEET SPOT/blue zone', () => {
     assert.equal(
       reader.COMMANDS.weeklyusage({}, {}, stdinWithUsage(47)),
-      `${ESC}34mWeekly usage : SWEET SPOT${RESET}`
+      `${ESC}34mWeekly: SWEET SPOT${RESET}`
     );
   });
 
   it('(a) extractor renders TOO HIGH/yellow zone', () => {
     assert.equal(
       reader.COMMANDS.weeklyusage({}, {}, stdinWithUsage(55)),
-      `${ESC}33mWeekly usage : TOO HIGH${RESET}`
+      `${ESC}33mWeekly: TOO HIGH${RESET}`
     );
   });
 
   it('(a) extractor renders SLOW DOWN/red zone', () => {
     assert.equal(
       reader.COMMANDS.weeklyusage({}, {}, stdinWithUsage(65)),
-      `${ESC}31mWeekly usage : SLOW DOWN${RESET}`
+      `${ESC}31mWeekly: SLOW DOWN${RESET}`
+    );
+  });
+
+  it('(a) extended displayMode prepends the usage percentage (1 decimal)', () => {
+    assert.equal(
+      reader.COMMANDS.weeklyusage(
+        {},
+        { colorModes: { 'bmad-weeklyusage': { mode: 'dynamic', displayMode: 'extended' } } },
+        stdinWithUsage(55)
+      ),
+      `${ESC}33mWeekly: 55.0% TOO HIGH${RESET}`
+    );
+  });
+
+  it('(a) compact displayMode renders no percentage (default behavior)', () => {
+    assert.equal(
+      reader.COMMANDS.weeklyusage(
+        {},
+        { colorModes: { 'bmad-weeklyusage': { mode: 'dynamic', displayMode: 'compact' } } },
+        stdinWithUsage(55)
+      ),
+      `${ESC}33mWeekly: TOO HIGH${RESET}`
     );
   });
 
@@ -1075,7 +1097,7 @@ describe('weekly-usage reader', () => {
     );
     assert.ok(out.includes(`${ESC}34m`), 'emits the blue (sweet) zone color from the extractor');
     assert.ok(!out.includes(`${ESC}35m`), 'does NOT emit the magenta fixed color (excluded from generic wrap)');
-    assert.ok(out.includes('Weekly usage : SWEET SPOT'), 'renders the sweet zone status word');
+    assert.ok(out.includes('Weekly: SWEET SPOT'), 'renders the sweet zone status word');
     fs.rmSync(configDir, { recursive: true, force: true });
   });
 });

@@ -155,17 +155,23 @@ export function EditLineScreen({ config, updateConfig, previewOverride, setPrevi
       setGrabMode(true);
     } else if (input === 'm') {
       const widget = widgetList[cursorIndex];
-      if (!widget || (widget.id !== 'bmad-story' && widget.id !== 'bmad-contextpct')) return;
+      if (!widget || (widget.id !== 'bmad-story' && widget.id !== 'bmad-contextpct' && widget.id !== 'bmad-weeklyusage')) return;
       if (!line.widgets.includes(widget.id)) return;
       updateConfig(cfg => {
         const ln = cfg.lines[editingLine];
         if (!ln.colorModes[widget.id]) {
           ln.colorModes[widget.id] = widget.id === 'bmad-contextpct'
             ? { mode: 'dynamic', thresholdLow: 0, thresholdHigh: 100, displayMode: 'full' }
+            : widget.id === 'bmad-weeklyusage'
+            ? { mode: 'dynamic', displayMode: 'compact' }
             : { mode: 'fixed', fixedColor: 'magenta' };
         }
         const cm = ln.colorModes[widget.id];
-        cm.displayMode = cm.displayMode === 'compact' ? 'full' : 'compact';
+        if (widget.id === 'bmad-weeklyusage') {
+          cm.displayMode = cm.displayMode === 'extended' ? 'compact' : 'extended';
+        } else {
+          cm.displayMode = cm.displayMode === 'compact' ? 'full' : 'compact';
+        }
       });
     } else if (key.leftArrow || key.rightArrow) {
       const widget = widgetList[cursorIndex];
@@ -195,7 +201,7 @@ export function EditLineScreen({ config, updateConfig, previewOverride, setPrevi
     config,
     previewOverride,
     shortcuts: grabMode ? GRAB_SHORTCUTS
-      : (widgetList[cursorIndex]?.id === 'bmad-story' || widgetList[cursorIndex]?.id === 'bmad-contextpct')
+      : (widgetList[cursorIndex]?.id === 'bmad-story' || widgetList[cursorIndex]?.id === 'bmad-contextpct' || widgetList[cursorIndex]?.id === 'bmad-weeklyusage')
         ? [...BASE_NAVIGATE_SHORTCUTS.slice(0, 4), STORY_MODE_SHORTCUT, ...BASE_NAVIGATE_SHORTCUTS.slice(4)]
         : BASE_NAVIGATE_SHORTCUTS,
   },
@@ -219,8 +225,8 @@ export function EditLineScreen({ config, updateConfig, previewOverride, setPrevi
         }
 
         // Display mode hint for story widget — shown in name column
-        const storyMode = isVisible && (widget.id === 'bmad-story' || widget.id === 'bmad-contextpct')
-          ? (line.colorModes[widget.id]?.displayMode || 'full')
+        const storyMode = isVisible && (widget.id === 'bmad-story' || widget.id === 'bmad-contextpct' || widget.id === 'bmad-weeklyusage')
+          ? (line.colorModes[widget.id]?.displayMode || (widget.id === 'bmad-weeklyusage' ? 'compact' : 'full'))
           : null;
         const displayName = storyMode ? `${widget.name} (${storyMode})` : widget.name;
 

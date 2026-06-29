@@ -401,7 +401,10 @@ const COMMANDS = {
     if (!rl) return ''; // empty state → no widget output (matches contextpct precedent)
     const u = computeWeeklyUsage({ used_percentage: rl.used_percentage, resets_at: rl.resets_at }, Date.now());
     if (!u) return '';
-    return colorize('Weekly usage : ' + u.status, COLOR_CODES[u.color]);
+    const cm = lc && lc.colorModes && lc.colorModes['bmad-weeklyusage'];
+    const extended = cm && cm.displayMode === 'extended';
+    const text = 'Weekly: ' + (extended ? u.usagePct.toFixed(1) + '% ' : '') + u.status;
+    return colorize(text, COLOR_CODES[u.color]);
   },
   health:       (s) => {
     const updatedAt = s.updated_at;

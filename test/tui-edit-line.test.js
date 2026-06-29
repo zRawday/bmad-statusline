@@ -238,6 +238,37 @@ describe('EditLineScreen', () => {
     unmount();
   });
 
+  test('m key toggles displayMode on weeklyusage widget (compact↔extended)', async () => {
+    let updatedCfg = null;
+    const config = createDefaultConfig();
+    config.lines[0].widgets.push('bmad-weeklyusage'); // make visible so the toggle applies
+    const props = makeScreenProps({
+      config,
+      updateConfig: (mutator) => {
+        const cfg = structuredClone(config);
+        mutator(cfg);
+        updatedCfg = cfg;
+      },
+    });
+    const { stdin, unmount } = render(e(EditLineScreen, props));
+    const wuIdx = config.lines[0].widgetOrder.indexOf('bmad-weeklyusage');
+    for (let i = 0; i < wuIdx; i++) {
+      await act(async () => { stdin.write('\x1B[B'); });
+    }
+    await act(async () => { stdin.write('m'); });
+    assert.ok(updatedCfg, 'updateConfig was called');
+    assert.equal(updatedCfg.lines[0].colorModes['bmad-weeklyusage'].displayMode, 'extended', 'first toggle from compact (default) to extended');
+    unmount();
+  });
+
+  test('shows (compact) displayMode hint on visible weeklyusage widget', () => {
+    const config = createDefaultConfig();
+    config.lines[0].widgets.push('bmad-weeklyusage');
+    const { lastFrame, unmount } = render(e(EditLineScreen, makeScreenProps({ config })));
+    assert.ok(lastFrame().includes('Weekly Usage (compact)'), 'shows (compact) hint for weeklyusage');
+    unmount();
+  });
+
   test('Enter on contextpct navigates to contextPctConfig', async () => {
     let navigatedTo = null;
     const config = createDefaultConfig();

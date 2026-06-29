@@ -55,7 +55,7 @@ export function WeeklyUsageScreen({ config, previewOverride, goBack, isActive, p
     // AC4 — empty state: grey placeholder bar + waiting message, no zone color, no tick compute on null
     body = e(Box, { flexDirection: 'column' },
       e(Text, { dimColor: true }, USAGE_GUTTER + '░'.repeat(WIDTH)),
-      e(Text, { dimColor: true }, 'Weekly usage : --'),
+      e(Text, { dimColor: true }, 'Weekly: --'),
       e(Text, { dimColor: true }, 'Waiting for usage data (subscribers only; appears after the first API response).'),
     );
   } else {
@@ -93,8 +93,9 @@ export function WeeklyUsageScreen({ config, previewOverride, goBack, isActive, p
     }
     const labelRow = e(Text, { dimColor: true }, LABEL_GUTTER + labelBuf.join(''));
 
-    // AC2 — zone status line, wording identical to the widget ('Weekly usage : ' + status)
-    const statusLine = e(Text, { color: toInkColor(u.color) }, 'Weekly usage : ' + u.status);
+    // AC2 — zone status line, matches the widget's compact form ('Weekly: ' + status);
+    // the dashboard shows the % on its own usage-bar row above, so no extended variant here.
+    const statusLine = e(Text, { color: toInkColor(u.color) }, 'Weekly: ' + u.status);
 
     body = e(Box, { flexDirection: 'column' },
       usageRow,

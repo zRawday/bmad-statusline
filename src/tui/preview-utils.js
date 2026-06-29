@@ -17,7 +17,7 @@ export const SAMPLE_VALUES = {
   'bmad-fileread': 'read src/hook/bmad-hook.js',
   'bmad-filewrite': 'edit _bmad-output/prd.md',
   'bmad-contextpct': '\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2591\u2591\u2591\u2591\u2591\u2591\u2591 73.0%',
-  'bmad-weeklyusage': 'Weekly usage : SWEET SPOT',
+  'bmad-weeklyusage': 'Weekly: SWEET SPOT',
 };
 
 export const SEPARATOR_MAP = SEPARATOR_VALUES;
@@ -36,6 +36,9 @@ export function getSampleValue(widgetId, colorModes) {
   }
   if (widgetId === 'bmad-contextpct' && colorModes && colorModes[widgetId]?.displayMode === 'compact') {
     return 'Ctx: 73.0%';
+  }
+  if (widgetId === 'bmad-weeklyusage' && colorModes && colorModes[widgetId]?.displayMode === 'extended') {
+    return 'Weekly: 53.0% SWEET SPOT';
   }
   return SAMPLE_VALUES[widgetId];
 }

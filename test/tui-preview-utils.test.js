@@ -6,6 +6,7 @@ import {
   WORKFLOW_SAMPLE_COLOR,
   SEPARATOR_MAP,
   resolvePreviewColor,
+  getSampleValue,
 } from '../src/tui/preview-utils.js';
 
 describe('preview-utils', () => {
@@ -26,8 +27,25 @@ describe('preview-utils', () => {
       assert.equal(Object.keys(SAMPLE_VALUES).length, 13);
     });
 
-    test('bmad-weeklyusage sample is the SWEET SPOT zone text', () => {
-      assert.equal(SAMPLE_VALUES['bmad-weeklyusage'], 'Weekly usage : SWEET SPOT');
+    test('bmad-weeklyusage sample is the compact SWEET SPOT zone text', () => {
+      assert.equal(SAMPLE_VALUES['bmad-weeklyusage'], 'Weekly: SWEET SPOT');
+    });
+  });
+
+  describe('getSampleValue — bmad-weeklyusage displayMode', () => {
+    test('compact (or unset) returns the no-percentage sample', () => {
+      assert.equal(getSampleValue('bmad-weeklyusage', {}), 'Weekly: SWEET SPOT');
+      assert.equal(
+        getSampleValue('bmad-weeklyusage', { 'bmad-weeklyusage': { displayMode: 'compact' } }),
+        'Weekly: SWEET SPOT',
+      );
+    });
+
+    test('extended returns the sample with a percentage', () => {
+      assert.equal(
+        getSampleValue('bmad-weeklyusage', { 'bmad-weeklyusage': { displayMode: 'extended' } }),
+        'Weekly: 53.0% SWEET SPOT',
+      );
     });
   });
 

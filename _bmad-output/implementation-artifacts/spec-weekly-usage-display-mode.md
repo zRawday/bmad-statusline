@@ -2,7 +2,8 @@
 title: 'Weekly usage widget — compact/extended display mode + label rename'
 type: 'feature'
 created: '2026-06-29'
-status: 'ready-for-dev'
+status: 'done'
+baseline_commit: 'ddda5aa'
 context: ['_bmad-output/project-context.md']
 ---
 
@@ -57,14 +58,14 @@ context: ['_bmad-output/project-context.md']
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `src/reader/bmad-sl-reader.js` -- in the `weeklyusage` extractor read `lc?.colorModes?.['bmad-weeklyusage']?.displayMode`; build `text = 'Weekly: ' + (displayMode === 'extended' ? u.usagePct.toFixed(1) + '% ' : '') + u.status`; keep `return colorize(text, COLOR_CODES[u.color])`. -- core render change.
-- [ ] `src/tui/screens/EditLineScreen.js` -- add `bmad-weeklyusage` to the `m`-key handler (init `{ mode:'dynamic', displayMode:'compact' }` when colorMode absent; toggle `compact↔extended`), to the "Mode" shortcut condition (L198), and to the display-mode hint condition (L222) with a `'compact'` fallback for weeklyusage. -- exposes the toggle in the TUI.
-- [ ] `src/tui/preview-utils.js` -- set `SAMPLE_VALUES['bmad-weeklyusage'] = 'Weekly: SWEET SPOT'`; in `getSampleValue` return `'Weekly: 53.0% SWEET SPOT'` when weeklyusage `displayMode === 'extended'`. -- preview reflects both modes.
-- [ ] `src/tui/screens/WeeklyUsageScreen.js` -- change `'Weekly usage : ' + u.status` → `'Weekly: ' + u.status` (L97) and `'Weekly usage : --'` → `'Weekly: --'` (L58); update the L96 comment wording. -- dashboard label consistency.
-- [ ] `test/reader.test.js` -- update L939-961 + L1078 expectations to `Weekly: <STATUS>`; add a test that an `extended` colorMode yields `Weekly: 55.0% TOO HIGH`. -- lock both modes.
-- [ ] `test/tui-preview-utils.test.js` -- update L30 expected to `'Weekly: SWEET SPOT'`; add an extended `getSampleValue` assertion. -- lock preview samples.
-- [ ] `test/tui-weekly-usage.test.js` -- update L60/L74 regexes to `Weekly:`. -- lock dashboard label.
-- [ ] `test/tui-edit-line.test.js` -- add coverage: `m` on a visible weeklyusage toggles displayMode compact↔extended, and the name renders `(compact)`/`(extended)`. -- lock the toggle.
+- [x] `src/reader/bmad-sl-reader.js` -- in the `weeklyusage` extractor read `lc?.colorModes?.['bmad-weeklyusage']?.displayMode`; build `text = 'Weekly: ' + (displayMode === 'extended' ? u.usagePct.toFixed(1) + '% ' : '') + u.status`; keep `return colorize(text, COLOR_CODES[u.color])`. -- core render change.
+- [x] `src/tui/screens/EditLineScreen.js` -- add `bmad-weeklyusage` to the `m`-key handler (init `{ mode:'dynamic', displayMode:'compact' }` when colorMode absent; toggle `compact↔extended`), to the "Mode" shortcut condition (L198), and to the display-mode hint condition (L222) with a `'compact'` fallback for weeklyusage. -- exposes the toggle in the TUI.
+- [x] `src/tui/preview-utils.js` -- set `SAMPLE_VALUES['bmad-weeklyusage'] = 'Weekly: SWEET SPOT'`; in `getSampleValue` return `'Weekly: 53.0% SWEET SPOT'` when weeklyusage `displayMode === 'extended'`. -- preview reflects both modes.
+- [x] `src/tui/screens/WeeklyUsageScreen.js` -- change `'Weekly usage : ' + u.status` → `'Weekly: ' + u.status` (L97) and `'Weekly usage : --'` → `'Weekly: --'` (L58); update the L96 comment wording. -- dashboard label consistency.
+- [x] `test/reader.test.js` -- update L939-961 + L1078 expectations to `Weekly: <STATUS>`; add a test that an `extended` colorMode yields `Weekly: 55.0% TOO HIGH`. -- lock both modes.
+- [x] `test/tui-preview-utils.test.js` -- update L30 expected to `'Weekly: SWEET SPOT'`; add an extended `getSampleValue` assertion. -- lock preview samples.
+- [x] `test/tui-weekly-usage.test.js` -- update L60/L74 regexes to `Weekly:`. -- lock dashboard label.
+- [x] `test/tui-edit-line.test.js` -- add coverage: `m` on a visible weeklyusage toggles displayMode compact↔extended, and the name renders `(compact)`/`(extended)`. -- lock the toggle.
 
 **Acceptance Criteria:**
 - Given a line with `bmad-weeklyusage` and no `displayMode`, when the reader renders, then output is `Weekly: <STATUS>` (no percentage), self-colored by zone.
@@ -79,3 +80,40 @@ context: ['_bmad-output/project-context.md']
 **Commands:**
 - `npm test` -- expected: all test files pass (notably `reader`, `tui-weekly-usage`, `tui-preview-utils`, `tui-edit-line`, `tui-widget-registry`).
 - `node src/reader/bmad-sl-reader.js weeklyusage` with stdin `{"session_id":"x","rate_limits":{"seven_day":{"used_percentage":55,"resets_at":<future-sec>}}}` -- expected (default/compact): `Weekly: TOO HIGH`.
+
+## Suggested Review Order
+
+**Widget render — the core change**
+
+- Entry point: the reader extractor branches on `displayMode` (undefined/compact → no `%`, extended → `pct.toFixed(1)%`).
+  [`bmad-sl-reader.js:405`](../../src/reader/bmad-sl-reader.js#L405)
+
+**TUI configuration — how the user picks the mode**
+
+- `m`-key toggle cycles compact↔extended and seeds the colorMode when absent.
+  [`EditLineScreen.js:156`](../../src/tui/screens/EditLineScreen.js#L156)
+
+- Row hint shows `(compact)`/`(extended)`; undefined resolves to compact, matching the reader.
+  [`EditLineScreen.js:228`](../../src/tui/screens/EditLineScreen.js#L228)
+
+**Preview & dashboard — wording consistency across surfaces**
+
+- Preview sample gains the extended (`%`) variant; compact sample loses " usage ".
+  [`preview-utils.js:40`](../../src/tui/preview-utils.js#L40)
+
+- Dashboard status line adopts the compact wording (`%` stays on its own bar row).
+  [`WeeklyUsageScreen.js:98`](../../src/tui/screens/WeeklyUsageScreen.js#L98)
+
+**Tests — supporting**
+
+- Reader compact + extended output locked per zone.
+  [`reader.test.js:965`](../../test/reader.test.js#L965)
+
+- `m`-key toggle and `(compact)` hint coverage.
+  [`tui-edit-line.test.js:241`](../../test/tui-edit-line.test.js#L241)
+
+- `getSampleValue` compact/extended samples.
+  [`tui-preview-utils.test.js:35`](../../test/tui-preview-utils.test.js#L35)
+
+- Dashboard label regex updated.
+  [`tui-weekly-usage.test.js:60`](../../test/tui-weekly-usage.test.js#L60)

@@ -57,7 +57,7 @@ describe('WeeklyUsageScreen', () => {
     await act(async () => { app = render(e(WeeklyUsageScreen, makeProps({ paths: { cachePath: tmpDir } }))); });
     await flush();
     const frame = app.lastFrame();
-    assert.match(frame, /Weekly usage : SWEET SPOT/);
+    assert.match(frame, /Weekly: SWEET SPOT/);
     assert.ok(frame.includes('█'), 'has filled block glyphs (both bars)');
     assert.ok(frame.includes('47.0%'), 'percentage with one decimal, no space before %');
     assert.ok(WEEKDAY_LABELS.some(l => frame.includes(l)), 'has at least one day-tick label');
@@ -71,7 +71,7 @@ describe('WeeklyUsageScreen', () => {
     await flush();
     const frame = app.lastFrame();
     assert.match(frame, /Waiting for usage data/);
-    assert.match(frame, /Weekly usage : --/);
+    assert.match(frame, /Weekly: --/);
     assert.ok(frame.includes('░'), 'has grey placeholder glyph');
     app.unmount();
   });
