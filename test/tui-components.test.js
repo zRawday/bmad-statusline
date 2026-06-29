@@ -111,9 +111,9 @@ describe('ThreeLinePreview', () => {
 
   test('renders empty line as blank', () => {
     const config = createDefaultConfig();
-    // Lines 1 and 2 are empty by default
+    config.lines[1].widgets = []; // force a genuinely empty line (defaults now populate every line)
     const { lastFrame, unmount } = render(e(ThreeLinePreview, { config }));
-    // Should render without error — empty lines produce blank space inside frame
+    // Should render without error — an empty line produces blank space inside frame
     assert.ok(lastFrame().includes('Preview'));
     unmount();
   });

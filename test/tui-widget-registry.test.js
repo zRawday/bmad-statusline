@@ -122,11 +122,14 @@ describe('createDefaultConfig', () => {
     assert.deepStrictEqual(cm['bmad-timer'], { mode: 'fixed', fixedColor: 'brightBlack' });
   });
 
-  it('line 1 has llmstate, line 2 has contextpct by default', () => {
+  it('line 1 has llmstate + weeklyusage (extended), line 2 has contextpct by default', () => {
     const config = createDefaultConfig();
-    assert.deepStrictEqual(config.lines[1].widgets, ['bmad-llmstate']);
+    assert.deepStrictEqual(config.lines[1].widgets, ['bmad-llmstate', 'bmad-weeklyusage']);
     assert.deepStrictEqual(config.lines[2].widgets, ['bmad-contextpct']);
-    assert.deepStrictEqual(config.lines[1].colorModes, { 'bmad-llmstate': { mode: 'dynamic' } });
+    assert.deepStrictEqual(config.lines[1].colorModes, {
+      'bmad-llmstate': { mode: 'dynamic' },
+      'bmad-weeklyusage': { mode: 'dynamic', displayMode: 'extended' },
+    });
     assert.deepStrictEqual(config.lines[2].colorModes, {
       'bmad-contextpct': { mode: 'dynamic', thresholdLow: 0, thresholdHigh: 100, displayMode: 'compact' },
     });
@@ -166,10 +169,17 @@ describe('10.3 — bmad-weeklyusage registry + preview integration', () => {
     });
   });
 
-  it('AC2: bmad-weeklyusage is on no default line widgets but is in every widgetOrder', () => {
+  it('AC2: bmad-weeklyusage is a default widget on line 1 (middle) only, and is in every widgetOrder', () => {
     const config = createDefaultConfig();
+    assert.ok(config.lines[1].widgets.includes('bmad-weeklyusage'), 'default on line 1 (middle)');
+    assert.ok(!config.lines[0].widgets.includes('bmad-weeklyusage'), 'not on line 0');
+    assert.ok(!config.lines[2].widgets.includes('bmad-weeklyusage'), 'not on line 2');
+    assert.deepStrictEqual(
+      config.lines[1].colorModes['bmad-weeklyusage'],
+      { mode: 'dynamic', displayMode: 'extended' },
+      'extended display mode by default',
+    );
     for (const line of config.lines) {
-      assert.ok(!line.widgets.includes('bmad-weeklyusage'), 'must not be a default widget on any line');
       assert.ok(line.widgetOrder.includes('bmad-weeklyusage'), 'must be selectable via widgetOrder');
       assert.equal(line.widgetOrder.length, 13);
     }

@@ -15,9 +15,9 @@
       }
     },
     {
-      "widgets": ["bmad-llmstate"],
+      "widgets": ["bmad-llmstate", "bmad-weeklyusage"],
       "widgetOrder": ["bmad-llmstate", "bmad-project", "bmad-workflow", "bmad-activeskill", "bmad-story", "bmad-docname", "bmad-progressstep", "bmad-nextstep", "bmad-fileread", "bmad-filewrite", "bmad-contextpct", "bmad-timer", "bmad-weeklyusage"],
-      "colorModes": { "bmad-llmstate": { "mode": "dynamic" } }
+      "colorModes": { "bmad-llmstate": { "mode": "dynamic" }, "bmad-weeklyusage": { "mode": "dynamic", "displayMode": "extended" } }
     },
     {
       "widgets": ["bmad-contextpct"],

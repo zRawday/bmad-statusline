@@ -2,7 +2,8 @@
 title: 'Weekly usage: extended by default on line 1 (middle)'
 type: 'feature'
 created: '2026-06-29'
-status: 'ready-for-dev'
+status: 'done'
+baseline_commit: '33e3149'
 context: ['_bmad-output/project-context.md']
 ---
 
@@ -50,10 +51,10 @@ context: ['_bmad-output/project-context.md']
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `src/tui/widget-registry.js` -- in `createDefaultConfig`, set line 1 to `widgets: ['bmad-llmstate', 'bmad-weeklyusage']` and `colorModes: { 'bmad-llmstate': { mode: 'dynamic' }, 'bmad-weeklyusage': { mode: 'dynamic', displayMode: 'extended' } }`. Leave `defaultEnabled: false` and lines 0/2 untouched. -- the core default-layout change.
-- [ ] `test/tui-widget-registry.test.js` -- update the 'line 1 has llmstate, line 2 has contextpct' test to expect the new line-1 `widgets` + `colorModes`; update AC2 to assert weeklyusage is on line 1 ONLY (present in `lines[1].widgets`, absent from `lines[0]`/`lines[2]`, still in every `widgetOrder`). -- lock the new contract.
-- [ ] `_bmad-output/project-context.md` -- update the `createDefaultConfig` default-layout sentence and the weeklyusage row so "appears on no default line" → "default on line 1 (middle), extended mode". -- keep the living doc accurate. (Flagged — skip if user declines.)
-- [ ] Run `npm test` and reconcile any other default-config-dependent assertion that surfaces. -- safety net.
+- [x] `src/tui/widget-registry.js` -- in `createDefaultConfig`, set line 1 to `widgets: ['bmad-llmstate', 'bmad-weeklyusage']` and `colorModes: { 'bmad-llmstate': { mode: 'dynamic' }, 'bmad-weeklyusage': { mode: 'dynamic', displayMode: 'extended' } }`. Leave `defaultEnabled: false` and lines 0/2 untouched. -- the core default-layout change.
+- [x] `test/tui-widget-registry.test.js` -- update the 'line 1 has llmstate, line 2 has contextpct' test to expect the new line-1 `widgets` + `colorModes`; update AC2 to assert weeklyusage is on line 1 ONLY (present in `lines[1].widgets`, absent from `lines[0]`/`lines[2]`, still in every `widgetOrder`). -- lock the new contract.
+- [x] `_bmad-output/project-context.md` -- update the `createDefaultConfig` default-layout sentence and the weeklyusage row so "appears on no default line" → "default on line 1 (middle), extended mode". -- keep the living doc accurate. (Flagged — skip if user declines.)
+- [x] Run `npm test` and reconcile any other default-config-dependent assertion that surfaces. -- safety net.
 
 **Acceptance Criteria:**
 - Given a fresh `createDefaultConfig()`, when inspected, then `lines[1].widgets` equals `['bmad-llmstate','bmad-weeklyusage']` and `lines[1].colorModes['bmad-weeklyusage']` equals `{ mode:'dynamic', displayMode:'extended' }`.
@@ -68,3 +69,23 @@ context: ['_bmad-output/project-context.md']
 **Commands:**
 - `npm test` -- expected: all pass (notably `tui-widget-registry`).
 - `node -e "import('./src/tui/widget-registry.js').then(m=>console.log(JSON.stringify(m.createDefaultConfig().lines[1])))"` -- expected: line 1 lists `bmad-llmstate` then `bmad-weeklyusage` with `displayMode:'extended'`.
+
+## Suggested Review Order
+
+- Entry point: the one-line change — line 1 of the default config now carries `bmad-weeklyusage` in extended mode (llmstate first).
+  [`widget-registry.js:51`](../../src/tui/widget-registry.js#L51)
+
+- Golden default-layout assertion reconciled to the new line 1.
+  [`tui-widget-registry.test.js:125`](../../test/tui-widget-registry.test.js#L125)
+
+- AC2 flipped: weeklyusage is now a default widget on line 1 only (absent from lines 0/2).
+  [`tui-widget-registry.test.js:172`](../../test/tui-widget-registry.test.js#L172)
+
+- Golden fixture used by the first-install config-loader test, kept in sync.
+  [`internal-config-default.json:18`](../../test/fixtures/internal-config-default.json#L18)
+
+- Review-surfaced patch: the "empty line" preview test now forces a truly empty line (every default line is populated now).
+  [`tui-components.test.js:114`](../../test/tui-components.test.js#L114)
+
+- Living-doc accuracy: default-layout description + widget-table note updated.
+  [`project-context.md:661`](../project-context.md#L661)
