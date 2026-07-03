@@ -37,10 +37,14 @@ export function ContextPctConfigScreen({ config, updateConfig, previewOverride, 
           ln.colorModes['bmad-contextpct'] = { mode: 'dynamic', thresholdLow: 0, thresholdHigh: 100, displayMode: 'full' };
         }
         const c = ln.colorModes['bmad-contextpct'];
+        // The entry may pre-exist WITHOUT threshold fields (seeded by the 'h'
+        // show-toggle) — backfill per field or `thresholdHigh - 5` is NaN.
+        c.thresholdLow ??= 0;
+        c.thresholdHigh ??= 100;
         if (cursorIndex === 0) {
-          c.thresholdLow = Math.max(0, Math.min(c.thresholdHigh - 5, (c.thresholdLow || 0) + delta));
+          c.thresholdLow = Math.max(0, Math.min(c.thresholdHigh - 5, c.thresholdLow + delta));
         } else {
-          c.thresholdHigh = Math.max((c.thresholdLow || 0) + 5, Math.min(100, (c.thresholdHigh ?? 100) + delta));
+          c.thresholdHigh = Math.max(c.thresholdLow + 5, Math.min(100, c.thresholdHigh + delta));
         }
       });
     } else if (key.escape) {

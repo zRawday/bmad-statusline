@@ -3,25 +3,25 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { getStatusLineConfig, getWidgetDefinitions, getHookConfig } from './defaults.js';
-import { getPackageVersion, VERSION_STAMP } from './deploy.js';
+import { DEPLOY_FILES, getPackageVersion, VERSION_STAMP } from './deploy.js';
 import { createDefaultConfig } from './tui/widget-registry.js';
 import { G, R, D, B, _, logSuccess, logSkipped, logError, logSection, readJsonFile, backupFile, writeJsonSafe } from './cli-utils.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const readerSource = path.join(__dirname, 'reader', 'bmad-sl-reader.js');
-const workflowColorsSource = path.join(__dirname, 'reader', 'workflow-colors.cjs');
-const sharedConstantsSource = path.join(__dirname, 'reader', 'shared-constants.cjs');
-const hookSource = path.join(__dirname, 'hook', 'bmad-hook.js');
+const hookSource = DEPLOY_FILES.find(f => f.name === 'bmad-hook.js').src;
 
 const home = os.homedir();
+// Honor BMAD_CONFIG_DIR like every other entry point (cli, doctor, hook, reader, TUI)
+// — otherwise `BMAD_CONFIG_DIR=/x install` deploys where nothing will ever look.
+const configDir = process.env.BMAD_CONFIG_DIR || path.join(home, '.config', 'bmad-statusline');
 const defaultPaths = {
   claudeSettings: path.join(home, '.claude', 'settings.json'),
   claudeDir: path.join(home, '.claude'),
   ccstatuslineSettings: path.join(home, '.config', 'ccstatusline', 'settings.json'),
   ccstatuslineDir: path.join(home, '.config', 'ccstatusline'),
-  readerDest: path.join(home, '.config', 'bmad-statusline', 'bmad-sl-reader.js'),
-  readerDir: path.join(home, '.config', 'bmad-statusline'),
-  hookDest: path.join(home, '.config', 'bmad-statusline', 'bmad-hook.js'),
+  readerDest: path.join(configDir, 'bmad-sl-reader.js'),
+  readerDir: configDir,
+  hookDest: path.join(configDir, 'bmad-hook.js'),
   cacheDir: process.env.BMAD_CACHE_DIR || path.join(home, '.cache', 'bmad-status'),
 };
 
@@ -31,6 +31,9 @@ const defaultPaths = {
 
 function installTarget1(paths) {
   const target = '~/.claude/settings.json';
+  // Only restore a backup taken during THIS run: a stale .bak from a previous
+  // install would silently overwrite every edit made since.
+  let backedUp = false;
   try {
     fs.mkdirSync(paths.claudeDir, { recursive: true });
 
@@ -41,6 +44,7 @@ function installTarget1(paths) {
         return;
       }
       backupFile(paths.claudeSettings);
+      backedUp = true;
       config.statusLine = getStatusLineConfig();
       writeJsonSafe(paths.claudeSettings, config);
     } else {
@@ -50,8 +54,7 @@ function installTarget1(paths) {
     logSuccess(target, 'statusLine configured');
   } catch (err) {
     try {
-      const bakPath = paths.claudeSettings + '.bak';
-      if (fs.existsSync(bakPath)) fs.copyFileSync(bakPath, paths.claudeSettings);
+      if (backedUp) fs.copyFileSync(paths.claudeSettings + '.bak', paths.claudeSettings);
     } catch {}
     logError(target, err.message);
     return false;
@@ -60,6 +63,7 @@ function installTarget1(paths) {
 
 function installTarget2(paths) {
   const target = '~/.config/ccstatusline/settings.json';
+  let backedUp = false;
   try {
     fs.mkdirSync(paths.ccstatuslineDir, { recursive: true });
 
@@ -80,30 +84,28 @@ function installTarget2(paths) {
     const existingV2 = new Set(allWidgets.filter(w => w.id?.startsWith('bmad-line-')).map(w => w.id));
     const missing = desired.filter(w => !existingV2.has(w.id));
 
-    // All 3 bmad-line-* already present — skip
-    if (missing.length === 0) {
+    // v1 remnants (individual bmad-* widgets, NOT the v2 bmad-line-* composites)
+    // and orphaned sep-bmad-* separators are cleaned even when nothing is missing,
+    // otherwise a leftover v1 widget next to a complete v2 set survives forever.
+    const hasV1 = allWidgets.some(w => w.id?.startsWith('bmad-') && w.type === 'custom-command' && !w.id.startsWith('bmad-line-'));
+    const hasOrphanSeps = allWidgets.some(w => w.id?.startsWith('sep-bmad-'));
+    if (hasV1 || hasOrphanSeps) {
+      config.lines = config.lines.map(line =>
+        line.filter(w =>
+          !(w.id?.startsWith('bmad-') && !w.id.startsWith('bmad-line-')) &&
+          !w.id?.startsWith('sep-bmad-'))
+      );
+    }
+
+    // All 3 bmad-line-* already present and nothing to clean — skip
+    if (missing.length === 0 && !hasV1 && !hasOrphanSeps) {
       logSkipped(target, 'bmad-line-* already present');
       return;
     }
 
     if (fs.existsSync(paths.ccstatuslineSettings)) {
       backupFile(paths.ccstatuslineSettings);
-    }
-
-    // v1 detection: individual bmad-* widgets (not bmad-line-*) — remove before injecting v2
-    const hasV1 = allWidgets.some(w => w.id?.startsWith('bmad-') && w.type === 'custom-command' && !w.id.startsWith('bmad-line-'));
-    if (hasV1) {
-      config.lines = config.lines.map(line =>
-        line.filter(w => !w.id?.startsWith('bmad-') && !w.id?.startsWith('sep-bmad-'))
-      );
-    } else {
-      // Clean orphan sep-bmad-* separators even on fresh install (no v1 widgets)
-      const hasOrphanSeps = allWidgets.some(w => w.id?.startsWith('sep-bmad-'));
-      if (hasOrphanSeps) {
-        config.lines = config.lines.map(line =>
-          line.filter(w => !w.id?.startsWith('sep-bmad-'))
-        );
-      }
+      backedUp = true;
     }
 
     // Inject each bmad-line-N on the corresponding ccstatusline line
@@ -117,12 +119,13 @@ function installTarget2(paths) {
     logSuccess(target, hasV1
       ? 'upgraded v1 widgets to v2 composites'
       : existingV2.size > 0
-        ? `added missing ${missing.map(w => w.id).join(', ')}`
+        ? missing.length > 0
+          ? `added missing ${missing.map(w => w.id).join(', ')}`
+          : 'removed orphaned sep-bmad-* separators'
         : 'BMAD widgets injected');
   } catch (err) {
     try {
-      const bakPath = paths.ccstatuslineSettings + '.bak';
-      if (fs.existsSync(bakPath)) fs.copyFileSync(bakPath, paths.ccstatuslineSettings);
+      if (backedUp) fs.copyFileSync(paths.ccstatuslineSettings + '.bak', paths.ccstatuslineSettings);
     } catch {}
     logError(target, err.message);
     return false;
@@ -134,18 +137,29 @@ function installTarget3(paths) {
   try {
     fs.mkdirSync(paths.readerDir, { recursive: true });
     const existed = fs.existsSync(paths.readerDest);
-    fs.copyFileSync(readerSource, paths.readerDest);
-    fs.copyFileSync(workflowColorsSource, path.join(paths.readerDir, 'workflow-colors.cjs'));
-    fs.copyFileSync(sharedConstantsSource, path.join(paths.readerDir, 'shared-constants.cjs'));
-    // Stamp the deploy dir with the package version so `npx bmad-statusline` can
-    // later detect a stale deployment and auto-resync (see src/deploy.js).
-    const ver = getPackageVersion();
-    if (ver) fs.writeFileSync(path.join(paths.readerDir, VERSION_STAMP), ver + '\n');
+    // Driven by DEPLOY_FILES (single source of truth) so a file added there can
+    // never be silently missing from a fresh install. The hook stays in target 6;
+    // the version stamp is written last, after ALL copies succeeded (see install()).
+    for (const f of DEPLOY_FILES) {
+      if (f.name === 'bmad-hook.js') continue;
+      fs.copyFileSync(f.src, path.join(paths.readerDir, f.name));
+    }
     logSuccess(target, existed ? 'updated' : 'installed');
   } catch (err) {
     logError(target, err.message);
     return false;
   }
+}
+
+// Stamp the deploy dir with the package version so `npx bmad-statusline` can later
+// detect a stale deployment and auto-resync (see src/deploy.js). Runs only after
+// targets 3 AND 6 both succeeded: stamping over a failed hook copy would mark a
+// stale deployment as current, making the self-heal permanently blind to it.
+function stampDeployedVersion(paths) {
+  try {
+    const ver = getPackageVersion();
+    if (ver) fs.writeFileSync(path.join(paths.readerDir, VERSION_STAMP), ver + '\n');
+  } catch { /* unstamped → isDeployStale stays true → self-heal will retry */ }
 }
 
 function installTarget4(paths) {
@@ -165,6 +179,7 @@ function installTarget4(paths) {
 
 function installTarget5(paths) {
   const target = '~/.claude/settings.json hooks';
+  let backedUp = false;
   try {
     if (!fs.existsSync(paths.claudeSettings)) {
       logSkipped(target, 'settings.json not found');
@@ -226,12 +241,12 @@ function installTarget5(paths) {
     }
 
     backupFile(paths.claudeSettings);
+    backedUp = true;
     writeJsonSafe(paths.claudeSettings, config);
     logSuccess(target, 'hook config injected');
   } catch (err) {
     try {
-      const bakPath = paths.claudeSettings + '.bak';
-      if (fs.existsSync(bakPath)) fs.copyFileSync(bakPath, paths.claudeSettings);
+      if (backedUp) fs.copyFileSync(paths.claudeSettings + '.bak', paths.claudeSettings);
     } catch {}
     logError(target, err.message);
     return false;
@@ -256,8 +271,18 @@ function installTarget7(paths) {
   try {
     const configPath = path.join(paths.readerDir, 'config.json');
     if (fs.existsSync(configPath)) {
-      logSkipped(target, 'already exists');
-      return;
+      // doctor points corrupt-config users here — recreate instead of skipping,
+      // otherwise that repair path can never actually repair anything.
+      try {
+        JSON.parse(fs.readFileSync(configPath, 'utf8'));
+        logSkipped(target, 'already exists');
+        return;
+      } catch {
+        try { fs.copyFileSync(configPath, configPath + '.bak'); } catch {}
+        fs.writeFileSync(configPath, JSON.stringify(createDefaultConfig(), null, 2) + '\n');
+        logSuccess(target, 'recreated (was invalid — old file saved as config.json.bak)');
+        return;
+      }
     }
     fs.mkdirSync(paths.readerDir, { recursive: true });
     const config = createDefaultConfig();
@@ -286,6 +311,9 @@ export default function install(paths = defaultPaths) {
   const r5 = installTarget5(paths);
   const r6 = installTarget6(paths);
   const r7 = installTarget7(paths);
+
+  // Stamp only when every deploy copy (reader files AND hook) succeeded.
+  if (r3 !== false && r6 !== false) stampDeployedVersion(paths);
 
   console.log(`\n  ${D}${'─'.repeat(38)}${_}`);
   if ([r1, r2, r3, r4, r5, r6, r7].some(r => r === false)) {

@@ -2,7 +2,6 @@
 
 import React, { useState } from 'react';
 import { Box, Text, useApp, useInput } from 'ink';
-import { StatusMessage } from '@inkjs/ui';
 import { loadConfig } from './config-loader.js';
 import { writeInternalConfig, syncCcstatuslineIfNeeded, syncCcstatuslineFromScratch } from './config-writer.js';
 import { HomeScreen } from './screens/HomeScreen.js';
@@ -44,8 +43,6 @@ export function App({ paths }) {
   const [screen, setScreen] = useState('home');
   const [navStack, setNavStack] = useState([]);
   const [editingLine, setEditingLine] = useState(null);
-  const [selectedWidget, setSelectedWidget] = useState(null);
-  const [statusMessage, setStatusMessage] = useState(null);
 
   // Pattern 15 — updateConfig(mutator): structuredClone -> mutate -> debounced write -> sync -> return
   const writeTimerRef = React.useRef(null);
@@ -53,9 +50,16 @@ export function App({ paths }) {
     setConfig(prev => {
       const next = structuredClone(prev);
       mutator(next);
-      syncCcstatuslineIfNeeded(prev, next, paths);
+      const occupancyChanged = syncCcstatuslineIfNeeded(prev, next, paths);
       if (writeTimerRef.current) clearTimeout(writeTimerRef.current);
-      writeTimerRef.current = setTimeout(() => writeInternalConfig(next, paths), 300);
+      if (occupancyChanged) {
+        // ccstatusline settings were just rewritten — commit config.json in the
+        // same tick, or a signal-driven exit inside the 300ms debounce window
+        // persists the two files out of step.
+        writeInternalConfig(next, paths);
+      } else {
+        writeTimerRef.current = setTimeout(() => writeInternalConfig(next, paths), 300);
+      }
       return next;
     });
   }
@@ -75,7 +79,6 @@ export function App({ paths }) {
     setNavStack(prev => [...prev, screen]);
     setScreen(screenName);
     if (context.editingLine !== undefined) setEditingLine(context.editingLine);
-    if (context.selectedWidget !== undefined) setSelectedWidget(context.selectedWidget);
   }
 
   // goBack — always clears previewOverride (pattern 17)
@@ -87,11 +90,6 @@ export function App({ paths }) {
     }
   }
 
-  // Dismiss status message on any keypress
-  useInput(() => {
-    if (statusMessage) setStatusMessage(null);
-  }, { isActive: !!statusMessage });
-
   // Standard screen props (pattern 18)
   const screenProps = {
     config,
@@ -101,16 +99,8 @@ export function App({ paths }) {
     navigate,
     goBack,
     editingLine,
-    selectedWidget,
-    isActive: !statusMessage,
+    isActive: true,
   };
-
-  // Status message overlay
-  if (statusMessage) {
-    return e(Box, { flexDirection: 'column' },
-      e(StatusMessage, { variant: statusMessage.variant }, statusMessage.text),
-    );
-  }
 
   // Screen router
   if (screen === 'home') {
@@ -167,13 +157,13 @@ export function App({ paths }) {
       config,
       navigate,
       goBack,
-      isActive: !statusMessage,
+      isActive: true,
       paths: { cachePath, outputFolder: path.join(process.cwd(), '_bmad-output') },
     });
   }
 
   // Fallback for unknown screens
-  return e(FallbackScreen, { screen, goBack, isActive: !statusMessage });
+  return e(FallbackScreen, { screen, goBack, isActive: true });
 }
 
 let launchCcstatuslineAfterExit = false;
@@ -184,6 +174,9 @@ let launchCcstatuslineAfterExit = false;
 async function setupAnsiDebug() {
   if (!process.env.BMAD_DEBUG_ANSI) return null;
   const debugPath = path.join(process.cwd(), '_bmad-output', 'ansi-debug.log');
+  // The project may not have _bmad-output/ — without this, openSync throws and
+  // the silent unhandledRejection handler kills the TUI with no output at all.
+  fs.mkdirSync(path.dirname(debugPath), { recursive: true });
   const fd = fs.openSync(debugPath, 'w');
   const startMs = Date.now();
   let callIndex = 0;
@@ -205,10 +198,13 @@ async function setupAnsiDebug() {
     return [...slice].map(x => x.toString(16).padStart(2, '0')).join(' ');
   }
 
-  // Patch Ink's Output.write to log grid coordinates
+  // Patch Ink's Output.write to log grid coordinates. ink's exports map only
+  // exposes the root entry, so resolve the real file next to it instead of the
+  // subpath (which always throws ERR_PACKAGE_PATH_NOT_EXPORTED).
   let OutputClass;
   try {
-    const outputMod = await import('ink/build/output.js');
+    const inkEntry = import.meta.resolve('ink');
+    const outputMod = await import(new URL('./output.js', inkEntry));
     OutputClass = outputMod.default;
   } catch { /* fallback: skip grid logging */ }
   const origOutputWrite = OutputClass?.prototype?.write;

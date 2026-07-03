@@ -16,7 +16,12 @@ export function writeInternalConfig(config, paths = {}) {
   const configDir = path.dirname(configPath);
   try {
     fs.mkdirSync(configDir, { recursive: true });
-    fs.writeFileSync(configPath, JSON.stringify(config, null, 2) + '\n');
+    // Atomic temp+rename: writes often happen exactly at quit/exit time — a kill
+    // between truncate and write would leave torn JSON that the loader then
+    // silently replaces with defaults, destroying the user's configuration.
+    const tmp = configPath + '.tmp';
+    fs.writeFileSync(tmp, JSON.stringify(config, null, 2) + '\n');
+    fs.renameSync(tmp, configPath);
   } catch {
     // Write failure — config state preserved in React, retry on next interaction
   }
@@ -26,6 +31,8 @@ export function writeInternalConfig(config, paths = {}) {
  * Sync ccstatusline config only when line occupancy changes
  * (empty -> non-empty or non-empty -> empty).
  * Pattern 4 for ccstatusline writes (backup/validate).
+ * Returns true when a sync happened, so the caller can commit the internal
+ * config in lockstep instead of leaving it to a debounced write.
  */
 export function syncCcstatuslineIfNeeded(oldConfig, newConfig, paths = {}) {
   let needsSync = false;
@@ -34,9 +41,10 @@ export function syncCcstatuslineIfNeeded(oldConfig, newConfig, paths = {}) {
     const isEmpty = newConfig.lines[i].widgets.length === 0;
     if (wasEmpty !== isEmpty) { needsSync = true; break; }
   }
-  if (!needsSync) return;
+  if (!needsSync) return false;
 
   syncCcstatuslineFromScratch(newConfig, paths);
+  return true;
 }
 
 /**
@@ -104,12 +112,15 @@ function addBmadLineToCcLine(ccConfig, lineIndex, readerPath) {
  * read -> parse -> backup(.bak) -> modify -> stringify(null, 2) -> write -> reread -> parse(validate)
  */
 function writeCcstatuslineConfig(ccConfig, ccConfigPath) {
+  // Only restore a backup written during THIS call: a stale .bak from a previous
+  // sync would silently revert changes the user made through ccstatusline since.
+  let backedUp = false;
+  const backupPath = path.join(path.dirname(ccConfigPath), path.basename(ccConfigPath) + '.bak');
   try {
-    const backupPath = path.join(path.dirname(ccConfigPath), path.basename(ccConfigPath) + '.bak');
-
     // Backup current file
     const currentRaw = fs.readFileSync(ccConfigPath, 'utf8');
     fs.writeFileSync(backupPath, currentRaw, 'utf8');
+    backedUp = true;
 
     // Write new config
     const newRaw = JSON.stringify(ccConfig, null, 2) + '\n';
@@ -119,10 +130,9 @@ function writeCcstatuslineConfig(ccConfig, ccConfigPath) {
     const verifyRaw = fs.readFileSync(ccConfigPath, 'utf8');
     JSON.parse(verifyRaw);
   } catch {
-    // Best effort restore from backup
+    // Best effort restore from the backup taken above
     try {
-      const backupPath = path.join(path.dirname(ccConfigPath), path.basename(ccConfigPath) + '.bak');
-      if (fs.existsSync(backupPath)) {
+      if (backedUp) {
         const backup = fs.readFileSync(backupPath, 'utf8');
         fs.writeFileSync(ccConfigPath, backup, 'utf8');
       }

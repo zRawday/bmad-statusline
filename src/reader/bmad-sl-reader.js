@@ -67,10 +67,11 @@ function getWorkflowColor(workflow, skillColors) {
     const custom = skillColors[normalized] || skillColors[workflow];
     if (custom && COLOR_CODES[custom]) return COLOR_CODES[custom];
   }
+  // Built-in maps are keyed by the stripped form only (no 'bmad-'-prefixed keys),
+  // so a single normalized lookup covers both input shapes.
   if (WORKFLOW_COLORS[normalized]) return WORKFLOW_COLORS[normalized];
-  if (WORKFLOW_COLORS[workflow]) return WORKFLOW_COLORS[workflow];
   for (const { prefix, color } of WORKFLOW_PREFIX_COLORS) {
-    if (normalized.startsWith(prefix) || workflow.startsWith(prefix)) return color;
+    if (normalized.startsWith(prefix)) return color;
   }
   return null;
 }
@@ -115,6 +116,7 @@ function readStatusFile(sessionId) {
 // --- PID detection (mirrors hook's findClaudeAncestorPid) ---
 
 function findClaudeAncestorPid() {
+  if (process.platform !== 'win32') return null; // wmic is Windows-only
   try {
     const { execSync } = require('child_process');
     const out = execSync('wmic process get ProcessId,ParentProcessId,Name /FORMAT:CSV', { encoding: 'utf8', timeout: 5000 });
@@ -149,9 +151,12 @@ function touchAlive(sessionId) {
     }
     // No alive file — new session (likely after /clear). Detect PID + cleanup stale sessions.
     const claudePid = findClaudeAncestorPid();
-    if (!claudePid) return; // Let the hook create the alive file with proper PID detection
-    fs.writeFileSync(alivePath, String(claudePid));
-    {
+    // Cache even a failed detection (empty file): without it, every render of every
+    // line re-spawns the ~700ms process scan until a hook event finally writes the
+    // file — which never happens in non-BMAD projects. The hook treats an existing
+    // empty file as "already probed" and the monitor falls back to mtime.
+    fs.writeFileSync(alivePath, claudePid ? String(claudePid) : '');
+    if (claudePid) {
       // Same-PID cleanup: delete alive+status for old sessions from this Claude instance
       const pidStr = String(claudePid);
       for (const f of fs.readdirSync(CACHE_DIR)) {
@@ -253,52 +258,67 @@ function stripAnsi(text) {
   return text.replace(/\x1b\[[0-9;]*m/g, '');
 }
 
-function readLineConfig(lineIndex) {
+function readConfig() {
   try {
-    const config = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'));
-    if (!config.lines || !config.lines[lineIndex]) return null;
-    return {
-      widgets: config.lines[lineIndex].widgets || [],
-      colorModes: config.lines[lineIndex].colorModes || {},
-      separator: config.separator || 'serre',
-      customSeparator: config.customSeparator ?? null,
-      skillColors: config.skillColors || {},
-      projectColors: config.projectColors || {},
-    };
+    return JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'));
   } catch {
     return null;
   }
 }
 
-function resolveSeparator(style, custom) {
-  if (style === 'custom' && custom != null) return custom;
-  return READER_SEPARATORS[style] || READER_SEPARATORS.serre;
+function readLineConfig(lineIndex) {
+  const config = readConfig();
+  if (!config || !config.lines || !config.lines[lineIndex]) return null;
+  return {
+    widgets: config.lines[lineIndex].widgets || [],
+    colorModes: config.lines[lineIndex].colorModes || {},
+    separator: config.separator || 'serre',
+    customSeparator: config.customSeparator ?? null,
+    skillColors: config.skillColors || {},
+    projectColors: config.projectColors || {},
+  };
 }
 
-function handleLineCommand(lineIndex) {
+function resolveSeparator(style, custom) {
+  if (style === 'custom' && custom != null) return custom;
+  return Object.hasOwn(READER_SEPARATORS, style) ? READER_SEPARATORS[style] : READER_SEPARATORS.serre;
+}
+
+// Shared session prologue for both entry points (line N + standalone command):
+// cache dir, stdin parse, usage snapshot, alive touch, stale purge. Returns the
+// parsed stdin or null when there is no usable session.
+function loadSession() {
   ensureCacheDir();
   const stdin = readStdin();
   persistUsageSnapshot(stdin); // account-global; capture even with no session/status file (Pattern 29)
-  if (!stdin || !stdin.session_id) { process.stdout.write(''); return; }
-  const sessionId = stdin.session_id;
-  touchAlive(sessionId);
+  if (!stdin || !stdin.session_id) return null;
+  touchAlive(stdin.session_id);
   purgeStale();
-  const status = readStatusFile(sessionId);
-  if (!status) { process.stdout.write(''); return; }
+  return stdin;
+}
 
+function handleLineCommand(lineIndex) {
+  const stdin = loadSession();
+  if (!stdin) { process.stdout.write(''); return; }
+
+  // Config check first: a widget-less line renders nothing, so don't pay the
+  // status-file read (with its retry/backoff machinery) for it.
   const lineConfig = readLineConfig(lineIndex);
   if (!lineConfig || lineConfig.widgets.length === 0) {
     process.stdout.write('');
     return;
   }
 
+  const status = readStatusFile(stdin.session_id);
+  if (!status) { process.stdout.write(''); return; }
+
   const separator = resolveSeparator(lineConfig.separator, lineConfig.customSeparator);
 
   const segments = [];
   for (const widgetId of lineConfig.widgets) {
     const cmd = widgetId.replace(/^bmad-/, '');
+    if (!Object.hasOwn(COMMANDS, cmd)) continue;
     const extractor = COMMANDS[cmd];
-    if (!extractor) continue;
     try {
       let value = extractor(status, lineConfig, stdin);
       if (!value) continue;
@@ -437,36 +457,24 @@ function main() {
     return;
   }
 
-  ensureCacheDir();
-
-  const stdin = readStdin();
-  persistUsageSnapshot(stdin); // account-global snapshot for the standalone TUI (Pattern 29)
-  if (!stdin || !stdin.session_id) {
+  const stdin = loadSession();
+  if (!stdin) {
     process.stdout.write('');
     return;
   }
 
-  const sessionId = stdin.session_id;
-
-  // Piggybacking: touch alive + purge stale
-  touchAlive(sessionId);
-  purgeStale();
-
-  const status = readStatusFile(sessionId);
+  const status = readStatusFile(stdin.session_id);
   if (!status) {
     process.stdout.write('');
     return;
   }
 
   // Standalone: read config for custom colors so extractors can use them
-  let lineConfig = null;
-  try {
-    const config = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'));
-    lineConfig = {
-      skillColors: config.skillColors || {},
-      projectColors: config.projectColors || {},
-    };
-  } catch { /* silent — no config or unreadable */ }
+  const config = readConfig();
+  const lineConfig = config ? {
+    skillColors: config.skillColors || {},
+    projectColors: config.projectColors || {},
+  } : null;
 
   try {
     const result = COMMANDS[command](status, lineConfig, stdin);
@@ -478,4 +486,6 @@ function main() {
 
 if (require.main === module) main();
 
-module.exports = { COMMANDS, formatProgressStep, formatLlmState, colorize, getProjectColor, getWorkflowColor, readStatusFile, resolveSeparator, COLOR_CODES };
+// Deployed standalone — exports exist only for the test suite, so keep the
+// surface to what the tests actually import.
+module.exports = { COMMANDS, formatProgressStep };

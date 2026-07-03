@@ -29,9 +29,17 @@ export function backupFile(filePath) {
 }
 
 export function writeJsonSafe(filePath, obj) {
-  const json = JSON.stringify(obj, null, 2);
-  fs.writeFileSync(filePath, json + '\n', 'utf8');
-  // Validate post-write by rereading and parsing
-  const reread = fs.readFileSync(filePath, 'utf8');
-  JSON.parse(reread);
+  // Atomic temp+rename: these are live-read files (~/.claude/settings.json is read
+  // by Claude Code, ccstatusline settings on every render) — an in-place truncate
+  // write would expose torn JSON to concurrent readers and a crash mid-write would
+  // corrupt the file permanently. (Same pattern as the hook's status writes.)
+  const json = JSON.stringify(obj, null, 2) + '\n';
+  const tmpPath = filePath + '.' + process.pid + '.tmp';
+  try {
+    fs.writeFileSync(tmpPath, json, 'utf8');
+    fs.renameSync(tmpPath, filePath);
+  } catch (e) {
+    try { fs.unlinkSync(tmpPath); } catch {} // don't leak our temp on failure
+    throw e;
+  }
 }

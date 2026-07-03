@@ -1,14 +1,13 @@
 // MonitorScreen.js — Monitor: tabs, badges, file tree, bash sections, scroll, reorder
 
-import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Box, Text, useInput, useStdout } from 'ink';
 import { ShortcutBar } from '../components/ShortcutBar.js';
 import LlmBadge from './components/LlmBadge.js';
 import SessionTabs from './components/SessionTabs.js';
-import { pollSessions, groupSessionsByProject, computeDisplayState, filterReadOnly, findFirstSelectable, findNextSelectable, mergeChronology, generateCsv, writeCsvExport, STORY_WORKFLOWS, formatStoryTitle, resolveProjectColor } from './monitor-utils.js';
+import { pollSessions, groupSessionsByProject, computeDisplayState, filterReadOnly, findFirstSelectable, findNextSelectable, mergeChronology, generateCsv, writeCsvExport, resolveAutoAllow, STORY_WORKFLOWS, formatStoryTitle, resolveProjectColor } from './monitor-utils.js';
 import { MonitorDetailScreen } from './MonitorDetailScreen.js';
 import { ExportPrompt } from './components/ExportPrompt.js';
 import { AutoAllowMenu } from './components/AutoAllowMenu.js';
@@ -20,14 +19,17 @@ const e = React.createElement;
 
 function useSessionPolling(cachePath, pollInterval = 1500) {
   const [sessions, setSessions] = useState([]);
-  const lastJson = useRef('');
+  const lastSessions = useRef(null);
   useEffect(() => {
-    lastJson.current = '';
+    lastSessions.current = null;
     function poll() {
       const next = pollSessions(cachePath);
-      const json = JSON.stringify(next);
-      if (json !== lastJson.current) {
-        lastJson.current = json;
+      // pollSessions caches parsed sessions with stable identities, so reference
+      // equality detects change — no need to serialize every edit diff per tick.
+      const prev = lastSessions.current;
+      const changed = !prev || next.length !== prev.length || next.some((s, i) => s !== prev[i]);
+      if (changed) {
+        lastSessions.current = next;
         setSessions(next);
       }
     }
@@ -117,17 +119,9 @@ export function MonitorScreen({ config, navigate, goBack, isActive, paths, pollI
     : naturalKeys;
   const clampedProjectIndex = Math.min(activeProjectIndex, Math.max(0, projectKeys.length - 1));
   const activeProject = projectKeys[clampedProjectIndex];
-  const projectSessions = groups.get(activeProject) || [];
-  const orderedSessions = sessionOrders[activeProject]
-    ? sessionOrders[activeProject].map(id => projectSessions.find(s => s.sessionId === id)).filter(Boolean)
-    : projectSessions;
-  const clampedSessionIndex = Math.min(activeSessionIndex, Math.max(0, orderedSessions.length - 1));
-  const currentSession = orderedSessions[clampedSessionIndex] || null;
-  const mode = projectKeys.length > 1 ? 'multi-project'
-    : orderedSessions.length > 1 ? 'single-project'
-    : 'single-session';
 
-  // Ordered groups map for SessionTabs
+  // Ordered groups map — single source of session ordering, shared by SessionTabs
+  // and keyboard navigation so the highlighted tab always opens the same session.
   const orderedGroups = new Map();
   for (const k of projectKeys) {
     const pSessions = groups.get(k) || [];
@@ -136,50 +130,61 @@ export function MonitorScreen({ config, navigate, goBack, isActive, paths, pollI
       : pSessions;
     orderedGroups.set(k, ordered);
   }
+  const orderedSessions = orderedGroups.get(activeProject) || [];
+  const clampedSessionIndex = Math.min(activeSessionIndex, Math.max(0, orderedSessions.length - 1));
+  const currentSession = orderedSessions[clampedSessionIndex] || null;
+  const mode = projectKeys.length > 1 ? 'multi-project'
+    : orderedSessions.length > 1 ? 'single-project'
+    : 'single-session';
 
-  // Build section content from current session
-  const rawWrites = currentSession ? (currentSession.writes || []) : [];
-  const rawReads = currentSession ? (currentSession.reads || []) : [];
-  const rawCommands = currentSession ? (currentSession.commands || []) : [];
-  const rawReadOnly = filterReadOnly(rawReads, rawWrites);
+  // Build section content from current session. Memoized: sessions from
+  // pollSessions have stable identities, so pure scroll/cursor re-renders reuse
+  // the arrays instead of re-filtering/sorting up to 1500 entries per keypress.
+  const { writes, readOnly, commands, hasSubAgents, allItems, items } = useMemo(() => {
+    const rawWrites = currentSession ? (currentSession.writes || []) : [];
+    const rawReads = currentSession ? (currentSession.reads || []) : [];
+    const rawCommands = currentSession ? (currentSession.commands || []) : [];
+    const rawReadOnly = filterReadOnly(rawReads, rawWrites);
 
-  // Sub-agent filtering
-  const noAgent = entry => entry.agent_id === null || entry.agent_id === undefined;
-  const writes = showSubAgents ? rawWrites : rawWrites.filter(noAgent);
-  const readOnly = showSubAgents ? rawReadOnly : rawReadOnly.filter(noAgent);
-  const commands = showSubAgents ? rawCommands : rawCommands.filter(noAgent);
+    // Sub-agent filtering
+    const noAgent = entry => entry.agent_id === null || entry.agent_id === undefined;
+    const writes = showSubAgents ? rawWrites : rawWrites.filter(noAgent);
+    const readOnly = showSubAgents ? rawReadOnly : rawReadOnly.filter(noAgent);
+    const commands = showSubAgents ? rawCommands : rawCommands.filter(noAgent);
 
-  // Apply sortMode to entries before rendering (Task 5.8)
-  const sortEntries = (arr, key) => {
-    if (sortMode === 'alpha') return [...arr].sort((a, b) => (a[key] || '').localeCompare(b[key] || ''));
-    return arr; // chrono = natural order from hook
-  };
-  const sortedWrites = sortEntries(writes, 'path');
-  const sortedReadOnly = sortEntries(readOnly, 'path');
-  const sortedCommands = sortEntries(commands, 'cmd');
+    // Apply sortMode to entries before rendering (Task 5.8)
+    const sortEntries = (arr, key) => {
+      if (sortMode === 'alpha') return [...arr].sort((a, b) => (a[key] || '').localeCompare(b[key] || ''));
+      return arr; // chrono = natural order from hook
+    };
+    const sortedWrites = sortEntries(writes, 'path');
+    const sortedReadOnly = sortEntries(readOnly, 'path');
+    const sortedCommands = sortEntries(commands, 'cmd');
 
-  // Detect sub-agent activity from raw (unfiltered) data
-  const hasAgent = entry => entry.agent_id !== null && entry.agent_id !== undefined;
-  const hasSubAgents = rawWrites.some(hasAgent) || rawReads.some(hasAgent) || rawCommands.some(hasAgent);
+    // Detect sub-agent activity from raw (unfiltered) data
+    const hasAgent = entry => entry.agent_id !== null && entry.agent_id !== undefined;
+    const hasSubAgents = rawWrites.some(hasAgent) || rawReads.some(hasAgent) || rawCommands.some(hasAgent);
 
-  const writesResult = renderFileSection('EDITED FILES', sortedWrites);
-  const readsResult = renderFileSection('READ FILES', sortedReadOnly);
-  const bashResult = showBash ? renderBashSection(sortedCommands) : { elements: [], items: [] };
+    const writesResult = renderFileSection('EDITED FILES', sortedWrites);
+    const readsResult = renderFileSection('READ FILES', sortedReadOnly);
+    const bashResult = showBash ? renderBashSection(sortedCommands) : { elements: [], items: [] };
 
-  // Concatenate sections with spacers between non-empty ones
-  const sectionPairs = [writesResult, readsResult, bashResult];
-  const allItems = [];
-  const items = [];
-  for (let i = 0; i < sectionPairs.length; i++) {
-    const section = sectionPairs[i];
-    if (section.items.length === 0) continue;
-    if (allItems.length > 0) {
-      allItems.push({ text: ' ', selectable: false, type: 'spacer' });
-      items.push(e(Text, { key: `section-sep-${i}` }, ' '));
+    // Concatenate sections with spacers between non-empty ones
+    const sectionPairs = [writesResult, readsResult, bashResult];
+    const allItems = [];
+    const items = [];
+    for (let i = 0; i < sectionPairs.length; i++) {
+      const section = sectionPairs[i];
+      if (section.items.length === 0) continue;
+      if (allItems.length > 0) {
+        allItems.push({ text: ' ', selectable: false, type: 'spacer' });
+        items.push(e(Text, { key: `section-sep-${i}` }, ' '));
+      }
+      allItems.push(...section.items);
+      items.push(...section.elements);
     }
-    allItems.push(...section.items);
-    items.push(...section.elements);
-  }
+    return { writes, readOnly, commands, hasSubAgents, allItems, items };
+  }, [currentSession, showSubAgents, showBash, sortMode]);
 
   const rows = (stdout && stdout.rows) || 24;
 
@@ -202,6 +207,17 @@ export function MonitorScreen({ config, navigate, goBack, isActive, paths, pollI
 
   // Reset scroll and detail state when active session changes
   const sessionId = currentSession ? currentSession.sessionId : null;
+
+  // Auto-allow indicator — shares the hook's exact resolution semantics via
+  // resolveAutoAllow, memoized so scroll re-renders don't hit the disk.
+  // `sessions` re-runs it on each poll diff; `autoAllowMenu` on menu toggles.
+  // Must stay ABOVE the detail-overlay early return (rules of hooks).
+  const configDir = paths.configDir || process.env.BMAD_CONFIG_DIR || path.join(os.homedir(), '.config', 'bmad-statusline');
+  const isAutoAllowActive = useMemo(
+    () => resolveAutoAllow(paths.cachePath, configDir, sessionId),
+    [paths.cachePath, configDir, sessionId, sessions, autoAllowMenu]
+  );
+
   useEffect(() => {
     setScrollOffset(0);
     setDetailMode('normal');
@@ -415,24 +431,6 @@ export function MonitorScreen({ config, navigate, goBack, isActive, paths, pollI
         ? currentSession.document_name
         : '',
   } : { state: 'waiting', workflow: '', startedAt: '', contextLabel: '' };
-
-  // Compute auto-allow active state for current session indicator
-  const configDir = paths.configDir || process.env.BMAD_CONFIG_DIR || path.join(os.homedir(), '.config', 'bmad-statusline');
-  let isAutoAllowActive = false;
-  if (sessionId) {
-    try {
-      const flag = fs.readFileSync(path.join(paths.cachePath, '.autoallow-' + sessionId), 'utf8').trim();
-      if (flag === 'on') isAutoAllowActive = true;
-      else if (flag === 'off') isAutoAllowActive = false;
-      else isAutoAllowActive = false;
-    } catch {
-      // No per-session flag — check global
-      try {
-        const cfg = JSON.parse(fs.readFileSync(path.join(configDir, 'config.json'), 'utf8'));
-        isAutoAllowActive = cfg.autoAllow === true;
-      } catch { isAutoAllowActive = false; }
-    }
-  }
 
   return e(Box, { flexDirection: 'column', height: rows },
     // Sticky top: title + session count

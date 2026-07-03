@@ -7,7 +7,8 @@ const home = os.homedir();
 const defaultPaths = {
   claudeSettings: path.join(home, '.claude', 'settings.json'),
   ccstatuslineSettings: path.join(home, '.config', 'ccstatusline', 'settings.json'),
-  readerDir: path.join(home, '.config', 'bmad-statusline'),
+  // Honor BMAD_CONFIG_DIR like install/doctor/cli — else an env-configured deployment is orphaned.
+  readerDir: process.env.BMAD_CONFIG_DIR || path.join(home, '.config', 'bmad-statusline'),
   cacheDir: process.env.BMAD_CACHE_DIR || path.join(home, '.cache', 'bmad-status'),
   claudeMd: path.join(process.cwd(), '.claude', 'CLAUDE.md'),
   settingsLocal: path.join(process.cwd(), '.claude', 'settings.local.json'),
@@ -23,6 +24,9 @@ function uninstallTarget1() {
 
 function uninstallTarget2(paths) {
   const target = '~/.config/ccstatusline/settings.json';
+  // Only restore a backup taken during THIS run — a stale .bak from a previous
+  // run would silently overwrite every edit made since (see install.js).
+  let backedUp = false;
   try {
     if (!fs.existsSync(paths.ccstatuslineSettings)) {
       logSkipped(target, 'file not found');
@@ -44,13 +48,13 @@ function uninstallTarget2(paths) {
     }
 
     backupFile(paths.ccstatuslineSettings);
+    backedUp = true;
     config.lines = config.lines.map(line => line.filter(w => !isBmad(w)));
     writeJsonSafe(paths.ccstatuslineSettings, config);
     logSuccess(target, 'BMAD widgets removed');
   } catch (err) {
     try {
-      const bakPath = paths.ccstatuslineSettings + '.bak';
-      if (fs.existsSync(bakPath)) fs.copyFileSync(bakPath, paths.ccstatuslineSettings);
+      if (backedUp) fs.copyFileSync(paths.ccstatuslineSettings + '.bak', paths.ccstatuslineSettings);
     } catch {}
     logError(target, err.message);
     return false;
@@ -89,6 +93,7 @@ function uninstallTarget4(paths) {
 
 function uninstallTarget5(paths) {
   const target = '~/.claude/settings.json hooks';
+  let backedUp = false;
   try {
     if (!fs.existsSync(paths.claudeSettings)) {
       logSkipped(target, 'file not found');
@@ -115,6 +120,7 @@ function uninstallTarget5(paths) {
     }
 
     backupFile(paths.claudeSettings);
+    backedUp = true;
 
     // Remove bmad-hook entries from all hook events
     for (const event of Object.keys(config.hooks)) {
@@ -126,8 +132,7 @@ function uninstallTarget5(paths) {
     logSuccess(target, 'hook config removed');
   } catch (err) {
     try {
-      const bakPath = paths.claudeSettings + '.bak';
-      if (fs.existsSync(bakPath)) fs.copyFileSync(bakPath, paths.claudeSettings);
+      if (backedUp) fs.copyFileSync(paths.claudeSettings + '.bak', paths.claudeSettings);
     } catch {}
     logError(target, err.message);
     return false;

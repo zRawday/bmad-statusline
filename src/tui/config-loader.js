@@ -27,10 +27,14 @@ export function loadConfig(paths = {}) {
         return ensureWidgetOrder(config);
       }
     } catch {
-      // Corrupted JSON -> fall back to defaults silently
+      // Corrupted JSON -> fall back to defaults, but preserve the user's file:
+      // the first TUI edit debounce-writes the in-memory config over it, so
+      // without this rename a one-character JSON typo destroys the whole setup.
+      preserveCorruptConfig(configPath);
       return createDefaultConfig();
     }
     // Parsed but not valid v2 structure -> treat as corrupted
+    preserveCorruptConfig(configPath);
     return createDefaultConfig();
   }
 
@@ -40,11 +44,17 @@ export function loadConfig(paths = {}) {
   return defaults;
 }
 
+function preserveCorruptConfig(configPath) {
+  try { fs.renameSync(configPath, configPath + '.corrupt'); } catch { /* best effort */ }
+}
+
 function ensureWidgetOrder(config) {
   const allIds = getIndividualWidgets().map(w => w.id);
   for (const line of config.lines) {
     if (!Array.isArray(line.widgetOrder)) {
-      line.widgetOrder = [...line.widgets, ...allIds.filter(id => !line.widgets.includes(id))];
+      // Seed from line.widgets but prune ids gone from the registry — a stale id
+      // here desynchronizes grab-mode reorder indexes in EditLineScreen.
+      line.widgetOrder = [...line.widgets.filter(id => allIds.includes(id)), ...allIds.filter(id => !line.widgets.includes(id))];
     } else {
       // Prune stale IDs no longer in registry, then add any new widgets
       line.widgetOrder = line.widgetOrder.filter(id => allIds.includes(id));
@@ -61,6 +71,10 @@ function ensureWidgetOrder(config) {
   if (!config.projectColors || typeof config.projectColors !== 'object' || Array.isArray(config.projectColors)) {
     config.projectColors = {};
   }
+  // A valid-v2 config may lack presets (hand edit) — the preset screens' save
+  // mutators index into it and would crash the whole TUI on Enter.
+  if (!Array.isArray(config.presets)) config.presets = [null, null, null];
+  while (config.presets.length < 3) config.presets.push(null);
   return config;
 }
 

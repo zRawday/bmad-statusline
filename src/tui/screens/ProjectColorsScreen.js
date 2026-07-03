@@ -26,6 +26,9 @@ const SHORTCUTS = [
 function detectProjects() {
   try {
     const files = fs.readdirSync(CACHE_DIR);
+    // Prebuilt Set: files.includes() per status file is O(n²) over a cache dir
+    // that accumulates one status file per session.
+    const aliveSet = new Set(files.filter(f => f.startsWith('.alive-')).map(f => f.slice('.alive-'.length)));
     const projects = new Map();
     for (const file of files) {
       if (!file.startsWith('status-') || !file.endsWith('.json')) continue;
@@ -34,7 +37,7 @@ function detectProjects() {
         const raw = fs.readFileSync(path.join(CACHE_DIR, file), 'utf8');
         const status = JSON.parse(raw);
         if (!status.project) continue;
-        const alive = files.includes(`.alive-${sid}`);
+        const alive = aliveSet.has(sid);
         const existing = projects.get(status.project);
         if (!existing || (!existing.alive && alive)) {
           projects.set(status.project, { name: status.project, alive });

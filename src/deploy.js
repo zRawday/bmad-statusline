@@ -17,10 +17,15 @@ import { fileURLToPath } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // Code files deployed verbatim into the deploy dir, flat (names mirror sources).
+// package.json ({"type":"commonjs"}) pins the module type of the deployed CJS
+// reader/hook: without it, a stray "type":"module" package.json anywhere above
+// ~/.config/bmad-statusline/ (e.g. an accidental `npm init` in $HOME) makes Node
+// parse them as ESM and every render/hook event crashes with a require error.
 export const DEPLOY_FILES = [
   { name: 'bmad-sl-reader.js',    src: path.join(__dirname, 'reader', 'bmad-sl-reader.js') },
   { name: 'workflow-colors.cjs',  src: path.join(__dirname, 'reader', 'workflow-colors.cjs') },
   { name: 'shared-constants.cjs', src: path.join(__dirname, 'reader', 'shared-constants.cjs') },
+  { name: 'package.json',         src: path.join(__dirname, 'reader', 'package.json') },
   { name: 'bmad-hook.js',         src: path.join(__dirname, 'hook', 'bmad-hook.js') },
 ];
 

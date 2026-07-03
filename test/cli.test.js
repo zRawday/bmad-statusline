@@ -1,15 +1,20 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import { execSync } from 'node:child_process';
+import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const CLI = path.join(__dirname, '..', 'bin', 'cli.js');
 
-function run(args = '', expectFail = false) {
+function run(args = '', expectFail = false, env = undefined) {
   try {
-    const stdout = execSync(`node "${CLI}" ${args}`, { encoding: 'utf8' });
+    const stdout = execSync(`node "${CLI}" ${args}`, {
+      encoding: 'utf8',
+      env: env ? { ...process.env, ...env } : process.env,
+    });
     return { stdout, exitCode: 0 };
   } catch (err) {
     if (expectFail) {
@@ -57,8 +62,25 @@ describe('bin/cli.js', () => {
     assert.strictEqual(typeof mod.default, 'function');
   });
 
-  it('runs clean command without error', () => {
-    const { stdout, exitCode } = run('clean');
-    assert.strictEqual(exitCode, 0);
+  it('runs clean command without error (isolated cache dir)', () => {
+    // BMAD_CACHE_DIR injected so `npm test` never deletes the developer's real
+    // session files — and the run is hermetic. Seed an expired pair to make the
+    // smoke test assert actual behavior.
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'bmad-cli-clean-'));
+    try {
+      const statusPath = path.join(tmpDir, 'status-cliclean.json');
+      const alivePath = path.join(tmpDir, '.alive-cliclean');
+      fs.writeFileSync(statusPath, '{}');
+      fs.writeFileSync(alivePath, '');
+      const past = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000);
+      fs.utimesSync(statusPath, past, past);
+      fs.utimesSync(alivePath, past, past);
+      const { stdout, exitCode } = run('clean', false, { BMAD_CACHE_DIR: tmpDir });
+      assert.strictEqual(exitCode, 0);
+      assert.ok(stdout.includes('2 file(s) purged'), 'expired pair purged');
+      assert.ok(!fs.existsSync(statusPath) && !fs.existsSync(alivePath));
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
   });
 });

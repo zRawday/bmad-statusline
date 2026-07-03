@@ -15,13 +15,13 @@ Custom widget pack for [ccstatusline](https://github.com/sirmalloc/ccstatusline)
 
 ## Features
 
-- **Passive detection via hooks** — 8 signals intercepted from the Claude Code lifecycle (prompts, reads, writes, bash, permissions, errors…). Zero manual action required.
+- **Passive detection via hooks** — 12 signals intercepted from the Claude Code lifecycle (prompts, reads, writes, bash, permissions, errors, session start/end…). Zero manual action required.
 - **Interactive TUI configurator** — full visual editor to customize the display, colors, separators, and widget order
 - **13 configurable widgets across 3 lines** — LLM State, Project, Initial Skill, Active Skill, Story, Step, Next Step, Document, File Read, File Write/Edit, Context %, Timer, Weekly Usage
 - **Semantic colors** — each workflow and project has its own color (cyan = dev, green = planning, yellow = product, magenta = architecture…), individually customizable
 - **Real-time Monitor** — built-in multi-session dashboard to follow all active BMAD sessions live, with file read/write/edit history, command tracking, and auto-allow permission control (see [Monitor](#monitor) section)
 - **Presets** — 3 slots to save and load complete layouts
-- **134 recognized workflows** — BMAD, GDS, WDS, CIS, and TEA compatibility
+- **Full workflow catalog recognition** — BMAD, GDS, WDS, CIS, and TEA compatibility, with semantic colors for every known workflow
 
 ## Prerequisites
 
@@ -60,7 +60,7 @@ Each line (1, 2, 3) is configured individually:
 - **Visibility** — show/hide each widget with `h`
 - **Color** — cycle through 15 ANSI colors with `←/→`, or switch to dynamic mode (color resolved at runtime based on the workflow/project)
 - **Order** — rearrange widgets within a line using grab mode (`g`)
-- **Display mode** — some widgets have alternate modes (Story: compact/full)
+- **Display mode** — toggle with `m` on widgets that support it: Story (compact/full), Context % (full bar/compact), Weekly Usage (compact/extended — extended is the default on line 2 since v1.6)
 
 ### Separator Style
 
@@ -77,6 +77,10 @@ Rearrange the order of the 3 lines with keyboard drag-and-drop.
 ### Presets
 
 3 save slots to store complete layouts (widgets, order, separators). Custom colors are preserved separately.
+
+### Weekly Usage
+
+A dedicated dashboard screen (reachable from the TUI home menu) showing your 7-day plan usage versus the elapsed share of the week, with a pace verdict. The data is captured passively by the reader on every status line refresh and persisted to `~/.cache/bmad-status/weekly-usage.json`, so the screen works even without an active session.
 
 ## Monitor
 
@@ -165,7 +169,7 @@ Export session data to CSV:
 
 | Command | Description |
 |---------|-------------|
-| `npx bmad-statusline` | Launch the TUI configurator |
+| `npx bmad-statusline` | Launch the TUI configurator (auto-updates the deployed reader/hook when the package is newer — no reinstall needed after upgrades, v1.4+) |
 | `npx bmad-statusline install` | Install widgets, reader, and hooks |
 | `npx bmad-statusline uninstall` | Remove all components |
 | `npx bmad-statusline clean` | Clean stale cache files |
@@ -173,14 +177,14 @@ Export session data to CSV:
 
 ### Doctor
 
-If the status line goes blank while the monitor still works, run `npx bmad-statusline doctor` (or pick **🩺 Run health check** from the TUI home screen). It verifies the deployed reader, `config.json`, the `statusLine` entry in `~/.claude/settings.json`, and the registered ccstatusline widgets, then checks that `npx -y ccstatusline@latest` actually runs. The most common cause is a corrupted npx cache (missing Windows bin shims) — doctor detects this and purges the offending ccstatusline cache entry so npx regenerates it. It never touches your settings, config, or the npm cache as a whole; for anything it can't repair it points you to `npx bmad-statusline install`.
+If the status line goes blank while the monitor still works, run `npx bmad-statusline doctor` (or pick **🩺 Run health check** from the TUI home screen). It verifies the deployed reader, `config.json`, the `statusLine` entry in `~/.claude/settings.json`, and the registered ccstatusline widgets, then checks that `npx -y ccstatusline@latest` actually runs. It also compares the deployed reader/hook against the running package version and automatically re-syncs the files in `~/.config/bmad-statusline/` if they are stale. The most common cause is a corrupted npx cache (missing Windows bin shims) — doctor detects this and purges the offending ccstatusline cache entry so npx regenerates it. It never touches your settings, config, or the npm cache as a whole; for anything it can't repair it points you to `npx bmad-statusline install`.
 
 ## How It Works
 
 bmad-statusline relies on a 3-layer architecture:
 
-1. **Hooks** — intercept Claude Code lifecycle events (8 signals: UserPromptSubmit, PreToolUse, PostToolUse, PermissionRequest, Stop, StopFailure, SubagentStart/Stop) to passively detect the active skill, story, step progress, and LLM state
-2. **Cache** — data is stored as JSON in `~/.cache/bmad-status/` (one status file + one alive file per session)
+1. **Hooks** — intercept Claude Code lifecycle events (12 signals: UserPromptSubmit, PreToolUse, PostToolUse, PermissionRequest, PermissionDenied, PostToolUseFailure, Stop, StopFailure, SubagentStart/Stop, SessionStart/End) to passively detect the active skill, story, step progress, and LLM state
+2. **Cache** — data is stored as JSON in `~/.cache/bmad-status/` (one status file + one alive file per session, plus an account-global `weekly-usage.json` snapshot used by the Weekly Usage widget and TUI screen)
 3. **Reader** — reads the cache and produces a formatted, ANSI-colored line for ccstatusline to display
 
 Everything is synchronous, with zero runtime dependencies (Node.js stdlib only for hook and reader), and designed to never interfere with Claude Code's operation.

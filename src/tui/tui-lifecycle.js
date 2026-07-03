@@ -7,7 +7,11 @@ const REGISTRY_FILE = 'tui-pids.json';
 
 export function loadRegistry(cachePath) {
   try {
-    return JSON.parse(fs.readFileSync(path.join(cachePath, REGISTRY_FILE), 'utf8'));
+    const registry = JSON.parse(fs.readFileSync(path.join(cachePath, REGISTRY_FILE), 'utf8'));
+    // Guarantee the shape: a hand-edited/torn file that parses but lacks a pids
+    // array would make unregisterPid throw inside the uncaughtException handler,
+    // which is fatal and skips screen restoration.
+    return Array.isArray(registry?.pids) ? registry : { pids: [] };
   } catch {
     return { pids: [] };
   }
@@ -51,14 +55,18 @@ export function setupSignalHandlers(cachePath, restoreScreen) {
   process.on('SIGINT', gracefulShutdown);
   process.on('SIGTERM', gracefulShutdown);
   process.on('SIGHUP', gracefulShutdown);
-  process.on('uncaughtException', () => {
+  // Print the error AFTER leaving the alternate screen buffer so it stays visible
+  // on the normal buffer — a silent exit(1) makes every TUI crash undiagnosable.
+  process.on('uncaughtException', (err) => {
     unregisterPid(cachePath);
     try { restoreScreen(); } catch {}
+    console.error(err);
     process.exit(1);
   });
-  process.on('unhandledRejection', () => {
+  process.on('unhandledRejection', (reason) => {
     unregisterPid(cachePath);
     try { restoreScreen(); } catch {}
+    console.error(reason);
     process.exit(1);
   });
 }

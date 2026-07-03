@@ -17,9 +17,12 @@ const LLM_BADGE_CONFIG = {
 function LlmBadge({ state, workflow, startedAt, contextLabel }) {
   const [, setTick] = useState(0);
   useEffect(() => {
+    // The 1 Hz tick only exists to refresh the elapsed timer — without a
+    // startedAt there is nothing to refresh, so don't re-render every second.
+    if (!startedAt) return undefined;
     const id = setInterval(() => setTick(t => t + 1), 1000);
     return () => clearInterval(id);
-  }, [state]);
+  }, [state, startedAt]);
 
   const cfg = LLM_BADGE_CONFIG[state] || LLM_BADGE_CONFIG.active;
   const elapsed = formatElapsed(startedAt);

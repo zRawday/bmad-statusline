@@ -489,6 +489,67 @@ describe('hook — 8-signal passive detection', () => {
     assert.equal(status.story_priority, 2);
   });
 
+  it('prompt-story: NEW explicit command id replaces a previous explicit lock', () => {
+    execHook(makeUserPromptPayload('ps17', '/bmad-create-story 3-1'));
+    let status = readStatusFile('ps17');
+    assert.equal(status.story, '3-1');
+    assert.equal(status.story_priority, 2);
+    // Same skill re-invoked with a different id: the new prompt postdates the lock
+    execHook(makeUserPromptPayload('ps17', '/bmad-create-story 3-2'));
+    status = readStatusFile('ps17');
+    assert.equal(status.story, '3-2', 'explicit id in a new prompt replaces the old lock');
+    assert.equal(status.story_priority, 2);
+  });
+
+  it('prompt-story: explicit id does NOT override a sprint-status lock (prio 1)', () => {
+    seedStatus('ps18', {
+      session_id: 'ps18',
+      skill: 'bmad-dev-story',
+      workflow: 'dev-story',
+      story: '9-9-from-sprint',
+      story_priority: 1,
+      step: { total: null }
+    });
+    execHook(makeUserPromptPayload('ps18', '/bmad-dev-story 2-4'));
+    const status = readStatusFile('ps18');
+    assert.equal(status.story, '9-9-from-sprint', 'sprint-status lock stays authoritative');
+  });
+
+  it('skill detection: prose starting with a bmad- token does not hijack the workflow', () => {
+    seedStatus('ps19', {
+      session_id: 'ps19',
+      skill: 'bmad-dev-story',
+      workflow: 'dev-story',
+      story: '3-1',
+      story_priority: 2,
+      step: { total: null }
+    });
+    // No .claude/skills/bmad-statusline dir exists → slash-less match is rejected
+    execHook(makeUserPromptPayload('ps19', 'bmad-statusline shows the wrong story'));
+    const status = readStatusFile('ps19');
+    assert.equal(status.skill, 'bmad-dev-story', 'skill preserved');
+    assert.equal(status.workflow, 'dev-story', 'workflow preserved');
+    assert.equal(status.story, '3-1', 'story state not wiped');
+  });
+
+  it('skill detection: slash-less prompt naming an EXISTING skill still registers', () => {
+    execHook(makeUserPromptPayload('ps20', 'bmad-dev-story 2-4'));
+    const status = readStatusFile('ps20');
+    assert.equal(status.workflow, 'dev-story', 'existing skill accepted without slash');
+    assert.equal(status.story, '2-4');
+  });
+
+  it('Edit history truncates oversized old_string/new_string', () => {
+    seedStatus('trunc1', { session_id: 'trunc1', step: { total: null } });
+    const big = 'x'.repeat(50000);
+    const filePath = path.join(tmpDir, 'src', 'big-file.js').replace(/\\/g, '/');
+    execHook(makeEditPayload('trunc1', filePath, big, big));
+    const status = readStatusFile('trunc1');
+    const w = status.writes[status.writes.length - 1];
+    assert.equal(w.old_string.length, 2000, 'old_string capped');
+    assert.equal(w.new_string.length, 2000, 'new_string capped');
+  });
+
   // ─── AC #7: cwd scoping (outside) ───────────────────────────────────────────
 
   it('AC #7: Read outside cwd is ignored', () => {
@@ -1051,9 +1112,12 @@ describe('hook — 8-signal passive detection', () => {
   // 4.4 subtask 4.14: story file regex does NOT match non-story files
   it('4.4: story file regex does NOT match step files, sprint-status, or plain .md', () => {
     const src = fs.readFileSync(HOOK_PATH, 'utf8');
-    const regexMatch = src.match(/STORY_FILE_REGEX\s*=\s*(\/.+\/)/);
-    assert.ok(regexMatch, 'STORY_FILE_REGEX should exist as constant');
-    const regex = new RegExp(regexMatch[1].slice(1, -1));
+    // STORY_FILE_REGEX is built from the shared STORY_KEY_SRC string — rebuild it
+    // the same way the hook does (unescaping the source-level double backslashes).
+    const keyMatch = src.match(/STORY_KEY_SRC\s*=\s*'([^']+)'/);
+    assert.ok(keyMatch, 'STORY_KEY_SRC should exist as constant');
+    const keySrc = keyMatch[1].replace(/\\\\/g, '\\');
+    const regex = new RegExp('\\/(' + keySrc + ')\\.md$');
 
     // Should NOT match (paths without N-N pattern after /)
     assert.equal(regex.test('/step-03-starter.md'), false, 'should not match step files');

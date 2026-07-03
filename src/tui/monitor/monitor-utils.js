@@ -16,35 +16,53 @@ function isProcessAlive(pid) {
   catch (e) { return e.code !== 'ESRCH'; }
 }
 
+// Parse cache: status files grow to hundreds of KB with history, and the monitor
+// polls every 1.5s — re-parsing unchanged files is pure CPU/GC churn. Keyed by
+// sessionId, invalidated on (mtimeMs, size). Stable object identity also lets
+// callers detect change with cheap reference equality instead of serializing.
+const statusCache = new Map();
+
 export function pollSessions(cachePath) {
   try {
     const files = fs.readdirSync(cachePath);
     const aliveFiles = files.filter(f => f.startsWith('.alive-'));
     const now = Date.now();
     const sessions = [];
+    const seen = new Set();
     for (const alive of aliveFiles) {
       const alivePath = path.join(cachePath, alive);
-      let content, mtime;
-      try {
-        content = fs.readFileSync(alivePath, 'utf8').trim();
-        mtime = fs.statSync(alivePath).mtimeMs;
-      } catch { continue; }
+      let content;
+      try { content = fs.readFileSync(alivePath, 'utf8').trim(); } catch { continue; }
       // PID-based check: if file contains a claude.exe PID, verify it's alive
       const pid = parseInt(content, 10);
       if (pid) {
         if (!isProcessAlive(pid)) continue; // claude.exe dead → skip
       } else {
-        // No PID yet (legacy or first hook hasn't fired) — use mtime fallback
+        // No PID (detection failed or first hook hasn't fired) — mtime fallback
+        let mtime;
+        try { mtime = fs.statSync(alivePath).mtimeMs; } catch { continue; }
         if (now - mtime > MONITOR_IDLE_WINDOW_MS) continue;
       }
       const sessionId = alive.slice('.alive-'.length);
       const statusPath = path.join(cachePath, `status-${sessionId}.json`);
       try {
-        const raw = fs.readFileSync(statusPath, 'utf8');
-        const status = JSON.parse(raw);
-        if (!status.skill) continue;
-        sessions.push({ ...status, sessionId });
+        const st = fs.statSync(statusPath);
+        const cached = statusCache.get(sessionId);
+        let session;
+        if (cached && cached.mtimeMs === st.mtimeMs && cached.size === st.size) {
+          session = cached.session;
+        } else {
+          session = { ...JSON.parse(fs.readFileSync(statusPath, 'utf8')), sessionId };
+          statusCache.set(sessionId, { mtimeMs: st.mtimeMs, size: st.size, session });
+        }
+        seen.add(sessionId);
+        if (!session.skill) continue;
+        sessions.push(session);
       } catch { /* skip corrupted/missing */ }
+    }
+    // Evict gone sessions so the cache cannot grow unbounded
+    for (const key of statusCache.keys()) {
+      if (!seen.has(key)) statusCache.delete(key);
     }
     // Sort by started_at (stable) — avoids tab reordering on LLM activity
     sessions.sort((a, b) => {
@@ -52,8 +70,27 @@ export function pollSessions(cachePath) {
       const tb = b.started_at ? new Date(b.started_at).getTime() : 0;
       return ta - tb;
     });
-    return sessions.slice(0, MAX_SESSIONS).map(({ _mtime, ...rest }) => rest);
+    return sessions.slice(0, MAX_SESSIONS);
   } catch { return []; /* cache dir missing */ }
+}
+
+// --- Auto-allow resolution ---
+
+// Mirrors the hook's isAutoAllowEnabled fall-through exactly (bmad-hook.js):
+// session flag 'on' → true, 'off' → false, anything else/missing → global config.
+// Single source for the MonitorScreen indicator so it can't lie about what the
+// hook will actually do.
+export function resolveAutoAllow(cachePath, configDir, sessionId) {
+  if (!sessionId) return false;
+  try {
+    const flag = fs.readFileSync(path.join(cachePath, '.autoallow-' + sessionId), 'utf8').trim();
+    if (flag === 'on') return true;
+    if (flag === 'off') return false;
+  } catch { /* absent — fall through */ }
+  try {
+    const config = JSON.parse(fs.readFileSync(path.join(configDir, 'config.json'), 'utf8'));
+    return config.autoAllow === true;
+  } catch { return false; }
 }
 
 // --- Session grouping ---

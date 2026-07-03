@@ -2,15 +2,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { ALIVE_MAX_AGE_MS } from './defaults.js';
+import { logSuccess, logSkipped, logError } from './cli-utils.js';
 
 const DEFAULT_PATHS = {
   cacheDir: process.env.BMAD_CACHE_DIR || path.join(os.homedir(), '.cache', 'bmad-status'),
   homeDir: os.homedir()
 };
-
-function logSuccess(target, message) { console.log(`  \u2713 ${target} \u2014 ${message}`); }
-function logSkipped(target, message) { console.log(`  \u25CB ${target} \u2014 ${message}`); }
-function logError(target, message)   { console.log(`  \u2717 ${target} \u2014 ${message}`); }
 
 export default function clean(paths = DEFAULT_PATHS) {
   const cacheDir = paths.cacheDir;
@@ -49,6 +46,22 @@ export default function clean(paths = DEFAULT_PATHS) {
   const now = Date.now();
   let deleted = 0;
 
+  // Orphaned status files share one retention rule: keep for possible resume,
+  // purge past the 7-day window. Used by both the no-alive case and the
+  // alive-vanished-mid-scan race.
+  function purgeStatusIfExpired(sid) {
+    const statusPath = path.join(cacheDir, statusFiles.get(sid));
+    try {
+      const statusStat = fs.statSync(statusPath);
+      if ((now - statusStat.mtimeMs) > ALIVE_MAX_AGE_MS) {
+        fs.unlinkSync(statusPath);
+        deleted++;
+      }
+    } catch (err) {
+      if (err.code !== 'ENOENT') logError(statusFiles.get(sid), `failed to delete — ${err.code || err.message}`);
+    }
+  }
+
   // Collect all session IDs
   const allSids = new Set([...statusFiles.keys(), ...aliveFiles.keys()]);
 
@@ -63,18 +76,8 @@ export default function clean(paths = DEFAULT_PATHS) {
       try {
         aliveStat = fs.statSync(alivePath);
       } catch {
-        // Alive file disappeared between readdirSync and statSync — treat as orphaned status
-        // Apply same 7-day age check as regular orphans (may be resumed)
-        const statusPath = path.join(cacheDir, statusFiles.get(sid));
-        try {
-          const sStat = fs.statSync(statusPath);
-          if ((now - sStat.mtimeMs) > ALIVE_MAX_AGE_MS) {
-            fs.unlinkSync(statusPath);
-            deleted++;
-          }
-        } catch (err) {
-          if (err.code !== 'ENOENT') logError(statusFiles.get(sid), `failed to delete — ${err.code || err.message}`);
-        }
+        // Alive file disappeared between readdirSync and statSync — orphaned status
+        purgeStatusIfExpired(sid);
         continue;
       }
       const isExpired = (now - aliveStat.mtimeMs) > ALIVE_MAX_AGE_MS;
@@ -97,16 +100,7 @@ export default function clean(paths = DEFAULT_PATHS) {
       // Active pair — skip both (do nothing)
     } else if (hasStatus && !hasAlive) {
       // Orphaned status — delete only if older than 7 days (may be resumed)
-      const statusPath = path.join(cacheDir, statusFiles.get(sid));
-      try {
-        const statusStat = fs.statSync(statusPath);
-        if ((now - statusStat.mtimeMs) > ALIVE_MAX_AGE_MS) {
-          fs.unlinkSync(statusPath);
-          deleted++;
-        }
-      } catch (err) {
-        if (err.code !== 'ENOENT') logError(statusFiles.get(sid), `failed to delete — ${err.code || err.message}`);
-      }
+      purgeStatusIfExpired(sid);
     } else if (!hasStatus && hasAlive) {
       // Orphaned alive — delete
       try {

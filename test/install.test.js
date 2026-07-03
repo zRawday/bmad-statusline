@@ -5,6 +5,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import install from '../src/install.js';
+import { DEPLOY_FILES, isDeployStale } from '../src/deploy.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const FIXTURES = path.join(__dirname, 'fixtures');
@@ -605,6 +606,113 @@ describe('idempotency', () => {
       const total = Object.values(claudeConfig.hooks).reduce((sum, arr) => sum + arr.length, 0);
       assert.equal(total, 15, '15 total matchers after 3 runs');
     } finally { teardown(baseDir); }
+  });
+});
+
+// --- Deploy parity with deploy.js ---
+
+describe('deploy parity', () => {
+  it('a fresh install deploys every DEPLOY_FILES entry and is not stale', () => {
+    const { baseDir, paths } = setup();
+    try {
+      captureOutput(() => install(paths));
+      for (const f of DEPLOY_FILES) {
+        assert.ok(fs.existsSync(path.join(paths.readerDir, f.name)), `${f.name} should be deployed`);
+      }
+      // Single assertion covering missing files, missing stamp, and stamp drift
+      assert.equal(isDeployStale(paths.readerDir), false, 'fresh install must not be stale');
+    } finally { teardown(baseDir); }
+  });
+});
+
+// --- Target 2: v1 cleanup edge cases ---
+
+describe('Target 2: v1 cleanup edge cases', () => {
+  it('v1 remnant next to a COMPLETE v2 set is still cleaned', () => {
+    const { baseDir, paths } = setup();
+    try {
+      const cc = {
+        version: 3,
+        lines: [
+          [{ id: 'bmad-agent', type: 'custom-command' }, { id: 'bmad-line-0', type: 'custom-command' }],
+          [{ id: 'bmad-line-1', type: 'custom-command' }],
+          [{ id: 'bmad-line-2', type: 'custom-command' }],
+        ],
+      };
+      fs.mkdirSync(paths.ccstatuslineDir, { recursive: true });
+      fs.writeFileSync(paths.ccstatuslineSettings, JSON.stringify(cc, null, 2));
+      captureOutput(() => install(paths));
+      const config = JSON.parse(fs.readFileSync(paths.ccstatuslineSettings, 'utf8'));
+      const all = config.lines.flat();
+      assert.ok(!all.some(w => w.id === 'bmad-agent'), 'v1 widget removed even with nothing missing');
+      assert.equal(all.filter(w => w.id?.startsWith('bmad-line-')).length, 3, 'v2 composites intact');
+    } finally { teardown(baseDir); }
+  });
+
+  it('v1 remnant plus PARTIAL v2 set: existing composite preserved, missing injected', () => {
+    const { baseDir, paths } = setup();
+    try {
+      const cc = {
+        version: 3,
+        lines: [
+          [{ id: 'bmad-agent', type: 'custom-command' }, { id: 'bmad-line-0', type: 'custom-command' }],
+          [],
+          [],
+        ],
+      };
+      fs.mkdirSync(paths.ccstatuslineDir, { recursive: true });
+      fs.writeFileSync(paths.ccstatuslineSettings, JSON.stringify(cc, null, 2));
+      captureOutput(() => install(paths));
+      const config = JSON.parse(fs.readFileSync(paths.ccstatuslineSettings, 'utf8'));
+      const all = config.lines.flat();
+      assert.ok(!all.some(w => w.id === 'bmad-agent'), 'v1 widget removed');
+      assert.ok(config.lines[0].some(w => w.id === 'bmad-line-0'), 'existing bmad-line-0 NOT dropped by the cleanup');
+      assert.ok(config.lines[1].some(w => w.id === 'bmad-line-1'), 'bmad-line-1 injected');
+      assert.ok(config.lines[2].some(w => w.id === 'bmad-line-2'), 'bmad-line-2 injected');
+      assert.equal(config.lines[0].filter(w => w.id === 'bmad-line-0').length, 1, 'no duplicate bmad-line-0');
+    } finally { teardown(baseDir); }
+  });
+});
+
+// --- Target 7: corrupt config repair ---
+
+describe('Target 7: corrupt config repair', () => {
+  it('recreates an invalid config.json and keeps a .bak of the corrupt file', () => {
+    const { baseDir, paths } = setup();
+    try {
+      fs.mkdirSync(paths.readerDir, { recursive: true });
+      fs.writeFileSync(path.join(paths.readerDir, 'config.json'), '{ not json');
+      const output = captureOutput(() => install(paths));
+      assert.ok(output.includes('recreated'), 'should log recreated');
+      const cfg = JSON.parse(fs.readFileSync(path.join(paths.readerDir, 'config.json'), 'utf8'));
+      assert.ok(Array.isArray(cfg.lines), 'valid default config written');
+      assert.ok(fs.existsSync(path.join(paths.readerDir, 'config.json.bak')), 'corrupt original preserved as .bak');
+    } finally { teardown(baseDir); }
+  });
+});
+
+// --- Stale backup safety ---
+
+describe('stale backup safety', () => {
+  it('a .bak from a previous run is NOT restored when this run fails early', () => {
+    const { baseDir, paths } = setup();
+    const origExit = process.exit;
+    try {
+      fs.mkdirSync(paths.claudeDir, { recursive: true });
+      // Stale backup from "weeks ago" + corrupt current settings (user hand-edit)
+      fs.writeFileSync(paths.claudeSettings + '.bak', JSON.stringify({ oldStale: true }));
+      fs.writeFileSync(paths.claudeSettings, '{ "broken": , }');
+      let exitCode = null;
+      process.exit = (code) => { exitCode = code; };
+      captureOutput(() => install(paths));
+      assert.equal(exitCode, 1, 'install reports failure');
+      const raw = fs.readFileSync(paths.claudeSettings, 'utf8');
+      assert.ok(raw.includes('"broken"'), 'corrupt file left in place for the user to fix');
+      assert.ok(!raw.includes('oldStale'), 'stale .bak must NOT be restored over current content');
+    } finally {
+      process.exit = origExit;
+      teardown(baseDir);
+    }
   });
 });
 

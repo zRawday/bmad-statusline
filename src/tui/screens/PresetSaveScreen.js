@@ -80,23 +80,6 @@ export function PresetSaveScreen({ config, updateConfig, previewOverride, goBack
     setPhase('renaming');
   }
 
-  function handleRenameSubmit(name) {
-    const trimmed = name.trim();
-    if (!trimmed) return;
-    updateConfig(cfg => {
-      cfg.presets[cursorIndex] = {
-        name: trimmed,
-        lines: cfg.lines.map(line => ({
-          widgets: [...line.widgets],
-          widgetOrder: [...line.widgetOrder],
-        })),
-        separator: cfg.separator,
-        customSeparator: cfg.customSeparator,
-      };
-    });
-    goBack();
-  }
-
   function handleCancelConfirm() {
     setPhase('list');
   }
@@ -141,7 +124,7 @@ export function PresetSaveScreen({ config, updateConfig, previewOverride, goBack
     children.push(
       e(Box, { key: 'renaming', marginTop: 1 },
         e(Text, null, 'Preset name: '),
-        e(TextInput, { defaultValue: existingName, placeholder: 'Enter name', onSubmit: handleRenameSubmit, isDisabled: !isActive }),
+        e(TextInput, { defaultValue: existingName, placeholder: 'Enter name', onSubmit: handleNameSubmit, isDisabled: !isActive }),
       )
     );
   }

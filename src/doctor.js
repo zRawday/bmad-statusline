@@ -5,14 +5,18 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { G, R, D, B, _, logSuccess, logError, logSection } from './cli-utils.js';
-import { getPackageVersion, getDeployedVersion, syncDeploy } from './deploy.js';
+import { DEPLOY_FILES, getPackageVersion, getDeployedVersion, isDeployStale, syncDeploy } from './deploy.js';
 
 const home = os.homedir();
 
 function defaultNpxCacheDir() {
   if (process.env.BMAD_NPX_CACHE_DIR) return process.env.BMAD_NPX_CACHE_DIR;
+  // Honor a relocated npm cache (`npm config set cache …`) and a moved %LOCALAPPDATA%
+  // — otherwise the purge silently inspects a directory npx never uses.
+  if (process.env.npm_config_cache) return path.join(process.env.npm_config_cache, '_npx');
   if (process.platform === 'win32') {
-    return path.join(home, 'AppData', 'Local', 'npm-cache', '_npx');
+    const local = process.env.LOCALAPPDATA || path.join(home, 'AppData', 'Local');
+    return path.join(local, 'npm-cache', '_npx');
   }
   return path.join(home, '.npm', '_npx');
 }
@@ -25,7 +29,8 @@ export const defaultPaths = {
   npxCacheDir: defaultNpxCacheDir(),
 };
 
-const READER_FILES = ['bmad-sl-reader.js', 'shared-constants.cjs', 'workflow-colors.cjs'];
+// Derived from DEPLOY_FILES so doctor can never drift from what deploy/install ship.
+const READER_FILES = DEPLOY_FILES.map(f => f.name);
 const INSTALL_HINT = 'run: npx bmad-statusline install';
 
 function truncate(s, n = 120) {
@@ -57,7 +62,16 @@ export function defaultRunStatusline() {
     }
     let stderr = '';
     const timer = setTimeout(() => {
-      try { child.kill(); } catch {}
+      try {
+        // With shell:true on Windows the child PID is cmd.exe — child.kill() would
+        // orphan the npx/node grandchildren, which then keep the npx cache entry
+        // locked and defeat the purge that follows. Kill the whole tree.
+        if (process.platform === 'win32' && child.pid) {
+          spawn('taskkill', ['/pid', String(child.pid), '/T', '/F']);
+        } else {
+          child.kill();
+        }
+      } catch {}
       resolve({ ok: false, error: 'timed out after 60s' });
     }, 60000);
     child.on('error', (err) => {
@@ -174,7 +188,8 @@ export async function runHealthCheck(paths = defaultPaths, runStatusline = defau
     try {
       const pkgVer = getPackageVersion();
       const deployedVer = getDeployedVersion(paths.readerDir);
-      if (deployedVer === pkgVer) {
+      // isDeployStale also catches a same-version deploy missing a newly added file.
+      if (!isDeployStale(paths.readerDir, pkgVer)) {
         checks.push({ id: 'version', label: 'Reader up to date', status: 'ok', detail: `v${pkgVer}` });
       } else {
         syncDeploy(paths.readerDir, pkgVer);

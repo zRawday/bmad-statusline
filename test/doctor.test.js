@@ -5,6 +5,7 @@ import path from 'node:path';
 import os from 'node:os';
 
 import doctor, { runHealthCheck, purgeCcstatuslineNpxCache } from '../src/doctor.js';
+import { DEPLOY_FILES, VERSION_STAMP, getPackageVersion, getDeployedVersion } from '../src/deploy.js';
 
 let tmpDir;
 
@@ -18,9 +19,12 @@ function makePaths() {
 
 function setupHealthy(paths) {
   fs.mkdirSync(paths.readerDir, { recursive: true });
-  for (const f of ['bmad-sl-reader.js', 'shared-constants.cjs', 'workflow-colors.cjs']) {
-    fs.writeFileSync(path.join(paths.readerDir, f), '// stub');
+  // Stub every deployed file (derived from DEPLOY_FILES so the test can't drift)
+  // and stamp the current version so check 6 sees a fresh deployment.
+  for (const f of DEPLOY_FILES) {
+    fs.writeFileSync(path.join(paths.readerDir, f.name), '// stub');
   }
+  fs.writeFileSync(path.join(paths.readerDir, VERSION_STAMP), getPackageVersion() + '\n');
   fs.writeFileSync(path.join(paths.readerDir, 'config.json'), JSON.stringify({ lines: [] }));
   fs.mkdirSync(path.dirname(paths.claudeSettings), { recursive: true });
   fs.writeFileSync(paths.claudeSettings, JSON.stringify({ statusLine: { type: 'command', command: 'npx -y ccstatusline@latest' } }));
@@ -53,9 +57,33 @@ describe('runHealthCheck', () => {
     setupHealthy(paths);
     const { checks, healthy } = await runHealthCheck(paths, okRunner);
     assert.equal(healthy, true);
-    for (const id of ['reader', 'config', 'statusline', 'widgets', 'npx']) {
+    for (const id of ['reader', 'config', 'statusline', 'widgets', 'npx', 'version']) {
       assert.equal(statusOf(checks, id), 'ok', `${id} should be ok`);
     }
+    // Fresh stamp → no resync → the stub files must be untouched
+    const reader = fs.readFileSync(path.join(paths.readerDir, 'bmad-sl-reader.js'), 'utf8');
+    assert.equal(reader, '// stub', 'up-to-date deployment must not be rewritten');
+  });
+
+  it('stale version stamp → auto-resync, status repaired, real files deployed', async () => {
+    const paths = makePaths();
+    setupHealthy(paths);
+    fs.writeFileSync(path.join(paths.readerDir, VERSION_STAMP), '0.0.1\n');
+    const { checks, healthy } = await runHealthCheck(paths, okRunner);
+    assert.equal(statusOf(checks, 'version'), 'repaired');
+    assert.equal(healthy, true);
+    assert.equal(getDeployedVersion(paths.readerDir), getPackageVersion(), 'stamp updated to package version');
+    const reader = fs.readFileSync(path.join(paths.readerDir, 'bmad-sl-reader.js'), 'utf8');
+    assert.ok(reader.includes('use strict'), 'stub replaced by the real reader');
+  });
+
+  it('unstamped deployment (pre-v1.4 install) → resynced (repaired)', async () => {
+    const paths = makePaths();
+    setupHealthy(paths);
+    fs.rmSync(path.join(paths.readerDir, VERSION_STAMP));
+    const { checks } = await runHealthCheck(paths, okRunner);
+    assert.equal(statusOf(checks, 'version'), 'repaired', 'unstamped deployment is resynced');
+    assert.equal(getDeployedVersion(paths.readerDir), getPackageVersion());
   });
 
   it('broken npx cache → purges only ccstatusline entry and repairs', async () => {
