@@ -51,7 +51,11 @@ _Patterns 0-13 from Architecture Rev.5 — preserved from Rev.2 (hook/reader/ins
 
 ### Pattern 0 — Hook Entry Point Structure
 
-The hook script follows this exact structure: Requires → Constants → Stdin parsing (try/catch → silent exit) → **Early SessionStart npx cache auto-heal (try/catch, BEFORE the guard)** → Guard (`_bmad/` check via walk-up) → Alive touch (PID detection) → Stale session cleanup (same-PID) → Project + output folders detection → Dispatch on `hook_event_name` (13 events) → Handlers → Story priority helper → Status file helpers → npx cache auto-heal helpers → Main entry. **Rule:** Constants → helpers → handlers → main. **Exception:** the SessionStart npx cache heal runs before the `_bmad/` guard because the status line is global (not project-scoped) — it must repair the cache even outside a BMAD project.
+The hook script follows this exact structure: Requires → Constants → Stdin parsing (try/catch → silent exit) → **Early SessionEnd** (delete the alive file, exit — runs before any cwd work) → **Early SessionStart npx cache auto-heal (try/catch)** → **Detection** (`_bmad/` walk-up) → Alive touch (PID detection) → Stale session cleanup (same-PID) → Project + output folders detection → Dispatch on `hook_event_name` (13 events) → Handlers → Story priority helper → Status file helpers → npx cache auto-heal helpers → Main entry. **Rule:** Constants → helpers → handlers → main.
+
+**The `_bmad/` walk-up is DETECTION, not a gate.** It sets `bmadRoot` when `_bmad/` is found (and only then rewrites `cwd = bmadRoot`); when the walk-up hits the filesystem root or the 20-level depth limit it sets `foundBmad = false`, keeps `payload.cwd`, and **the hook keeps going**. Every Claude Code session is tracked, so the widgets and the monitor work outside BMAD projects too. In a non-BMAD session `project` falls back to `basename(payload.cwd)` (or `'root'` when cwd is a filesystem root).
+
+**BMAD-specific fields are not forced to `null` outside a BMAD project — they simply have nothing to match.** Every detector runs against `cwd`, and outside BMAD `cwd === payload.cwd`, so each field populates exactly when its trigger really exists there: `skill`/`workflow`/`story` are **prompt-derived** (a `/bmad-*` command typed anywhere names the workflow); `step.*` and `active_skill` match `.claude/skills/{skill}/steps*/` under cwd; `document_name` matches the `_outputFolders` fallbacks (`_bmad-output/…`, `design-artifacts/`) resolved under cwd. In an ordinary project none of those paths exist, so the widgets render empty — but this is *absence of a match*, not suppression. Do not add suppression: a bmad workflow run outside a BMAD project should still report its step and document. The only remaining hard exit at this stage is a missing `payload.cwd`.
 
 ### Pattern 1 — Error Handling Triad
 
@@ -389,7 +393,7 @@ The hook is the **central component** — sole writer of status data.
 | **PostToolUseFailure** | `hook_event_name: "PostToolUseFailure"` | Tool failed or user interrupted | `is_interrupt` | `interrupted` if interrupt, else `active` |
 | **SubagentStart** | `hook_event_name: "SubagentStart"` | Subagent spawned | `agent_type` | `active` + sets `subagent_type` |
 | **SubagentStop** | `hook_event_name: "SubagentStop"` | Subagent completed | — | `active` + clears `subagent_type` |
-| **SessionStart** | `hook_event_name: "SessionStart"` | Auto-heal corrupted ccstatusline npx cache (runs BEFORE `_bmad/` guard); alive touch | — | no-op for status (alive already touched) |
+| **SessionStart** | `hook_event_name: "SessionStart"` | Auto-heal corrupted ccstatusline npx cache (runs before the `_bmad/` walk-up); alive touch | — | no-op for status (alive already touched) |
 | **SessionEnd** | `hook_event_name: "SessionEnd"` | Delete alive file, preserve status for resume | — | no write — only deletes `.alive-{id}` |
 
 ### Hook Config (13 event types, deployed via installer)
@@ -398,7 +402,7 @@ The hook is the **central component** — sole writer of status data.
 {
   "hooks": {
     "UserPromptSubmit": [
-      { "matcher": "(?:bmad|gds|wds)[:-]", "hooks": [{ "type": "command", "command": "node <hookPath>" }] }
+      { "matcher": "", "hooks": [{ "type": "command", "command": "node <hookPath>" }] }
     ],
     "PreToolUse": [
       { "matcher": "", "hooks": [{ "type": "command", "command": "node <hookPath>" }] }
@@ -416,13 +420,15 @@ The hook is the **central component** — sole writer of status data.
     "StopFailure": [{ "matcher": "", "hooks": [...] }],
     "SubagentStart": [{ "matcher": "", "hooks": [...] }],
     "SubagentStop": [{ "matcher": "", "hooks": [...] }],
-    "SessionStart": [{ "matcher": "resume", "hooks": [...] }],
+    "SessionStart": [{ "matcher": "", "hooks": [...] }],
     "SessionEnd": [{ "matcher": "", "hooks": [...] }]
   }
 }
 ```
 
-**Key rule:** UserPromptSubmit has skill-matching matcher `(?:bmad|gds|wds)[:-]`. All other events use empty matcher (fire always). SessionStart uses `"resume"` matcher only.
+**Key rule:** every event uses the empty matcher (fire always) **except PostToolUse**, which keeps its four tool matchers (`Read`/`Write`/`Edit`/`Bash`). UserPromptSubmit was widened from `(?:bmad|gds|wds)[:-]` to `''` — non-BMAD prompts must reach the hook for `llm_state=active` and for the `started_at` timer anchor.
+
+**Upgrade rule:** narrowed bmad matchers are widened **in place** by the shared `widenBmadMatchers(entries)` helper in `src/install.js` — used by both SessionStart and UserPromptSubmit, and by any future matcher change. Never hand-roll a second copy: `installTarget5`'s generic merge loop keys on matcher equality, so appending instead of rewriting would leave two bmad entries and double-fire the hook (feeding the concurrent-write race that wipes widget state). The helper also **drops** a narrowed entry when a bmad wildcard entry already exists, so a part-upgraded settings file cannot end up with two wildcards.
 
 ### Discrimination Logic (Complete Truth Table)
 
@@ -430,7 +436,7 @@ The hook is the **central component** — sole writer of status data.
 |-------|-----------|--------|
 | **UserPromptSubmit** | Prompt matches `SKILL_REGEX` or `LEGACY_COMMAND_REGEX` AND skill changed | Reset step, story, reads/writes/commands, set new workflow, `llm_state=active` |
 | **UserPromptSubmit** | Prompt matches, same skill | Set `llm_state=active`, preserve state |
-| **UserPromptSubmit** | No match | Set `llm_state=active` only |
+| **UserPromptSubmit** | No match | Set `llm_state=active`; anchor `started_at` if absent (first prompt of the session) |
 | **PreToolUse** | Always | Set `llm_state=active`, clear subagent_type, clear error_type |
 | **Read** `steps*/step-*.md` | Path in `steps*/` of active skill | Update `step.current`, `step.current_name`, derive `next`; calculate total if first Read or track change |
 | **Read** (any file) | Always | Append to `reads[]` history, update `last_read`, set `llm_state=active` |
@@ -445,13 +451,13 @@ The hook is the **central component** — sole writer of status data.
 | **Bash** | Always | Append to `commands[]` history (truncated at 1000 chars), set `llm_state=active` |
 | **Stop** | Always | Set `llm_state=waiting` |
 | **StopFailure** | Always | Set `llm_state=error`, store `error_type` |
-| **PermissionRequest** | Always | Set `llm_state=permission` |
+| **PermissionRequest** | Always | Set `llm_state=permission`. **Observe only** — the hook never writes a `decision` to stdout. The auto-allow feature (`config.autoAllow`, `.autoallow-{sid}` flags, the monitor's `a` shortcut and `AutoAllowMenu`) was removed: Claude Code has its own auto-permission system, and the hook running in every session would have widened auto-approval to every directory on the machine. Do not reintroduce it. |
 | **PermissionDenied** | Always | Set `llm_state=active` |
 | **PostToolUseFailure** | `is_interrupt === true` | Set `llm_state=interrupted` |
 | **PostToolUseFailure** | `is_interrupt !== true` | Set `llm_state=active` |
 | **SubagentStart** | Always | Set `llm_state=active`, store `subagent_type` |
 | **SubagentStop** | Always | Set `llm_state=active`, clear `subagent_type` |
-| **SessionStart** | Always (matcher ensures resume only) | Call `healCcstatuslineNpxCache()` in an early try/catch **before the `_bmad/` guard** (status line is global), then no-op — alive already touched on entry |
+| **SessionStart** | Always | Call `healCcstatuslineNpxCache()` in an early try/catch **before the `_bmad/` walk-up** (status line is global), then no-op — alive already touched on entry |
 | **SessionEnd** | Always | Delete `.alive-{session_id}`, preserve status file for resume recovery |
 
 All Read/Write/Edit gated by cwd scoping (pattern 11). History appends gated by `canAppendHistory()` (10MB max file size).
@@ -475,7 +481,7 @@ function isCcstatuslineEntry(pkg) {
 
 ### Hook: `healCcstatuslineNpxCache()` (passive, structural, anti-race)
 
-- Runs at **SessionStart, before the `_bmad/` guard** (status line is global).
+- Runs at **SessionStart, before the `_bmad/` walk-up** (status line is global).
 - Iterates `BMAD_NPX_CACHE_DIR` entries, reads each `package.json`, keeps only ccstatusline entries.
 - **Broken = shim missing:** `ccstatuslineShimMissing(dir)` checks `node_modules/.bin/ccstatusline.cmd` (Windows) or `ccstatusline` (else) is absent.
 - **Anti-race guard:** `recentlyModified(dir)` skips entries whose mtime is < 60s old (an in-flight `npx` install has `package.json` written but shim not yet — deleting it would corrupt the install). The 60s window is an **inline literal**, not a module const — TDZ: this runs in the early SessionStart block before late `const` declarations initialize.
@@ -575,7 +581,8 @@ Location: `~/.cache/bmad-status/status-{session_id}.json`
 - `reads`, `writes`, `commands` are arrays, capped at 500 entries via `trimHistory()`
 - `writes[].is_new` is best-effort — after history cap, `reads[]` may have been truncated
 - `writes[].old_string`/`new_string` are null for Write ops, populated for Edit ops
-- `_outputFolders` is hook-internal — derived from `_bmad/bmm/config.yaml` folder keys
+- `started_at` is the timer anchor, set in `handleUserPrompt` on the session's **first prompt** when absent, then re-anchored by the skill-change branch. `formatTimer(null)` returns `''`, so a session that never submits a prompt shows no timer
+- `_outputFolders` is hook-internal — derived from `_bmad/bmm/config.yaml` folder keys. Outside a BMAD project it points at non-existent `_bmad-output/` paths, so `document_name` simply never matches
 - Reader-visible: `session_id`, `project`, `workflow`, `active_skill`, `story`, `step.*`, `last_read`, `last_write`, `last_write_op`, `document_name`, `llm_state`, `llm_state_since`, `subagent_type`, `started_at`, `updated_at`
 - Monitor-visible: all fields including `reads`, `writes`, `commands`
 - Hook-internal: `skill`, `story_priority`, `step.track`, `_outputFolders`
@@ -660,7 +667,7 @@ Read by: Reader (for `line N` command) and TUI (on launch)
 
 Default layout (`createDefaultConfig()`): Line 0 = all default-enabled widgets **except** `bmad-llmstate` and `bmad-contextpct` (= [project, workflow, activeskill, story, progressstep, timer]). Line 1 = [llmstate, weeklyusage] (weeklyusage colorMode `{ mode: 'dynamic', displayMode: 'extended' }`). Line 2 = [contextpct] (colorMode `{ mode: 'dynamic', thresholdLow: 0, thresholdHigh: 100, displayMode: 'compact' }`). `bmad-llmstate` and `bmad-contextpct` are deliberately segregated onto their own lines. `bmad-weeklyusage` keeps `defaultEnabled: false` (so it is **not** auto-added to line 0) but is placed on **line 1 by default** in **extended** mode via the hardcoded line-1 object — the same mechanism `bmad-contextpct` uses for line 2. It remains selectable via `widgetOrder` and can be moved to any line by the user.
 
-**Intentional asymmetry (Rev.7 — deliberate, not a bug):** the `bmad-weeklyusage` **statusline widget** renders only inside a tracked BMAD session — the `line N` reader returns `''` when there is no `status-<sid>.json` for the session (consistent with every other widget). But the **TUI "Weekly usage" screen** works anywhere, because the reader calls `persistUsageSnapshot(stdin)` to write the account-global `weekly-usage.json` **before** the `line N` no-status early-return (`bmad-sl-reader.js:261`). Do not "fix" the widget to render outside a session, and do not move the snapshot write after the early-return.
+**Intentional asymmetry (Rev.7 — deliberate, not a bug):** the `bmad-weeklyusage` **statusline widget** renders only inside a tracked session — the `line N` reader returns `''` when there is no `status-<sid>.json` for the session (consistent with every other widget). The hook now tracks every session, BMAD or not, so in practice this only blanks the widget in the window before the session's first hook event. But the **TUI "Weekly usage" screen** works anywhere, because the reader calls `persistUsageSnapshot(stdin)` to write the account-global `weekly-usage.json` **before** the `line N` no-status early-return (`bmad-sl-reader.js:261`). Do not "fix" the widget to render outside a session, and do not move the snapshot write after the early-return.
 
 ---
 
@@ -961,6 +968,7 @@ function canAppendHistory(sid) {
 - Monitor: `src/tui/monitor/` — real-time session dashboard, cache read-only
 - Writes to internal config (Boundary 4) and ccstatusline config
 - Monitor reads status files directly (Boundary 1 output) — read-only consumer
+- `pollSessions()` lists **every** live session, BMAD or not — it has no `status.skill` filter. `sessionLabel(session)` = `workflow || skill || sessionId.slice(0, 8)` is the single source for tab labels; never re-derive it inline
 
 ### Boundary 9: TUI Lifecycle (process management)
 
@@ -1231,7 +1239,8 @@ Detection (no version field — structure-based):
 - Keep `BMAD_NPX_CACHE_DIR` defaults identical between `src/doctor.js` (`defaultNpxCacheDir`) and the hook's inline `ccstatuslineNpxCacheDir()`
 - Match only `ccstatusline`/`ccstatusline@*` npx entries — never `ccstatusline-*`
 - Hook npx heal must respect the 60s `recentlyModified` anti-race guard (inline literal, not a const — TDZ) and the shim-missing structural check
-- Run the npx auto-heal at SessionStart **before** the `_bmad/` guard (status line is global)
+- Run the npx auto-heal at SessionStart **before** the `_bmad/` walk-up (status line is global)
+- Never reintroduce a `_bmad/`-absent early exit in the hook — the walk-up is detection, and every session must be tracked (Pattern 0)
 
 ---
 

@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { Box, Text } from 'ink';
-import { resolveProjectColor, resolveSessionColor, worstState, computeDisplayState, STORY_WORKFLOWS, extractStoryNumber } from '../monitor-utils.js';
+import { resolveProjectColor, resolveSessionColor, worstState, computeDisplayState, STORY_WORKFLOWS, extractStoryNumber, sessionLabel } from '../monitor-utils.js';
 
 const e = React.createElement;
 
@@ -28,7 +28,7 @@ function SessionTabs({ groups, activeProject, activeSessionIndex, config, mode, 
       const isCursor = reorderingSessions && i === reorderCursor;
       const isGrabbed = isCursor && reorderGrabbed;
       const isActive = reorderingSessions ? isCursor : (i === activeSessionIndex);
-      const baseLabel = s.workflow || s.skill || s.sessionId;
+      const baseLabel = sessionLabel(s);
       const storyNum = STORY_WORKFLOWS.includes(s.workflow) ? extractStoryNumber(s.story) : '';
       const label = storyNum ? `${baseLabel} ${storyNum}` : baseLabel;
       const color = resolveSessionColor(baseLabel, config);

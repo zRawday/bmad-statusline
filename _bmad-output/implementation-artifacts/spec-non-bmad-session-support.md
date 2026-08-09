@@ -2,8 +2,8 @@
 title: 'Non-BMAD session support (widgets + monitor)'
 type: 'feature'
 created: '2026-08-09'
-status: 'ready-for-dev'
-baseline_commit: '5c42781'
+status: 'done'
+baseline_commit: '5d46968'
 context: ['_bmad-output/project-context.md']
 ---
 
@@ -59,16 +59,16 @@ context: ['_bmad-output/project-context.md']
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `src/hook/bmad-hook.js` -- §4: on walk-up failure (fs root or depth > 20) break with `foundBmad = false` and keep `cwd = payload.cwd`; assign `cwd = bmadRoot` only when found -- gate becomes detection, BMAD path resolution preserved
-- [ ] `src/hook/bmad-hook.js` -- `handleUserPrompt`: set `status.started_at = now` when absent, before the skill-detection block -- the timer must start at the session's first prompt; `formatTimer(null)` returns `''`, so it would otherwise stay blank in sessions that never run a BMAD skill
-- [ ] `src/defaults.js` -- `UserPromptSubmit` matcher → `''` -- LLM state must go `active` on any prompt, including tool-free replies
-- [ ] `src/install.js` -- in `installTarget5`, before the merge loop, rewrite any bmad-hook `UserPromptSubmit` entry whose matcher is `(?:bmad|gds|wds)[:-]` to `''` -- prevents a duplicate hook entry on upgrade
-- [ ] `src/tui/monitor/monitor-utils.js` -- drop `if (!status.skill) continue`; export `sessionLabel(session)` = `workflow || skill || sessionId.slice(0, 8)` -- lists non-BMAD sessions with a readable tab
-- [ ] `src/tui/monitor/components/SessionTabs.js` -- use `sessionLabel(s)` for `baseLabel` -- avoids a full-UUID tab
-- [ ] `test/hook.test.js` -- rewrite the depth-limit test to assert a status file **is** created (`project` = basename, skill null); add non-BMAD coverage for `UserPromptSubmit`, `Bash` history and `started_at`; keep a BMAD walk-up regression test
-- [ ] `test/defaults.test.js`, `test/install.test.js` -- assert matcher `''` and the in-place upgrade (legacy matcher rewritten, no duplicate)
-- [ ] `test/tui-monitor.test.js` -- assert a skill-less session is listed by `pollSessions`, and `sessionLabel` falls back to the 8-char id
-- [ ] `_bmad-output/project-context.md` -- update Pattern 0, the SessionStart/SessionEnd notes and the hook-config block to describe detection instead of a `_bmad/` gate -- it is the agent contract
+- [x] `src/hook/bmad-hook.js` -- §4: on walk-up failure (fs root or depth > 20) break with `foundBmad = false` and keep `cwd = payload.cwd`; assign `cwd = bmadRoot` only when found -- gate becomes detection, BMAD path resolution preserved
+- [x] `src/hook/bmad-hook.js` -- `handleUserPrompt`: set `status.started_at = now` when absent, before the skill-detection block -- the timer must start at the session's first prompt; `formatTimer(null)` returns `''`, so it would otherwise stay blank in sessions that never run a BMAD skill
+- [x] `src/defaults.js` -- `UserPromptSubmit` matcher → `''` -- LLM state must go `active` on any prompt, including tool-free replies
+- [x] `src/install.js` -- in `installTarget5`, before the merge loop, rewrite any bmad-hook `UserPromptSubmit` entry whose matcher is `(?:bmad|gds|wds)[:-]` to `''` -- prevents a duplicate hook entry on upgrade
+- [x] `src/tui/monitor/monitor-utils.js` -- drop `if (!status.skill) continue`; export `sessionLabel(session)` = `workflow || skill || sessionId.slice(0, 8)` -- lists non-BMAD sessions with a readable tab
+- [x] `src/tui/monitor/components/SessionTabs.js` -- use `sessionLabel(s)` for `baseLabel` -- avoids a full-UUID tab
+- [x] `test/hook.test.js` -- rewrite the depth-limit test to assert a status file **is** created (`project` = basename, skill null); add non-BMAD coverage for `UserPromptSubmit`, `Bash` history and `started_at`; keep a BMAD walk-up regression test
+- [x] `test/defaults.test.js`, `test/install.test.js` -- assert matcher `''` and the in-place upgrade (legacy matcher rewritten, no duplicate)
+- [x] `test/tui-monitor.test.js` -- assert a skill-less session is listed by `pollSessions`, and `sessionLabel` falls back to the 8-char id
+- [x] `_bmad-output/project-context.md` -- update Pattern 0, the SessionStart/SessionEnd notes and the hook-config block to describe detection instead of a `_bmad/` gate -- it is the agent contract
 
 **Acceptance Criteria:**
 - Given a session with no `_bmad/` anywhere up-tree, when any tracked hook event fires, then `status-{sid}.json` exists with non-null `project` and null `skill`.
@@ -78,6 +78,22 @@ context: ['_bmad-output/project-context.md']
 - Given the repository, when `npm test` runs, then every test passes.
 
 ## Spec Change Log
+
+### 2026-08-09 — review round 1 (blind hunter + edge case hunter + acceptance auditor)
+
+Human chose to amend in place rather than revert and re-derive.
+
+**1. intent_gap — auto-allow blast radius (human decision required).** With the hook no longer exiting outside BMAD projects, `handlePermissionRequest` became reachable everywhere, so a user's global `config.autoAllow` would have auto-approved every tool in every directory. Not covered by the frozen Intent. **Human decision: remove the auto-allow feature entirely** — Claude Code now ships its own auto-permission system. Removed `isAutoAllowEnabled`, the allow-decision branch, `AutoAllowMenu.js`, the monitor `a` shortcut and indicator, and all their tests. The hook now only ever *observes* PermissionRequest. Known-bad state avoided: a silent, machine-wide widening of tool auto-approval on upgrade.
+
+**2. Frozen "Always"/"Never" bullets and AC2 are factually inaccurate — code kept, docs corrected.** The frozen block claims `skill`, `workflow`, `story`, `step.*` and `document_name` "stay null" outside BMAD, and that `document_name` "never matches". False: every detector resolves against `cwd`, and outside BMAD `cwd === payload.cwd`. `skill`/`workflow`/`story` are prompt-derived; `step.*`/`active_skill` match `.claude/skills/{skill}/steps*/` under cwd; `document_name` matches the `_outputFolders` fallbacks (`design-artifacts/`, `_bmad-output/…`) under cwd. This is *absence of a match*, not suppression — and the populated behavior is correct (a bmad workflow run outside a BMAD project should still report step and document). No code change; `project-context.md` rewritten to state the real rule. The frozen bullets are left as written and superseded by this entry.
+
+**3. patch — incomplete matcher migration.** The rewrite matched only `'(?:bmad|gds|wds)[:-]'`; an earlier release shipped `'(?:bmad|gds|wds)-'`, so those users would have gained a second entry and double-fired the hook (the concurrent-write race that wipes widget state). The SessionStart copy had the same hole plus no dedupe. Both now go through one shared `widenBmadMatchers(entries)` helper that widens any non-empty bmad matcher and drops the redundant entry when a wildcard already exists.
+
+**4. patch — monitor robustness.** Removing the `!status.skill` filter also removed the implicit throw that rejected a status file containing `null`; added an explicit shape check. `started_at`-less sessions sorted to position 0 and could evict established sessions at the `MAX_SESSIONS` cut; they now sort last.
+
+**5. patch — misc.** `basename` of a filesystem-root cwd is `''`, which left `project` falsy and rewrote the status file on every event; now falls back to `'root'`. Stale `_bmad guard` comments corrected. `project-context.md`: Pattern 0 was missing the §3b Early-SessionEnd block, the "every event uses the empty matcher" rule contradicted PostToolUse's four tool matchers, the UserPromptSubmit truth-table row omitted the `started_at` anchor, and four unbacked "v1.7" version claims were dropped (`package.json` is still `1.6.0`).
+
+**KEEP on any re-derivation:** the walk-up must stay *in place* between stdin parsing and `touchAlive` (source-order test); `cwd = bmadRoot` only when found; the reader untouched; `started_at` anchored in `handleUserPrompt` (never at §5b bootstrap) so the skill-change branch still re-anchors it; one shared matcher-widening helper, never a per-event copy.
 
 ## Design Notes
 
@@ -106,3 +122,62 @@ This makes the matcher widening load-bearing: with the old `(?:bmad|gds|wds)[:-]
 **Manual checks:**
 - After `npx bmad-statusline install`, open Claude Code in a directory with no `_bmad/` and submit a prompt: status line shows project + LLM state + timer + context %; the monitor lists the session.
 - `~/.claude/settings.json`: exactly one bmad `UserPromptSubmit` entry, matcher `""`.
+
+## Suggested Review Order
+
+**The core inversion — gate becomes detection**
+
+- Entry point: the walk-up now records whether `_bmad/` exists instead of exiting.
+  [`bmad-hook.js:92`](../../src/hook/bmad-hook.js#L92)
+
+- `cwd` is only rewritten to `bmadRoot` on a hit; otherwise `payload.cwd` stands.
+  [`bmad-hook.js:107`](../../src/hook/bmad-hook.js#L107)
+
+- Project falls back to the cwd basename, with a guard for a rootless cwd.
+  [`bmad-hook.js:147`](../../src/hook/bmad-hook.js#L147)
+
+**Timer anchor**
+
+- `started_at` is set on the session's first prompt; the skill-change branch still re-anchors it.
+  [`bmad-hook.js:228`](../../src/hook/bmad-hook.js#L228)
+
+**Every prompt must reach the hook**
+
+- Matcher widened to `''` — required for both `llm_state` and the timer anchor.
+  [`defaults.js:31`](../../src/defaults.js#L31)
+
+- Shared widening helper: rewrites in place, drops redundant duplicates, no per-event copies.
+  [`install.js:170`](../../src/install.js#L170)
+
+- Both SessionStart and UserPromptSubmit now upgrade through that one helper.
+  [`install.js:226`](../../src/install.js#L226)
+
+**Permission handling — auto-allow removed**
+
+- The hook only observes PermissionRequest; it never emits an allow decision.
+  [`bmad-hook.js:686`](../../src/hook/bmad-hook.js#L686)
+
+**Monitor lists every session**
+
+- Skill filter dropped; an explicit shape check replaces the guard it implicitly provided.
+  [`monitor-utils.js:45`](../../src/tui/monitor/monitor-utils.js#L45)
+
+- Unanchored sessions sort last so they cannot evict established ones at the cap.
+  [`monitor-utils.js:53`](../../src/tui/monitor/monitor-utils.js#L53)
+
+- Single source for tab labels, falling back to a short session id.
+  [`monitor-utils.js:110`](../../src/tui/monitor/monitor-utils.js#L110)
+
+- Tab rendering consumes that helper instead of re-deriving the label.
+  [`SessionTabs.js:31`](../../src/tui/monitor/components/SessionTabs.js#L31)
+
+**Supporting changes**
+
+- Non-BMAD coverage: tracking past the depth limit, timer anchoring, bash history.
+  [`hook.test.js:2189`](../../test/hook.test.js#L2189)
+
+- Migration coverage: older matcher, duplicate collapse, foreign wildcard left alone.
+  [`install.test.js:519`](../../test/install.test.js#L519)
+
+- Agent contract updated: detection, matcher rule, auto-allow removal.
+  [`project-context.md:54`](../project-context.md#L54)

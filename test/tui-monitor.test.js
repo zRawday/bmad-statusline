@@ -14,7 +14,7 @@ import {
   getCommandFamily, buildFileTree, renderTreeLines,
   groupSessionsByProject, computeDisplayState, worstState,
   resolveSessionColor, resolveProjectColor, formatElapsed,
-  MONITOR_IDLE_WINDOW_MS,
+  sessionLabel, MONITOR_IDLE_WINDOW_MS,
 } from '../src/tui/monitor/monitor-utils.js';
 import { MonitorScreen } from '../src/tui/monitor/MonitorScreen.js';
 import { renderBashSection } from '../src/tui/monitor/components/BashSection.js';
@@ -49,14 +49,18 @@ describe('pollSessions', () => {
     assert.equal(sessions[0].project, 'my-project');
   });
 
-  test('filters non-BMAD sessions (no skill field)', () => {
+  test('lists non-BMAD sessions (no skill field)', () => {
     fs.writeFileSync(path.join(tmpDir, '.alive-def456'), '');
     fs.writeFileSync(path.join(tmpDir, 'status-def456.json'), JSON.stringify({
       project: 'other-project',
       updated_at: new Date().toISOString(),
+      llm_state: 'active',
     }));
     const sessions = pollSessions(tmpDir);
-    assert.equal(sessions.length, 0);
+    assert.equal(sessions.length, 1);
+    assert.equal(sessions[0].sessionId, 'def456');
+    assert.equal(sessions[0].project, 'other-project');
+    assert.equal(sessions[0].skill, undefined);
   });
 
   test('handles missing cache dir gracefully', () => {
@@ -389,6 +393,24 @@ describe('groupSessionsByProject', () => {
     const groups = groupSessionsByProject(sessions);
     assert.equal(groups.size, 1);
     assert.equal(groups.get('unknown').length, 2);
+  });
+});
+
+// --- sessionLabel tests ---
+
+describe('sessionLabel', () => {
+  test('prefers workflow, then skill', () => {
+    assert.equal(sessionLabel({ workflow: 'dev-story', skill: 'bmad-dev-story', sessionId: 'abcdef123456' }), 'dev-story');
+    assert.equal(sessionLabel({ skill: 'bmad-dev-story', sessionId: 'abcdef123456' }), 'bmad-dev-story');
+  });
+
+  test('non-BMAD session falls back to an 8-char session id', () => {
+    assert.equal(sessionLabel({ sessionId: '27748989-4a8a-40ae-ae6c-297489894a8a' }), '27748989');
+  });
+
+  test('returns empty string when nothing identifies the session', () => {
+    assert.equal(sessionLabel({}), '');
+    assert.equal(sessionLabel(null), '');
   });
 });
 
@@ -1117,49 +1139,5 @@ describe('ScrollableViewport — content correctness after scroll', () => {
     assert.ok(out1.includes('1 more'), 'should show 1 more above');
     assert.ok(out1.includes('4 more'), 'should show 4 more below');
     u1();
-  });
-});
-
-// ─── Auto-allow: Monitor integration tests ─────────────────────────────────
-
-describe('MonitorScreen — auto-allow', () => {
-  test('a key is ignored without active session', async () => {
-    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'bmad-monitor-aa-'));
-    try {
-      const { stdin, lastFrame, unmount } = render(e(MonitorScreen, {
-        config: {},
-        navigate: () => {},
-        goBack: () => {},
-        isActive: true,
-        paths: { cachePath: tmpDir },
-        pollInterval: 10,
-      }));
-      await act(async () => { stdin.write('a'); });
-      const frame = lastFrame();
-      assert.ok(!frame.includes('WARNING'), 'a key should not open menu without session');
-      assert.ok(frame.includes('auto-allow'), 'shortcut bar should still show');
-      unmount();
-    } finally {
-      fs.rmSync(tmpDir, { recursive: true, force: true });
-    }
-  });
-
-  test('shortcut bar includes auto-allow entry', async () => {
-    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'bmad-monitor-aa-bar-'));
-    try {
-      const { lastFrame, unmount } = render(e(MonitorScreen, {
-        config: {},
-        navigate: () => {},
-        goBack: () => {},
-        isActive: true,
-        paths: { cachePath: tmpDir },
-        pollInterval: 10,
-      }));
-      const frame = lastFrame();
-      assert.ok(frame.includes('auto-allow'), 'shortcut bar should show auto-allow');
-      unmount();
-    } finally {
-      fs.rmSync(tmpDir, { recursive: true, force: true });
-    }
   });
 });

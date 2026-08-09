@@ -28,7 +28,9 @@ export function getHookConfig(hookPath) {
   return {
     hooks: {
       UserPromptSubmit: [
-        { matcher: '(?:bmad|gds|wds)[:-]', hooks: [{ type: 'command', command: cmd }] }
+        // Empty matcher: fires on every prompt, not just bmad ones. Non-BMAD sessions
+        // need it for llm_state=active and for the started_at timer anchor.
+        { matcher: '', hooks: [{ type: 'command', command: cmd }] }
       ],
       PreToolUse: [
         { matcher: '', hooks: [{ type: 'command', command: cmd }] }
