@@ -40,7 +40,7 @@ context: ['_bmad-output/project-context.md']
 | BMAD project (regression) | `cwd` is a subdir of a dir holding `_bmad/` | Unchanged: `cwd` := `bmadRoot`, project from `_bmad/bmm/config.yaml` |
 | Non-BMAD project | no `_bmad/` within 20 levels up | Status file written; `project` = `basename(cwd)`; skill/workflow/story/step null |
 | Non-BMAD prompt | `UserPromptSubmit`, prompt `fix this bug` | `llm_state='active'` + `llm_state_since`; skill fields untouched |
-| Fresh session timer | new session, no prompt yet | `started_at` set at bootstrap → timer renders non-empty |
+| Timer start | first `UserPromptSubmit` of the session | `started_at` set at that prompt; before it, the timer widget renders empty |
 | Monitor listing | status file `skill: null` + live `.alive-{sid}` | Session listed and navigable; tab label = first 8 chars of session id |
 | Missing cwd | `payload.cwd` absent | Silent `process.exit(0)` (unchanged) |
 | Upgrade | settings.json has bmad `UserPromptSubmit` matcher `(?:bmad\|gds\|wds)[:-]` | Rewritten in place to `''`; entry count unchanged |
@@ -49,7 +49,7 @@ context: ['_bmad-output/project-context.md']
 
 ## Code Map
 
-- `src/hook/bmad-hook.js` -- §4 guard (L109-121) → detection; §5b bootstrap (L145-182) gains `started_at`
+- `src/hook/bmad-hook.js` -- §4 guard (L109-121) → detection; `handleUserPrompt` (L225-269) gains the `started_at` anchor
 - `src/defaults.js` -- `getHookConfig()` L30-32, `UserPromptSubmit` matcher
 - `src/install.js` -- `installTarget5()`; the SessionStart `'resume' → ''` block (L196-205) is the precedent to mirror
 - `src/tui/monitor/monitor-utils.js` -- `pollSessions()` L45 skill filter; new `sessionLabel()` export
@@ -60,7 +60,7 @@ context: ['_bmad-output/project-context.md']
 
 **Execution:**
 - [ ] `src/hook/bmad-hook.js` -- §4: on walk-up failure (fs root or depth > 20) break with `foundBmad = false` and keep `cwd = payload.cwd`; assign `cwd = bmadRoot` only when found -- gate becomes detection, BMAD path resolution preserved
-- [ ] `src/hook/bmad-hook.js` -- §5b: set `earlyStatus.started_at` (+ `earlyDirty = true`) when absent -- `formatTimer(null)` returns `''`, so the timer would stay blank in sessions that never run a BMAD skill
+- [ ] `src/hook/bmad-hook.js` -- `handleUserPrompt`: set `status.started_at = now` when absent, before the skill-detection block -- the timer must start at the session's first prompt; `formatTimer(null)` returns `''`, so it would otherwise stay blank in sessions that never run a BMAD skill
 - [ ] `src/defaults.js` -- `UserPromptSubmit` matcher → `''` -- LLM state must go `active` on any prompt, including tool-free replies
 - [ ] `src/install.js` -- in `installTarget5`, before the merge loop, rewrite any bmad-hook `UserPromptSubmit` entry whose matcher is `(?:bmad|gds|wds)[:-]` to `''` -- prevents a duplicate hook entry on upgrade
 - [ ] `src/tui/monitor/monitor-utils.js` -- drop `if (!status.skill) continue`; export `sessionLabel(session)` = `workflow || skill || sessionId.slice(0, 8)` -- lists non-BMAD sessions with a readable tab
@@ -94,7 +94,9 @@ while (!fs.existsSync(path.join(bmadRoot, '_bmad'))) {
 if (foundBmad) cwd = bmadRoot; // else keep payload.cwd — non-BMAD session
 ```
 
-Accepted side effect: in a BMAD project the timer now starts at session bootstrap rather than at the first `/bmad-*` prompt. `handleUserPrompt` still resets `started_at` on skill change, so per-workflow timing is unaffected.
+The timer anchor is `handleUserPrompt`, not §5b bootstrap: `started_at` is filled on the session's first prompt, and the existing skill-change branch (`status.skill !== skillName`) still overwrites it when a BMAD workflow starts. BMAD timing is therefore byte-for-byte unchanged — a `/bmad-dev-story` prompt resets `started_at` whether or not an earlier plain prompt set it first.
+
+This makes the matcher widening load-bearing: with the old `(?:bmad|gds|wds)[:-]` matcher, `handleUserPrompt` never fires outside BMAD and `started_at` would stay null forever.
 
 ## Verification
 
