@@ -3,12 +3,12 @@
 import { SEPARATOR_VALUES } from '../defaults.js';
 
 const INDIVIDUAL_WIDGETS = [
-  { id: 'bmad-llmstate',    command: 'llmstate',    name: 'LLM State',     hint: 'LLM needs attention signal',           defaultEnabled: true,  defaultColor: null,         defaultMode: 'dynamic' },
+  { id: 'bmad-llmstate',    command: 'llmstate',    name: 'LLM State',     hint: 'LLM needs attention signal',           defaultEnabled: false, defaultColor: null,         defaultMode: 'dynamic' },
   { id: 'bmad-project',      command: 'project',      name: 'Project',       hint: 'Name from BMAD config.yaml',           defaultEnabled: true,  defaultColor: null,         defaultMode: 'dynamic' },
   { id: 'bmad-workflow',     command: 'workflow',     name: 'Initial Skill', hint: 'Skill invoked by user prompt',         defaultEnabled: true,  defaultColor: null,         defaultMode: 'dynamic' },
   { id: 'bmad-activeskill', command: 'activeskill', name: 'Active Skill',  hint: 'Skill actually running',               defaultEnabled: true,  defaultColor: null,         defaultMode: 'dynamic' },
   { id: 'bmad-story',        command: 'story',        name: 'Story',         hint: 'create-story, dev-story, code-review', defaultEnabled: true,  defaultColor: 'magenta',    defaultMode: 'fixed' },
-  { id: 'bmad-docname',      command: 'docname',      name: 'Document',      hint: 'File being worked on in output folders', defaultEnabled: false, defaultColor: 'brightYellow', defaultMode: 'fixed' },
+  { id: 'bmad-docname',      command: 'docname',      name: 'Document',      hint: 'File being worked on in output folders', defaultEnabled: true,  defaultColor: 'brightYellow', defaultMode: 'fixed' },
   { id: 'bmad-progressstep', command: 'progressstep', name: 'Step',          hint: 'Skills with BMAD /step format only',   defaultEnabled: true,  defaultColor: 'brightCyan', defaultMode: 'fixed' },
   { id: 'bmad-nextstep',     command: 'nextstep',     name: 'Next Step',     hint: 'Skills with BMAD /step format only',   defaultEnabled: false, defaultColor: 'yellow',     defaultMode: 'fixed' },
   { id: 'bmad-fileread',     command: 'fileread',     name: 'File Read',     hint: 'Last file read by LLM',                  defaultEnabled: false, defaultColor: 'cyan',        defaultMode: 'fixed' },
@@ -33,22 +33,24 @@ export function getIndividualWidgets() {
 export function createDefaultConfig() {
   const allIds = INDIVIDUAL_WIDGETS.map(w => w.id);
   const widgets = INDIVIDUAL_WIDGETS.filter(w => w.defaultEnabled);
-  const widgetsLine1 = widgets.filter(w => w.id !== 'bmad-llmstate' && w.id !== 'bmad-contextpct');
+  // contextpct is default-enabled but segregated onto its own line (line 2) below.
+  const widgetsLine0 = widgets.filter(w => w.id !== 'bmad-contextpct');
   const colorModes = {};
   for (const w of widgets) {
     colorModes[w.id] = w.defaultMode === 'dynamic'
       ? { mode: 'dynamic' }
       : { mode: 'fixed', fixedColor: w.defaultColor };
   }
-  const colorModesLine1 = { ...colorModes };
-  delete colorModesLine1['bmad-llmstate'];
-  delete colorModesLine1['bmad-contextpct'];
+  const colorModesLine0 = { ...colorModes };
+  delete colorModesLine0['bmad-contextpct'];
   return {
     separator: 'modere',
     customSeparator: null,
     lines: [
-      { widgets: widgetsLine1.map(w => w.id), widgetOrder: [...allIds], colorModes: colorModesLine1 },
-      { widgets: ['bmad-llmstate', 'bmad-weeklyusage'], widgetOrder: [...allIds], colorModes: { 'bmad-llmstate': { mode: 'dynamic' }, 'bmad-weeklyusage': { mode: 'dynamic', displayMode: 'extended' } } },
+      { widgets: widgetsLine0.map(w => w.id), widgetOrder: [...allIds], colorModes: colorModesLine0 },
+      // llmstate is hidden by default but keeps a colorMode so its color survives a
+      // show/hide cycle — the schema explicitly allows colorModes for hidden widgets.
+      { widgets: ['bmad-weeklyusage'], widgetOrder: [...allIds], colorModes: { 'bmad-llmstate': { mode: 'dynamic' }, 'bmad-weeklyusage': { mode: 'dynamic', displayMode: 'extended' } } },
       { widgets: ['bmad-contextpct'], widgetOrder: [...allIds], colorModes: { 'bmad-contextpct': { mode: 'dynamic', thresholdLow: 0, thresholdHigh: 100, displayMode: 'compact' } } },
     ],
     skillColors: {},

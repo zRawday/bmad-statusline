@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { getStatusLineConfig, getWidgetDefinitions, getHookConfig } from './defaults.js';
+import { getStatusLineConfig, getWidgetDefinitions, getHookConfig, getCcstatuslineSeedLines } from './defaults.js';
 import { DEPLOY_FILES, getPackageVersion, VERSION_STAMP } from './deploy.js';
 import { createDefaultConfig } from './tui/widget-registry.js';
 import { G, R, D, B, _, logSuccess, logSkipped, logError, logSection, readJsonFile, backupFile, writeJsonSafe } from './cli-utils.js';
@@ -71,7 +71,9 @@ function installTarget2(paths) {
     if (fs.existsSync(paths.ccstatuslineSettings)) {
       config = readJsonFile(paths.ccstatuslineSettings);
     } else {
-      config = { version: 3, lines: [[], [], []] };
+      // Fresh config only — seed ccstatusline's own widgets so a first install
+      // reproduces the reference layout instead of three bare bmad composites.
+      config = { version: 3, lines: getCcstatuslineSeedLines() };
     }
 
     // Ensure lines array exists

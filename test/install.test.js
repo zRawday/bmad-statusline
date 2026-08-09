@@ -145,6 +145,40 @@ describe('Target 2: ccstatusline settings.json', () => {
     } finally { teardown(baseDir); }
   });
 
+  it('seeds the reference ccstatusline layout on a fresh config', () => {
+    const { baseDir, paths } = setup();
+    try {
+      captureOutput(() => install(paths));
+      const config = JSON.parse(fs.readFileSync(paths.ccstatuslineSettings, 'utf8'));
+      const types = config.lines.map(l => l.map(w => w.type));
+      assert.deepEqual(types[0], ['custom-command'], 'line 0: bmad composite only');
+      assert.deepEqual(types[1], ['model', 'separator', 'thinking-effort', 'separator', 'custom-command'],
+        'line 1: ccstatusline widgets left of the bmad composite');
+      assert.deepEqual(types[2], ['tokens-total', 'separator', 'custom-command'],
+        'line 2: tokens-total left of the bmad composite');
+      // Seeded widgets must not carry the bmad- prefix, or cleanup/uninstall would eat them
+      const seeded = config.lines.flat().filter(w => w.type !== 'custom-command');
+      assert.ok(seeded.every(w => !w.id.startsWith('bmad-')), 'seeded ids are user-owned UUIDs');
+      assert.equal(new Set(seeded.map(w => w.id)).size, seeded.length, 'seeded ids are unique');
+      // Only `lines` is seeded — ccstatusline's own display defaults stay unset
+      assert.deepEqual(Object.keys(config).sort(), ['lines', 'version']);
+    } finally { teardown(baseDir); }
+  });
+
+  it('never seeds into an existing ccstatusline config', () => {
+    const { baseDir, paths } = setup();
+    try {
+      const userConfig = { version: 3, lines: [[], [], []] };
+      fs.mkdirSync(paths.ccstatuslineDir, { recursive: true });
+      fs.writeFileSync(paths.ccstatuslineSettings, JSON.stringify(userConfig, null, 2));
+      captureOutput(() => install(paths));
+      const config = JSON.parse(fs.readFileSync(paths.ccstatuslineSettings, 'utf8'));
+      const nonBmad = config.lines.flat().filter(w => w.type !== 'custom-command');
+      assert.equal(nonBmad.length, 0, 'an existing layout is never seeded into');
+      assert.equal(config.lines.flat().length, 3, 'only the 3 bmad composites added');
+    } finally { teardown(baseDir); }
+  });
+
   it('preserves existing user widgets on other lines', () => {
     const { baseDir, paths } = setup();
     try {

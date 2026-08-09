@@ -3,29 +3,121 @@
   "customSeparator": null,
   "lines": [
     {
-      "widgets": ["bmad-project", "bmad-workflow", "bmad-activeskill", "bmad-story", "bmad-progressstep", "bmad-timer"],
-      "widgetOrder": ["bmad-llmstate", "bmad-project", "bmad-workflow", "bmad-activeskill", "bmad-story", "bmad-docname", "bmad-progressstep", "bmad-nextstep", "bmad-fileread", "bmad-filewrite", "bmad-contextpct", "bmad-timer", "bmad-weeklyusage"],
+      "widgets": [
+        "bmad-project",
+        "bmad-workflow",
+        "bmad-activeskill",
+        "bmad-story",
+        "bmad-docname",
+        "bmad-progressstep",
+        "bmad-timer"
+      ],
+      "widgetOrder": [
+        "bmad-llmstate",
+        "bmad-project",
+        "bmad-workflow",
+        "bmad-activeskill",
+        "bmad-story",
+        "bmad-docname",
+        "bmad-progressstep",
+        "bmad-nextstep",
+        "bmad-fileread",
+        "bmad-filewrite",
+        "bmad-contextpct",
+        "bmad-timer",
+        "bmad-weeklyusage"
+      ],
       "colorModes": {
-        "bmad-project": { "mode": "dynamic" },
-        "bmad-workflow": { "mode": "dynamic" },
-        "bmad-activeskill": { "mode": "dynamic" },
-        "bmad-story": { "mode": "fixed", "fixedColor": "magenta" },
-        "bmad-progressstep": { "mode": "fixed", "fixedColor": "brightCyan" },
-        "bmad-timer": { "mode": "fixed", "fixedColor": "brightBlack" }
+        "bmad-project": {
+          "mode": "dynamic"
+        },
+        "bmad-workflow": {
+          "mode": "dynamic"
+        },
+        "bmad-activeskill": {
+          "mode": "dynamic"
+        },
+        "bmad-story": {
+          "mode": "fixed",
+          "fixedColor": "magenta"
+        },
+        "bmad-docname": {
+          "mode": "fixed",
+          "fixedColor": "brightYellow"
+        },
+        "bmad-progressstep": {
+          "mode": "fixed",
+          "fixedColor": "brightCyan"
+        },
+        "bmad-timer": {
+          "mode": "fixed",
+          "fixedColor": "brightBlack"
+        }
       }
     },
     {
-      "widgets": ["bmad-llmstate", "bmad-weeklyusage"],
-      "widgetOrder": ["bmad-llmstate", "bmad-project", "bmad-workflow", "bmad-activeskill", "bmad-story", "bmad-docname", "bmad-progressstep", "bmad-nextstep", "bmad-fileread", "bmad-filewrite", "bmad-contextpct", "bmad-timer", "bmad-weeklyusage"],
-      "colorModes": { "bmad-llmstate": { "mode": "dynamic" }, "bmad-weeklyusage": { "mode": "dynamic", "displayMode": "extended" } }
+      "widgets": [
+        "bmad-weeklyusage"
+      ],
+      "widgetOrder": [
+        "bmad-llmstate",
+        "bmad-project",
+        "bmad-workflow",
+        "bmad-activeskill",
+        "bmad-story",
+        "bmad-docname",
+        "bmad-progressstep",
+        "bmad-nextstep",
+        "bmad-fileread",
+        "bmad-filewrite",
+        "bmad-contextpct",
+        "bmad-timer",
+        "bmad-weeklyusage"
+      ],
+      "colorModes": {
+        "bmad-llmstate": {
+          "mode": "dynamic"
+        },
+        "bmad-weeklyusage": {
+          "mode": "dynamic",
+          "displayMode": "extended"
+        }
+      }
     },
     {
-      "widgets": ["bmad-contextpct"],
-      "widgetOrder": ["bmad-llmstate", "bmad-project", "bmad-workflow", "bmad-activeskill", "bmad-story", "bmad-docname", "bmad-progressstep", "bmad-nextstep", "bmad-fileread", "bmad-filewrite", "bmad-contextpct", "bmad-timer", "bmad-weeklyusage"],
-      "colorModes": { "bmad-contextpct": { "mode": "dynamic", "thresholdLow": 0, "thresholdHigh": 100, "displayMode": "compact" } }
+      "widgets": [
+        "bmad-contextpct"
+      ],
+      "widgetOrder": [
+        "bmad-llmstate",
+        "bmad-project",
+        "bmad-workflow",
+        "bmad-activeskill",
+        "bmad-story",
+        "bmad-docname",
+        "bmad-progressstep",
+        "bmad-nextstep",
+        "bmad-fileread",
+        "bmad-filewrite",
+        "bmad-contextpct",
+        "bmad-timer",
+        "bmad-weeklyusage"
+      ],
+      "colorModes": {
+        "bmad-contextpct": {
+          "mode": "dynamic",
+          "thresholdLow": 0,
+          "thresholdHigh": 100,
+          "displayMode": "compact"
+        }
+      }
     }
   ],
   "skillColors": {},
   "projectColors": {},
-  "presets": [null, null, null]
+  "presets": [
+    null,
+    null,
+    null
+  ]
 }

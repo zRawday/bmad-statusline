@@ -60,7 +60,11 @@ describe('EditLineScreen', () => {
 
   test('h key toggles visibility — hide a visible widget', async () => {
     let updatedCfg = null;
+    // llmstate is hidden by default; make it visible on line 1 so this exercises hiding
+    const config = createDefaultConfig();
+    config.lines[1].widgets = ['bmad-llmstate', ...config.lines[1].widgets];
     const props = makeScreenProps({
+      config,
       editingLine: 1,
       updateConfig: (mutator) => {
         const cfg = structuredClone(props.config);
@@ -69,7 +73,7 @@ describe('EditLineScreen', () => {
       },
     });
     const { stdin, unmount } = render(e(EditLineScreen, props));
-    // First widget in widgetOrder is bmad-llmstate, visible on line 1 — press h to hide
+    // First widget in widgetOrder is bmad-llmstate, now visible on line 1 — press h to hide
     await act(async () => { stdin.write('h'); });
     assert.ok(updatedCfg, 'updateConfig was called');
     assert.ok(!updatedCfg.lines[1].widgets.includes('bmad-llmstate'), 'widget removed from line');

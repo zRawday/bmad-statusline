@@ -293,7 +293,10 @@ describe('reader color output', () => {
 
   it('line 1: llmstate-only line renders llm state (AC #2)', () => {
     const configDir = fs.mkdtempSync(path.join(os.tmpdir(), 'bmad-cfg-'));
-    fs.copyFileSync(FIXTURE_CONFIG_PATH, path.join(configDir, 'config.json'));
+    // llmstate ships hidden — put it on line 1 explicitly to exercise the widget
+    const cfg = JSON.parse(fs.readFileSync(FIXTURE_CONFIG_PATH, 'utf8'));
+    cfg.lines[1].widgets = ['bmad-llmstate'];
+    fs.writeFileSync(path.join(configDir, 'config.json'), JSON.stringify(cfg, null, 2));
     writeStatus('line2', { project: 'Toulou' });
     const result = execReaderWithConfig('line 1', 'line2', configDir);
     assert.ok(result.includes('WAITING'), 'line 1 should render llmstate');

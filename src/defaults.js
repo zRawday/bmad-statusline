@@ -1,5 +1,6 @@
 // defaults.js — Config templates and color maps
 
+import { randomUUID } from 'node:crypto';
 import { createRequire } from 'node:module';
 const _require = createRequire(import.meta.url);
 const _wc = _require('./reader/workflow-colors.cjs');
@@ -11,6 +12,23 @@ export function getStatusLineConfig() {
     command: 'npx -y ccstatusline@latest',
     padding: 0
   };
+}
+
+// Seed layout for a BRAND-NEW ccstatusline config only — never applied to one that
+// already exists, which would inject widgets into a layout the user owns. Places
+// ccstatusline's own widgets left of where bmad-line-1/2 get appended, so a fresh
+// install reproduces the reference three-line setup. Ids are random UUIDs (the shape
+// ccstatusline itself generates) so our cleanup and uninstall passes, which key on the
+// `bmad-` prefix, leave them alone — they belong to the user from the moment they land.
+// Only `lines` is seeded: ccstatusline's global display settings stay unset so its own
+// defaults apply and can evolve.
+export function getCcstatuslineSeedLines() {
+  const w = type => ({ id: randomUUID(), type });
+  return [
+    [],
+    [w('model'), w('separator'), w('thinking-effort'), w('separator')],
+    [w('tokens-total'), w('separator')],
+  ];
 }
 
 export function getWidgetDefinitions(readerPath) {

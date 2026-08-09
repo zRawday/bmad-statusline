@@ -651,12 +651,12 @@ Read by: Reader (for `line N` command) and TUI (on launch)
 
 | Widget ID | Command | Name | Default Enabled | Default Color | Default Mode |
 |-----------|---------|------|----------------|---------------|-------------|
-| `bmad-llmstate` | `llmstate` | LLM State | true (line 1) | — | dynamic |
+| `bmad-llmstate` | `llmstate` | LLM State | **false** | — | dynamic |
 | `bmad-project` | `project` | Project | true | — | dynamic |
 | `bmad-workflow` | `workflow` | Initial Skill | true | — | dynamic |
 | `bmad-activeskill` | `activeskill` | Active Skill | **true** | — | dynamic |
 | `bmad-story` | `story` | Story | true | magenta | fixed |
-| `bmad-docname` | `docname` | Document | false | brightYellow | fixed |
+| `bmad-docname` | `docname` | Document | **true** | brightYellow | fixed |
 | `bmad-progressstep` | `progressstep` | Step | true | brightCyan | fixed |
 | `bmad-nextstep` | `nextstep` | Next Step | false | yellow | fixed |
 | `bmad-fileread` | `fileread` | File Read | false | cyan | fixed |
@@ -665,7 +665,7 @@ Read by: Reader (for `line N` command) and TUI (on launch)
 | `bmad-timer` | `timer` | Timer | true | brightBlack | fixed |
 | `bmad-weeklyusage` | `weeklyusage` | Weekly Usage | false (**default on line 1, extended**) | — | dynamic |
 
-Default layout (`createDefaultConfig()`): Line 0 = all default-enabled widgets **except** `bmad-llmstate` and `bmad-contextpct` (= [project, workflow, activeskill, story, progressstep, timer]). Line 1 = [llmstate, weeklyusage] (weeklyusage colorMode `{ mode: 'dynamic', displayMode: 'extended' }`). Line 2 = [contextpct] (colorMode `{ mode: 'dynamic', thresholdLow: 0, thresholdHigh: 100, displayMode: 'compact' }`). `bmad-llmstate` and `bmad-contextpct` are deliberately segregated onto their own lines. `bmad-weeklyusage` keeps `defaultEnabled: false` (so it is **not** auto-added to line 0) but is placed on **line 1 by default** in **extended** mode via the hardcoded line-1 object — the same mechanism `bmad-contextpct` uses for line 2. It remains selectable via `widgetOrder` and can be moved to any line by the user.
+Default layout (`createDefaultConfig()`) — mirrors the reference setup, do not change casually: Line 0 = all default-enabled widgets **except** `bmad-contextpct` (= [project, workflow, activeskill, story, docname, progressstep, timer]). Line 1 = [weeklyusage] (colorMode `{ mode: 'dynamic', displayMode: 'extended' }`, plus a preserved `bmad-llmstate` colorMode though it is hidden). Line 2 = [contextpct] (colorMode `{ mode: 'dynamic', thresholdLow: 0, thresholdHigh: 100, displayMode: 'compact' }`). `bmad-contextpct` is segregated onto its own line via the hardcoded line-2 object; `bmad-weeklyusage` keeps `defaultEnabled: false` (so it is **not** auto-added to line 0) and is placed on **line 1** by the same mechanism. `bmad-llmstate` ships **hidden** (`defaultEnabled: false`) — the LLM state is already conveyed by Claude Code itself; it stays selectable via `widgetOrder`.
 
 **Intentional asymmetry (Rev.7 — deliberate, not a bug):** the `bmad-weeklyusage` **statusline widget** renders only inside a tracked session — the `line N` reader returns `''` when there is no `status-<sid>.json` for the session (consistent with every other widget). The hook now tracks every session, BMAD or not, so in practice this only blanks the widget in the window before the session's first hook event. But the **TUI "Weekly usage" screen** works anywhere, because the reader calls `persistUsageSnapshot(stdin)` to write the account-global `weekly-usage.json` **before** the `line N` no-status early-return (`bmad-sl-reader.js:261`). Do not "fix" the widget to render outside a session, and do not move the snapshot write after the early-return.
 
@@ -1149,7 +1149,7 @@ _27 test files as of v1.2.1._
 | # | Target | Behavior |
 |---|--------|----------|
 | 1 | `~/.claude/settings.json` statusLine | Add config if absent, skip if present |
-| 2 | `~/.config/ccstatusline/settings.json` widgets | Inject `bmad-line-0`, `bmad-line-1`, `bmad-line-2` |
+| 2 | `~/.config/ccstatusline/settings.json` widgets | Inject `bmad-line-0/1/2`. On a **brand-new** config only, first seed `getCcstatuslineSeedLines()` (model + thinking-effort on line 1, tokens-total on line 2, with separators) so a fresh install reproduces the reference layout. **Never** seed into an existing config — that layout belongs to the user. Seeded ids are `randomUUID()`, never `bmad-`-prefixed, so the v1-cleanup and uninstall passes leave them alone. Only `lines` is seeded; ccstatusline's global display settings stay unset so its own defaults apply. |
 | 3 | `~/.config/bmad-statusline/bmad-sl-reader.js` | **Always overwrite** (deploy latest) |
 | 4 | `~/.config/bmad-statusline/shared-constants.cjs` | **Always overwrite** (deploy latest) |
 | 5 | `~/.config/bmad-statusline/workflow-colors.cjs` | **Always overwrite** (deploy latest) |
