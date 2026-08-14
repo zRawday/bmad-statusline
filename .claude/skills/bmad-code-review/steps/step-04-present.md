@@ -1,6 +1,5 @@
 ---
 deferred_work_file: '{implementation_artifacts}/deferred-work.md'
-tests_passed: true # set at runtime during patch application
 ---
 
 # Step 4: Present and Act
@@ -8,7 +7,7 @@ tests_passed: true # set at runtime during patch application
 ## RULES
 
 - YOU MUST ALWAYS SPEAK OUTPUT in your Agent communication style with the config `{communication_language}`
-- When `{spec_file}` is set, always write findings to the story file before applying patches.
+- When `{spec_file}` is set, always write findings to the story file before offering action choices.
 - `decision-needed` findings must be resolved before handling `patch` findings.
 
 ## INSTRUCTIONS
@@ -43,29 +42,41 @@ Otherwise add: `Findings are listed above. No story file was provided, so nothin
 
 ### 4. Resolve decision-needed findings
 
-If `decision_needed` findings exist, classify each as **technical** or **non-technical**:
+If `decision_needed` findings exist, present each one with its detail and the options available. The user must decide — the correct fix is ambiguous without their input. Walk through each finding (or batch related ones) and get the user's call. Once resolved, each becomes a `patch`, `defer`, or is dismissed.
 
-- **Technical** (code style, architecture choice, implementation approach, library selection, error handling strategy, naming, performance optimization): resolve autonomously using expert judgment. Convert to `patch` (if fixable) or `defer` (if pre-existing). Log the decision rationale in the finding detail.
-- **Non-technical** (product behavior, business logic ambiguity, UX intent, feature scope, user-facing text, data model semantics): **HALT** and present the finding with clear options in `{communication_language}`, explained simply for a non-technical audience. Wait for user input. Once resolved, convert to `patch`, `defer`, or dismiss.
+If the user chooses to defer, ask: Quick one-line reason for deferring this item? (helps future reviews): — then append that reason to both the story file bullet and the `{deferred_work_file}` entry.
 
-If the user chooses to defer a non-technical finding, ask for a one-line reason, then append it to both the story file bullet and `{deferred_work_file}`.
+**HALT** — I am waiting for your numbered choice. Reply with only the number. Do not proceed until you select an option.
 
 ### 5. Handle `patch` findings
 
-If `patch` findings exist (including any promoted from step 4), apply all fixes automatically:
+If `patch` findings exist (including any resolved from step 4), HALT. Ask the user:
 
-1. Apply each patch fix in sequence.
-2. After all patches are applied, run the project's test suite to verify no regressions.
-3. If tests pass: check off patched items in the story file (if `{spec_file}` is set). Set `{tests_passed}` = `true`.
-4. If tests fail: revert the last patch, log the failure, and reclassify that finding as `defer`. Re-run tests to confirm green. Set `{tests_passed}` accordingly.
-5. Present a summary of changes made, any patches that were reverted, and test results.
+If `{spec_file}` is set, present all three options:
 
-If no `patch` findings exist, set `{tests_passed}` = `true`.
+> **How would you like to handle the `<P>` `patch` findings?**
+> 1. **Apply every patch** — fix all of them now, no per-finding confirmation. Defer and decision-needed items are not touched.
+> 2. **Leave as action items** — they are already in the story file
+> 3. **Walk through each patch** — show details for each before deciding
+
+If `{spec_file}` is **not** set, present only options 1 and 2 (omit "Leave as action items" — findings were not written to a file):
+
+> **How would you like to handle the `<P>` `patch` findings?**
+> 1. **Apply every patch** — fix all of them now, no per-finding confirmation. Defer and decision-needed items are not touched.
+> 2. **Walk through each patch** — show details for each before deciding
+
+**HALT** — I am waiting for your numbered choice. Reply with only the number. Do not proceed until you select an option.
+
+- **Apply every patch**: Apply every patch finding without per-finding confirmation. Do not modify defer or decision-needed items. After all patches are applied, present a summary of changes made. If `{spec_file}` is set, check off the patch items in the story file (leave defer items as-is).
+- **Leave as action items** (only when `{spec_file}` is set): Done — findings are already written to the story.
+- **Walk through each patch**: Present each finding with full detail, diff context, and suggested fix. After walkthrough, re-offer the applicable options above.
+
+  **HALT** — I am waiting for your numbered choice. Do not proceed until you select an option.
 
 **✅ Code review actions complete**
 
 - Decision-needed resolved: <D>
-- Patches applied: <P>
+- Patches handled: <P>
 - Deferred: <W>
 - Dismissed: <R>
 
@@ -75,7 +86,7 @@ Skip this section if `{spec_file}` is not set.
 
 #### Determine new status based on review outcome
 
-- If all `decision-needed` and `patch` findings were resolved (fixed or dismissed) AND no unresolved HIGH/MEDIUM issues remain: set `{new_status}` = `done`. Update the story file Status section to `done`.
+- If all `decision-needed` and `patch` findings were resolved (fixed or dismissed) AND no unresolved `high`/`medium` findings remain: set `{new_status}` = `done`. Update the story file Status section to `done`.
 - If `patch` findings were left as action items, or unresolved issues remain: set `{new_status}` = `in-progress`. Update the story file Status section to `in-progress`.
 
 Save the story file.
@@ -84,17 +95,14 @@ Save the story file.
 
 If `{story_key}` is not set, skip this subsection and note that sprint status was not synced because no story key was available.
 
-If sprint status file exists at `{sprint_status}`:
+If `{sprint_status}` file exists:
 
-1. Read `{sprint_status}`.
+1. Load the FULL `{sprint_status}` file.
 2. Find the `development_status` entry matching `{story_key}`.
-3. If found: modify ONLY the line for `{story_key}` to `{new_status}`. Update `last_updated` to current date. Save the file, preserving ALL comments and structure including STATUS DEFINITIONS.
-4. Run `git add {sprint_status}`.
-5. Run `git commit -m "update sprint-status: {story_key} → {new_status}"`.
-   - If commit fails with `index.lock` error: retry up to 3 times with backoff (200ms, 400ms, 800ms). If all retries fail, warn that sprint-status update could not be committed.
-6. If `{story_key}` not found in sprint status: warn the user that the story file was updated but sprint-status sync failed.
+3. If found: update `development_status[{story_key}]` to `{new_status}`. Update `last_updated` to current date. Save the file, preserving ALL comments and structure including STATUS DEFINITIONS.
+4. If `{story_key}` not found in sprint status: warn the user that the story file was updated but sprint-status sync failed.
 
-If sprint status file does not exist at `{sprint_status}`, note that story status was updated in the story file only.
+If `{sprint_status}` file does not exist, note that story status was updated in the story file only.
 
 #### Completion summary
 
@@ -106,6 +114,19 @@ If sprint status file does not exist at `{sprint_status}`, note that story statu
 > **Deferred:** <W>
 > **Dismissed:** <R>
 
-## NEXT
+### 7. Next steps
 
-Read fully and follow `./step-05-commit.md`
+Present the user with follow-up options:
+
+> **What would you like to do next?**
+> 1. **Start the next story** — run `dev-story` to pick up the next `ready-for-dev` story
+> 2. **Re-run code review** — address findings and review again
+> 3. **Done** — end the workflow
+
+**HALT** — I am waiting for your choice. Do not proceed until the user selects an option.
+
+## On Complete
+
+Run: `uv run {project-root}/_bmad/scripts/resolve_customization.py --skill {skill-root} --key workflow.on_complete`
+
+If the resolved `workflow.on_complete` is non-empty, follow it as the final terminal instruction before exiting.

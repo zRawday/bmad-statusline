@@ -9,10 +9,16 @@ const WORKFLOW_COLORS = {
   'quick-dev': '\x1b[36m',
   'quick-dev-new-preview': '\x1b[36m',
   'quick-spec': '\x1b[36m',
+  'build': '\x1b[36m',
+  'build-auto': '\x1b[36m',
+  'dev-auto': '\x1b[36m',
+  'checkpoint-preview': '\x1b[36m',
   // Review (brightRed)
   'code-review': '\x1b[91m',
   'review-adversarial-general': '\x1b[91m',
   'review-edge-case-hunter': '\x1b[91m',
+  'review': '\x1b[91m',
+  'review-verification-gap': '\x1b[91m',
   // Planning (green)
   'sprint-planning': '\x1b[32m',
   'sprint-status': '\x1b[32m',
@@ -28,22 +34,25 @@ const WORKFLOW_COLORS = {
   'product-brief': '\x1b[33m',
   'create-game-brief': '\x1b[33m',
   'create-gdd': '\x1b[33m',
+  'prd': '\x1b[33m',
+  'prfaq': '\x1b[33m',
+  'spec': '\x1b[33m',
   // Architecture (magenta)
   'create-architecture': '\x1b[35m',
   'create-ux-design': '\x1b[35m',
   'game-architecture': '\x1b[35m',
+  'architecture': '\x1b[35m',
+  'ux': '\x1b[35m',
   // Research (blue)
   'domain-research': '\x1b[34m',
   'technical-research': '\x1b[34m',
   'market-research': '\x1b[34m',
+  'deep-recon': '\x1b[34m',
   // Agents — BMM (role-colored)
   'agent-analyst': '\x1b[34m',
   'agent-architect': '\x1b[35m',
   'agent-dev': '\x1b[36m',
   'agent-pm': '\x1b[33m',
-  'agent-qa': '\x1b[31m',
-  'agent-quick-flow-solo-dev': '\x1b[96m',
-  'agent-sm': '\x1b[32m',
   'agent-ux-designer': '\x1b[95m',
   // Agents — GDS
   'agent-game-architect': '\x1b[35m',
@@ -59,10 +68,11 @@ const WORKFLOW_COLORS = {
   'brainstorm-game': '\x1b[93m',
   'create-narrative': '\x1b[93m',
   'playtest-plan': '\x1b[93m',
+  'forge-idea': '\x1b[93m',
   // Documentation (brightGreen)
   'document-project': '\x1b[92m',
   'generate-project-context': '\x1b[92m',
-  'index-docs': '\x1b[92m',
+  'project-context': '\x1b[92m',
   // Quality / Test (red)
   'tea': '\x1b[31m',
   'teach-me-testing': '\x1b[31m',
@@ -87,7 +97,8 @@ const WORKFLOW_COLORS = {
   'agent-saga-analyst': '\x1b[94m',
   // Builder (brightCyan)
   'agent-builder': '\x1b[96m',
-  'builder-setup': '\x1b[96m',
+  'bmb-setup': '\x1b[96m',
+  'eval-runner': '\x1b[96m',
   'module-builder': '\x1b[96m',
   'workflow-builder': '\x1b[96m',
 };
