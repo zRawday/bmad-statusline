@@ -19,7 +19,7 @@ Custom widget pack for [ccstatusline](https://github.com/sirmalloc/ccstatusline)
 - **Interactive TUI configurator** — full visual editor to customize the display, colors, separators, and widget order
 - **13 configurable widgets across 3 lines** — LLM State, Project, Initial Skill, Active Skill, Story, Step, Next Step, Document, File Read, File Write/Edit, Context %, Timer, Weekly Usage
 - **Semantic colors** — each workflow and project has its own color (cyan = dev, green = planning, yellow = product, magenta = architecture…), individually customizable
-- **Real-time Monitor** — built-in multi-session dashboard to follow all active BMAD sessions live, with file read/write/edit history, command tracking, and auto-allow permission control (see [Monitor](#monitor) section)
+- **Real-time Monitor** — built-in multi-session dashboard to follow all active BMAD sessions live, with file read/write/edit history, command tracking, and auto-allow permission control for a fixed list of non-interactive tools (see [Monitor](#monitor) section)
 - **Presets** — 3 slots to save and load complete layouts
 - **Full workflow catalog recognition** — BMAD, GDS, WDS, CIS, and TEA compatibility, with semantic colors for every known workflow
 
@@ -152,12 +152,14 @@ Merged timeline view of all operations (reads, writes, edits, bash commands):
 
 ### Auto-Allow
 
-Toggle automatic permission approval per-session or globally, directly from the Monitor (`a` key). When enabled, permission prompts are approved automatically — sessions can proceed unattended without waiting for manual confirmation.
+Toggle automatic permission approval per-session or globally, directly from the Monitor (`a` key). When enabled, permission requests for a fixed list of tools are approved automatically — sessions can proceed unattended without waiting for manual confirmation.
 
+- **Restricted to an allowlist** — only `Bash`, `Read`, `Write`, `Edit`, `Glob`, `Grep`, `WebFetch` and any MCP tool (`mcp__*` prefix) are ever auto-approved. Every other tool — including anything that asks you a question, such as `ExitPlanMode` — still stops and waits for you. The allowlist is hardcoded in the hook and is not configurable.
 - **Per-session toggle** — enable or disable auto-allow for the current session only
-- **Global toggle ("Always")** — enable for all sessions, with per-session override capability
-- **Visual indicator** — `Auto-allow` shown in red on the monitor title line when active
-- **Warning overlay** — the menu clearly warns that tools will execute without human review
+- **Global toggle ("Always")** — enable for all sessions **on the whole machine**, in any directory, with per-session override capability. The allowlist is what keeps that scope safe.
+- **Precedence** — the per-session flag wins (`on` / `off`); with no session flag, the global setting applies; otherwise auto-allow is off
+- **Visual indicator** — `Auto-allow` shown in red on the monitor title line when active for the selected session
+- **Warning overlay** — the menu names the allowlisted tools and warns that they will execute without human review
 
 ### CSV Export
 

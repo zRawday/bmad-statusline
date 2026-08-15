@@ -288,3 +288,111 @@ describe('cleanOrphanedStatusFiles', () => {
     assert.doesNotThrow(() => cleanOrphanedStatusFiles(missingDir));
   });
 });
+
+
+// ─── Auto-allow global flag — App-owned round trip ──────────────────────────
+// Regression guard for the defect where AutoAllowMenu wrote config.json directly:
+// App loads the config at startup and full-replaces the file on quit, so the direct
+// write was silently undone. The disabling direction is the dangerous one — the user
+// believes machine-wide auto-approval is off while the hook keeps allowing.
+
+describe('App — auto-allow global flag persistence', () => {
+  function seedSession(cacheDir, id) {
+    fs.writeFileSync(path.join(cacheDir, '.alive-' + id), '');
+    fs.writeFileSync(path.join(cacheDir, 'status-' + id + '.json'), JSON.stringify({
+      skill: 'bmad-dev', project: 'alpha', workflow: 'dev-story',
+      updated_at: new Date().toISOString(), llm_state: 'active',
+    }));
+  }
+
+  // Drives the real App: Home -> Monitor -> auto-allow menu -> toggle Always ->
+  // Esc (close menu) -> Esc (back Home) -> q (quit, which full-replaces config.json).
+  async function toggleAlwaysAndQuit(paths, cacheDir) {
+    const prevCache = process.env.BMAD_CACHE_DIR;
+    process.env.BMAD_CACHE_DIR = cacheDir;
+    try {
+      const { stdin, lastFrame, unmount } = render(e(App, { paths }));
+      // unmount in finally: MonitorScreen polls on an interval, so an assertion
+      // failure here would otherwise hang the test runner instead of reporting.
+      try {
+        await act(async () => { stdin.write('\r'); });          // Enter on "Monitor"
+        await act(async () => {});                              // let polling land
+        assert.ok(lastFrame().includes('MONITOR'), 'monitor screen open');
+
+        await act(async () => { stdin.write('a'); });            // open auto-allow menu
+        assert.ok(lastFrame().includes('WARNING'), 'auto-allow menu open');
+
+        await act(async () => { stdin.write('\u001B[B'); });     // cursor -> "Always"
+        await act(async () => { stdin.write('\r'); });           // toggle
+        await act(async () => { stdin.write('\u001B'); });       // Esc closes menu
+        await act(async () => { stdin.write('\u001B'); });       // Esc back to Home
+        await act(async () => { stdin.write('q'); });            // quit -> writeInternalConfig
+        await act(async () => { await new Promise(r => setTimeout(r, 50)); });
+      } finally {
+        unmount();
+      }
+    } finally {
+      if (prevCache === undefined) delete process.env.BMAD_CACHE_DIR;
+      else process.env.BMAD_CACHE_DIR = prevCache;
+    }
+    return JSON.parse(fs.readFileSync(paths.internalConfig, 'utf8'));
+  }
+
+  test('enabling Always survives quitting the TUI', async () => {
+    const cacheDir = makeTmpDir();
+    seedSession(cacheDir, 'appaa1');
+    const paths = makePathsWithConfig(createDefaultConfig());
+    const written = await toggleAlwaysAndQuit(paths, cacheDir);
+    assert.equal(written.autoAllow, true, 'autoAllow must persist as true after quit');
+  });
+
+  test('disabling Always survives quitting the TUI (safety-critical direction)', async () => {
+    const cacheDir = makeTmpDir();
+    seedSession(cacheDir, 'appaa2');
+    const config = createDefaultConfig();
+    config.autoAllow = true;
+    const paths = makePathsWithConfig(config);
+    const written = await toggleAlwaysAndQuit(paths, cacheDir);
+    assert.equal(written.autoAllow, false,
+      'turning auto-allow off must not be reverted to true by the App config write');
+  });
+
+  test('toggling Always leaves the rest of the config intact', async () => {
+    const cacheDir = makeTmpDir();
+    seedSession(cacheDir, 'appaa3');
+    const config = createDefaultConfig();
+    const paths = makePathsWithConfig(config);
+    const written = await toggleAlwaysAndQuit(paths, cacheDir);
+    assert.equal(written.autoAllow, true);
+    assert.equal(written.lines.length, 3, 'widget layout preserved');
+    assert.deepEqual(written.lines[0].widgets, config.lines[0].widgets, 'line 1 widgets preserved');
+    assert.equal(written.separator, config.separator, 'separator preserved');
+  });
+
+  test('the flag is committed immediately, not left in the debounce window', async () => {
+    // A signal-driven exit inside the 300ms debounce must not lose a permission flag.
+    const cacheDir = makeTmpDir();
+    seedSession(cacheDir, 'appaa4');
+    const paths = makePathsWithConfig(createDefaultConfig());
+    const prevCache = process.env.BMAD_CACHE_DIR;
+    process.env.BMAD_CACHE_DIR = cacheDir;
+    try {
+      const { stdin, unmount } = render(e(App, { paths }));
+      try {
+        await act(async () => { stdin.write('\r'); });
+        await act(async () => {});
+        await act(async () => { stdin.write('a'); });
+        await act(async () => { stdin.write('\u001B[B'); });
+        await act(async () => { stdin.write('\r'); });
+        // No quit, no debounce wait — the value must already be on disk.
+        const written = JSON.parse(fs.readFileSync(paths.internalConfig, 'utf8'));
+        assert.equal(written.autoAllow, true, 'autoAllow must be written in the same tick');
+      } finally {
+        unmount();
+      }
+    } finally {
+      if (prevCache === undefined) delete process.env.BMAD_CACHE_DIR;
+      else process.env.BMAD_CACHE_DIR = prevCache;
+    }
+  });
+});

@@ -355,3 +355,186 @@ describe('ShortcutBar', () => {
     unmount();
   });
 });
+
+// ─── AutoAllowMenu ──────────────────────────────────────────────────────────
+
+import fs from 'node:fs';
+import path from 'node:path';
+import os from 'node:os';
+import { act } from 'react';
+globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+import { AutoAllowMenu } from '../src/tui/monitor/components/AutoAllowMenu.js';
+
+describe('AutoAllowMenu', () => {
+  let tmpCache;
+
+  function setup() {
+    tmpCache = fs.mkdtempSync(path.join(os.tmpdir(), 'bmad-aa-cache-'));
+  }
+  function cleanup() {
+    fs.rmSync(tmpCache, { recursive: true, force: true });
+  }
+
+  // Mirrors how MonitorScreen wires the menu: the global flag arrives as a prop from
+  // App-owned config and changes only through setAutoAllow. The component must never
+  // touch config.json itself.
+  function mount(props = {}) {
+    const calls = [];
+    const r = render(e(AutoAllowMenu, {
+      sessionId: props.sessionId || 'test1',
+      cachePath: tmpCache,
+      globalFlag: props.globalFlag === true,
+      setAutoAllow: v => calls.push(v),
+      isActive: true,
+      onClose: props.onClose || (() => {}),
+    }));
+    return { ...r, calls };
+  }
+
+  test('renders warning text and two toggle rows', () => {
+    setup();
+    const { lastFrame, unmount } = mount();
+    const frame = lastFrame();
+    assert.ok(frame.includes('WARNING'), 'should show WARNING header');
+    assert.ok(frame.includes('permission prompts'), 'should show warning text');
+    assert.ok(frame.includes('This session'), 'should show session toggle');
+    assert.ok(frame.includes('Always'), 'should show global toggle');
+    assert.ok(frame.includes('Esc close'), 'should show footer hint');
+    assert.ok(frame.includes('approved automatically'), 'should state what happens');
+    unmount();
+    cleanup();
+  });
+
+  test('warning names the allowlist and the machine-wide scope', () => {
+    setup();
+    const { lastFrame, unmount } = mount();
+    const frame = lastFrame();
+    assert.ok(!frame.includes('All permission prompts'), 'must not overstate the scope');
+    assert.ok(frame.includes('Only'), 'should scope the claim');
+    for (const tool of ['Bash', 'Read', 'Write', 'Edit', 'Glob', 'Grep', 'WebFetch']) {
+      assert.ok(frame.includes(tool), 'banner should name ' + tool);
+    }
+    // mcp__* not bare mcp__, which read as "mcp__ permission prompts"
+    assert.ok(frame.includes('mcp__* tools'), 'MCP entry should read as a wildcard');
+    // The scope is what made the allowlist necessary — it must be stated.
+    assert.ok(/every session on this machine/i.test(frame), 'banner should state machine-wide scope');
+    assert.ok(/any directory/i.test(frame), 'banner should state directory scope');
+    unmount();
+    cleanup();
+  });
+
+  test('never writes config.json itself — the global flag is App-owned', async () => {
+    setup();
+    const { stdin, calls, unmount } = mount({ globalFlag: false });
+    await act(async () => { stdin.write('\u001B[B'); });
+    await act(async () => { stdin.write('\r'); });
+    assert.deepEqual(calls, [true], 'toggle must go through setAutoAllow');
+    // Nothing may appear on disk beyond the per-session flag directory contents.
+    assert.ok(!fs.existsSync(path.join(tmpCache, 'config.json')), 'no config.json written by the menu');
+    unmount();
+    cleanup();
+  });
+
+  test('Always toggles off when it starts on (both directions)', async () => {
+    setup();
+    const { stdin, calls, unmount } = mount({ globalFlag: true });
+    await act(async () => { stdin.write('\u001B[B'); });
+    await act(async () => { stdin.write('\r'); });
+    assert.deepEqual(calls, [false], 'on -> off must request false, not true');
+    unmount();
+    cleanup();
+  });
+
+  test('Always row reflects the incoming global flag', () => {
+    setup();
+    const off = mount({ globalFlag: false });
+    assert.ok(/Always\s+OFF/.test(off.lastFrame()), 'shows OFF when global is off');
+    off.unmount();
+    const on = mount({ globalFlag: true });
+    assert.ok(/Always\s+\* ON/.test(on.lastFrame()), 'shows ON when global is on');
+    on.unmount();
+    cleanup();
+  });
+
+  test('toggle writes per-session signal file', async () => {
+    setup();
+    const { stdin, unmount } = mount({ sessionId: 'sig1' });
+    // Cursor starts on row 0 (This session), press Enter to toggle ON
+    await act(async () => { stdin.write('\r'); });
+    const flagPath = path.join(tmpCache, '.autoallow-sig1');
+    assert.ok(fs.existsSync(flagPath), 'signal file should be created');
+    assert.equal(fs.readFileSync(flagPath, 'utf8').trim(), 'on');
+    unmount();
+    cleanup();
+  });
+
+  test('a second Enter on This session removes the flag file', async () => {
+    setup();
+    const { stdin, unmount } = mount({ sessionId: 'sig2', globalFlag: false });
+    const flagPath = path.join(tmpCache, '.autoallow-sig2');
+    await act(async () => { stdin.write('\r'); }); // off -> on
+    assert.equal(fs.readFileSync(flagPath, 'utf8').trim(), 'on', 'first Enter enables');
+    await act(async () => { stdin.write('\r'); }); // on -> off (global off => unlink)
+    assert.ok(!fs.existsSync(flagPath), 'second Enter must remove the flag, not leave it on');
+    unmount();
+    cleanup();
+  });
+
+  test('session row writes an explicit off override when global is on', async () => {
+    setup();
+    const { stdin, unmount } = mount({ sessionId: 'ovr1', globalFlag: true });
+    await act(async () => { stdin.write('\r'); }); // toggle "This session" off
+    const flagPath = path.join(tmpCache, '.autoallow-ovr1');
+    assert.equal(fs.readFileSync(flagPath, 'utf8').trim(), 'off', 'inherited-on must write an explicit off');
+    unmount();
+    cleanup();
+  });
+
+  test('an explicit off flips back to on with global still on', async () => {
+    setup();
+    fs.writeFileSync(path.join(tmpCache, '.autoallow-ovr2'), 'off');
+    const { stdin, unmount } = mount({ sessionId: 'ovr2', globalFlag: true });
+    await act(async () => { stdin.write('\r'); });
+    assert.equal(fs.readFileSync(path.join(tmpCache, '.autoallow-ovr2'), 'utf8').trim(), 'on');
+    unmount();
+    cleanup();
+  });
+
+  test('override suffix shows only when a session off masks a global on', () => {
+    setup();
+    fs.writeFileSync(path.join(tmpCache, '.autoallow-sfx'), 'off');
+    const withGlobal = mount({ sessionId: 'sfx', globalFlag: true });
+    assert.ok(withGlobal.lastFrame().includes('(override)'), 'should mark the override');
+    withGlobal.unmount();
+    const withoutGlobal = mount({ sessionId: 'sfx', globalFlag: false });
+    assert.ok(!withoutGlobal.lastFrame().includes('(override)'), 'nothing to override when global is off');
+    withoutGlobal.unmount();
+    cleanup();
+  });
+
+  test('cursor navigation between rows', async () => {
+    setup();
+    const { stdin, lastFrame, unmount } = mount({ sessionId: 'nav1' });
+    // Initially cursor on row 0
+    let frame = lastFrame();
+    assert.ok(frame.includes('> This session'), 'cursor should be on This session');
+    // Press down
+    await act(async () => { stdin.write('\u001B[B'); });
+    frame = lastFrame();
+    assert.ok(frame.includes('> Always'), 'cursor should move to Always');
+    unmount();
+    cleanup();
+  });
+
+  test('Esc closes without changing anything', async () => {
+    setup();
+    let closed = false;
+    const { stdin, calls, unmount } = mount({ sessionId: 'esc1', onClose: () => { closed = true; } });
+    await act(async () => { stdin.write('\u001B'); });
+    assert.ok(closed, 'Esc should close');
+    assert.deepEqual(calls, [], 'Esc must not toggle anything');
+    assert.ok(!fs.existsSync(path.join(tmpCache, '.autoallow-esc1')), 'no session flag written');
+    unmount();
+    cleanup();
+  });
+});

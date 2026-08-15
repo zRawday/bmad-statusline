@@ -80,6 +80,31 @@ export function pollSessions(cachePath) {
   } catch { return []; /* cache dir missing */ }
 }
 
+// --- Auto-allow resolution ---
+
+// Same validation as the hook's isSafeId (bmad-hook.js). Duplicated rather than
+// shared because the hook is a standalone zero-dependency CJS file that cannot
+// import from here — keep the two regexes identical.
+function isSafeId(id) { return typeof id === 'string' && /^[a-zA-Z0-9_-]+$/.test(id); }
+
+// Mirrors the hook's isAutoAllowEnabled fall-through exactly (bmad-hook.js):
+// session flag 'on' → true, 'off' → false, anything else/missing → global config.
+// Single source for the MonitorScreen indicator so it can't lie about what the
+// hook will actually do — including the session-id guard, without which the
+// indicator could read an arbitrary path the hook would never look at.
+export function resolveAutoAllow(cachePath, configDir, sessionId) {
+  if (!isSafeId(sessionId)) return false;
+  try {
+    const flag = fs.readFileSync(path.join(cachePath, '.autoallow-' + sessionId), 'utf8').trim();
+    if (flag === 'on') return true;
+    if (flag === 'off') return false;
+  } catch { /* absent — fall through */ }
+  try {
+    const config = JSON.parse(fs.readFileSync(path.join(configDir, 'config.json'), 'utf8'));
+    return config.autoAllow === true;
+  } catch { return false; }
+}
+
 // --- Session grouping ---
 
 export function groupSessionsByProject(sessions) {

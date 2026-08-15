@@ -184,12 +184,17 @@ describe('hook — 8-signal passive detection', () => {
     };
   }
 
-  function makePermissionRequestPayload(sessionId) {
-    return {
+  // A real PermissionRequest always carries tool_name (documented core field). The
+  // default is allowlisted so callers that only care about llm_state exercise the
+  // permissive side of the allowlist; pass null to omit the key entirely.
+  function makePermissionRequestPayload(sessionId, toolName = 'Bash') {
+    const payload = {
       hook_event_name: 'PermissionRequest',
       session_id: sessionId,
       cwd: tmpDir
     };
+    if (toolName !== null) payload.tool_name = toolName;
+    return payload;
   }
 
   function makeStopFailurePayload(sessionId, errorType) {
@@ -2851,14 +2856,242 @@ describe('hook — 8-signal passive detection', () => {
     assert.equal(status.step.current, null, 'Edit should not trigger step enrichment');
   });
 
-  // ─── PermissionRequest: always signals, never decides ────────────────────
+  // ─── Auto-allow: PermissionRequest hook response ─────────────────────────
+  // Two conjuncts gate every allow: the flag tier AND the tool allowlist. The
+  // allowlist is the load-bearing guard for the machine-wide global flag, so it
+  // gets the densest coverage here.
 
-  it('PermissionRequest sets permission state and never emits a decision', () => {
-    const sid = 'perm-signal-only';
+  // Deliberately does NOT swallow a crash into ''. Returning e.stdout on failure
+  // would make every "must not be auto-allowed" assertion pass vacuously if the
+  // hook threw, which is precisely the regression these tests exist to catch.
+  function execHookWithConfig(payload, configDir) {
+    try {
+      return execSync(`node "${HOOK_PATH}"`, {
+        input: JSON.stringify(payload),
+        encoding: 'utf8',
+        env: { ...process.env, BMAD_CACHE_DIR: cacheDir, BMAD_CONFIG_DIR: configDir },
+        timeout: 5000
+      });
+    } catch (e) {
+      assert.fail(`hook must always exit 0, got status=${e.status} signal=${e.signal} stderr=${(e.stderr || '').trim()}`);
+    }
+  }
+
+  // Isolated config dir per case so a global flag can never leak between tests.
+  function withConfig(fn, configJson) {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'bmad-config-'));
+    try {
+      if (configJson !== undefined) {
+        fs.writeFileSync(path.join(dir, 'config.json'), configJson);
+      }
+      return fn(dir);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  }
+
+  function assertAllowed(stdout, message) {
+    const parsed = JSON.parse(stdout);
+    assert.equal(parsed.hookSpecificOutput.hookEventName, 'PermissionRequest', message);
+    assert.equal(parsed.hookSpecificOutput.decision.behavior, 'allow', message);
+    assert.ok(!('updatedInput' in parsed.hookSpecificOutput.decision), 'never rewrites tool input');
+  }
+
+  it('session flag on + allowlisted tool — allow JSON, stays active', () => {
+    const sid = 'aa-session-on';
     seedStatus(sid, { session_id: sid, project: 'TestProject', llm_state: 'active' });
-    const stdout = execHook(makePermissionRequestPayload(sid));
-    assert.equal(readStatusFile(sid).llm_state, 'permission');
-    assert.equal(stdout.trim(), '', 'the hook must stay silent — permission decisions belong to Claude Code');
+    fs.writeFileSync(path.join(cacheDir, '.autoallow-' + sid), 'on');
+    withConfig(dir => {
+      const stdout = execHookWithConfig(makePermissionRequestPayload(sid, 'Bash'), dir);
+      assert.equal(readStatusFile(sid).llm_state, 'active', 'should stay active when auto-allowing');
+      assertAllowed(stdout);
+    });
+  });
+
+  it('global flag on with no session flag — allow JSON via fallback', () => {
+    const sid = 'aa-global-fallback';
+    seedStatus(sid, { session_id: sid, project: 'TestProject', llm_state: 'active' });
+    withConfig(dir => {
+      const stdout = execHookWithConfig(makePermissionRequestPayload(sid, 'Edit'), dir);
+      assert.equal(readStatusFile(sid).llm_state, 'active', 'global on should enable auto-allow');
+      assertAllowed(stdout);
+    }, JSON.stringify({ autoAllow: true }));
+  });
+
+  it('every allowlisted tool is auto-allowed when enabled', () => {
+    for (const tool of ['Bash', 'Read', 'Write', 'Edit', 'Glob', 'Grep', 'WebFetch']) {
+      const sid = 'aa-tool-' + tool.toLowerCase();
+      seedStatus(sid, { session_id: sid, project: 'TestProject', llm_state: 'active' });
+      fs.writeFileSync(path.join(cacheDir, '.autoallow-' + sid), 'on');
+      withConfig(dir => {
+        const stdout = execHookWithConfig(makePermissionRequestPayload(sid, tool), dir);
+        assertAllowed(stdout, tool + ' should be auto-allowed');
+        assert.equal(readStatusFile(sid).llm_state, 'active', tool + ' should stay active');
+      });
+    }
+  });
+
+  it('MCP tools are auto-allowed by prefix when enabled', () => {
+    const sid = 'aa-mcp';
+    seedStatus(sid, { session_id: sid, project: 'TestProject', llm_state: 'active' });
+    fs.writeFileSync(path.join(cacheDir, '.autoallow-' + sid), 'on');
+    withConfig(dir => {
+      const stdout = execHookWithConfig(makePermissionRequestPayload(sid, 'mcp__claude_ai_Gmail__send_message'), dir);
+      assertAllowed(stdout, 'mcp__ prefix should be auto-allowed');
+      assert.equal(readStatusFile(sid).llm_state, 'active');
+    });
+  });
+
+  it('per-session off overrides global on — no auto-allow', () => {
+    const sid = 'aa-override-off';
+    seedStatus(sid, { session_id: sid, project: 'TestProject', llm_state: 'active' });
+    fs.writeFileSync(path.join(cacheDir, '.autoallow-' + sid), 'off');
+    withConfig(dir => {
+      const stdout = execHookWithConfig(makePermissionRequestPayload(sid, 'Bash'), dir);
+      assert.equal(readStatusFile(sid).llm_state, 'permission', 'per-session off should override global on');
+      assert.equal(stdout.trim(), '', 'should not output allow JSON');
+    }, JSON.stringify({ autoAllow: true }));
+  });
+
+  it('per-session on without the global flag — auto-allow active', () => {
+    const sid = 'aa-session-only';
+    seedStatus(sid, { session_id: sid, project: 'TestProject', llm_state: 'active' });
+    fs.writeFileSync(path.join(cacheDir, '.autoallow-' + sid), 'on');
+    withConfig(dir => {
+      const stdout = execHookWithConfig(makePermissionRequestPayload(sid, 'Bash'), dir);
+      assert.equal(readStatusFile(sid).llm_state, 'active', 'per-session on should enable auto-allow');
+      assertAllowed(stdout);
+    });
+  });
+
+  it('neither flag tier enabled — no stdout, llm_state permission', () => {
+    const sid = 'aa-disabled';
+    seedStatus(sid, { session_id: sid, project: 'TestProject', llm_state: 'active' });
+    withConfig(dir => {
+      const stdout = execHookWithConfig(makePermissionRequestPayload(sid, 'Bash'), dir);
+      assert.equal(readStatusFile(sid).llm_state, 'permission', 'should set permission when disabled');
+      assert.equal(stdout.trim(), '', 'should not output anything to stdout');
+    });
+  });
+
+  // ─── The allowlist guard: enabled, but the tool is not allowlisted ────────
+
+  it('interactive and unknown tools are never auto-allowed, even when enabled', () => {
+    // ExitPlanMode DOES fire PermissionRequest (tools reference: permission required
+    // = Yes). It must reach the human, which is exactly what the allowlist buys.
+    const cases = ['AskUserQuestion', 'ExitPlanMode', 'SomeFutureTool', 'NotebookEdit', 'Agent'];
+    for (const tool of cases) {
+      const sid = 'aa-block-' + tool.toLowerCase();
+      seedStatus(sid, { session_id: sid, project: 'TestProject', llm_state: 'active' });
+      fs.writeFileSync(path.join(cacheDir, '.autoallow-' + sid), 'on');
+      withConfig(dir => {
+        const stdout = execHookWithConfig(makePermissionRequestPayload(sid, tool), dir);
+        assert.equal(stdout.trim(), '', tool + ' must not be auto-allowed');
+        assert.equal(readStatusFile(sid).llm_state, 'permission', tool + ' must set permission');
+      }, JSON.stringify({ autoAllow: true }));
+    }
+  });
+
+  it('malformed tool_name fails closed — absent, empty, or non-string', () => {
+    const cases = [
+      ['aa-noname', null],          // key omitted entirely
+      ['aa-emptyname', ''],
+      ['aa-numname', 42],
+      ['aa-objname', { name: 'Bash' }],
+      ['aa-arrname', ['Bash']],
+    ];
+    for (const [sid, toolName] of cases) {
+      seedStatus(sid, { session_id: sid, project: 'TestProject', llm_state: 'active' });
+      fs.writeFileSync(path.join(cacheDir, '.autoallow-' + sid), 'on');
+      withConfig(dir => {
+        const payload = makePermissionRequestPayload(sid, null);
+        if (toolName !== null) payload.tool_name = toolName;
+        const stdout = execHookWithConfig(payload, dir);
+        assert.equal(stdout.trim(), '', sid + ' must not be auto-allowed');
+        assert.equal(readStatusFile(sid).llm_state, 'permission', sid + ' must set permission');
+      }, JSON.stringify({ autoAllow: true }));
+    }
+  });
+
+  it('a tool that merely starts with an allowlisted name is not allowed', () => {
+    // Set membership, not prefix matching — 'Bashful' must not slip through.
+    const sid = 'aa-nearmiss';
+    seedStatus(sid, { session_id: sid, project: 'TestProject', llm_state: 'active' });
+    fs.writeFileSync(path.join(cacheDir, '.autoallow-' + sid), 'on');
+    withConfig(dir => {
+      const stdout = execHookWithConfig(makePermissionRequestPayload(sid, 'Bashful'), dir);
+      assert.equal(stdout.trim(), '', 'near-miss tool name must not be auto-allowed');
+      assert.equal(readStatusFile(sid).llm_state, 'permission');
+    }, JSON.stringify({ autoAllow: true }));
+  });
+
+  it('unsafe session id never auto-allows and never builds a flag path', () => {
+    const stdout = withConfig(dir => execHookWithConfig({
+      hook_event_name: 'PermissionRequest',
+      session_id: '../../etc/passwd',
+      cwd: tmpDir,
+      tool_name: 'Bash'
+    }, dir), JSON.stringify({ autoAllow: true }));
+    assert.equal(stdout.trim(), '', 'unsafe id must not produce an allow decision');
+  });
+
+  it('corrupt config.json disables auto-allow rather than throwing', () => {
+    const sid = 'aa-corrupt-config';
+    seedStatus(sid, { session_id: sid, project: 'TestProject', llm_state: 'active' });
+    withConfig(dir => {
+      const stdout = execHookWithConfig(makePermissionRequestPayload(sid, 'Bash'), dir);
+      assert.equal(stdout.trim(), '', 'corrupt config must not auto-allow');
+      assert.equal(readStatusFile(sid).llm_state, 'permission');
+    }, '{ this is not json');
+  });
+
+  it('autoAllow present but not exactly true does not enable auto-allow', () => {
+    const cases = [['aa-truthy-str', 'true'], ['aa-truthy-num', 1], ['aa-truthy-obj', {}], ['aa-truthy-null', null]];
+    for (const [sid, value] of cases) {
+      seedStatus(sid, { session_id: sid, project: 'TestProject', llm_state: 'active' });
+      withConfig(dir => {
+        const stdout = execHookWithConfig(makePermissionRequestPayload(sid, 'Bash'), dir);
+        assert.equal(stdout.trim(), '', 'only autoAllow === true enables auto-allow');
+      }, JSON.stringify({ autoAllow: value }));
+    }
+  });
+
+  it('emits allow only — never deny, escalate, or updatedInput', () => {
+    // Strip comments first: prose about what the hook must NOT do would otherwise
+    // false-fail these assertions, and a real defect hidden in a comment is not one.
+    const src = fs.readFileSync(HOOK_PATH, 'utf8');
+    const code = src
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/(^|[^:])\/\/.*$/gm, '$1');
+
+    // Both quote styles — 'deny' and "deny" are equally forbidden.
+    assert.ok(!/behavior\s*:\s*['"]deny['"]/.test(code), 'hook must never deny');
+    assert.ok(!/behavior\s*:\s*['"]escalate['"]/.test(code), 'hook must never escalate');
+    assert.ok(/behavior\s*:\s*['"]allow['"]/.test(code), 'the allow decision must still be there');
+    assert.ok(!/updatedInput/.test(code), 'hook must never rewrite tool input');
+    assert.ok(!/(^|[^.\w])console\.log/.test(code), 'hook must never console.log');
+
+    // Exactly one stdout channel, and it is the guarded synchronous write. A
+    // buffered process.stdout.write can be dropped by the process.exit(0) that
+    // follows, so its absence is part of the contract.
+    assert.ok(!/process\.stdout\.write/.test(code), 'hook must not use buffered process.stdout.write');
+    const writes = code.match(/fs\.writeSync\(\s*1\s*,/g) || [];
+    assert.equal(writes.length, 1, 'exactly one stdout write in the whole hook');
+  });
+
+  it('the allow decision survives immediate process exit (full JSON on stdout)', () => {
+    // Guards the fs.writeSync(1, …) fix: with a buffered write the dispatcher's
+    // process.exit(0) can truncate or drop this payload entirely.
+    const sid = 'aa-flush';
+    seedStatus(sid, { session_id: sid, project: 'TestProject', llm_state: 'active' });
+    fs.writeFileSync(path.join(cacheDir, '.autoallow-' + sid), 'on');
+    withConfig(dir => {
+      const stdout = execHookWithConfig(makePermissionRequestPayload(sid, 'Bash'), dir);
+      const expected = JSON.stringify({
+        hookSpecificOutput: { hookEventName: 'PermissionRequest', decision: { behavior: 'allow' } }
+      });
+      assert.equal(stdout, expected, 'stdout must be the complete decision JSON, byte for byte');
+    });
   });
 });
 

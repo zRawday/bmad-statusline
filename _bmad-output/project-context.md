@@ -64,7 +64,7 @@ Four components with **different** error handling philosophies. Check which comp
 | Component | Philosophy | Pattern |
 |-----------|-----------|---------|
 | Reader (`src/reader/`) | **Silent always** | Return empty string on any error. Never `console.log`, never `console.error`, never throw. |
-| Hook (`src/hook/`) | **Silent always** | No output ever. Never `console.log`, never `console.error`, never throw. Exit silently on any error. Must never interfere with Claude Code. |
+| Hook (`src/hook/`) | **Silent always — one exception** | No output ever. Never `console.log`, never `console.error`, never throw. Exit silently on any error. Must never interfere with Claude Code. **Sole exception:** the auto-allow `PermissionRequest` decision, written with a guarded `fs.writeSync(1, …)` (see [Auto-Allow](#auto-allow--the-one-place-the-hook-writes-to-stdout-current)). Nothing else may write to stdout, and never via `process.stdout.write`. |
 | Installer (`src/install.js`, etc.) | **Verbose always** | Log every action with `logSuccess`/`logSkipped`/`logError` helpers. |
 | TUI (`src/tui/`) | **StatusMessage on error** | Display via Ink StatusMessage, persist until keypress. Never console.log. Never crash to terminal on recoverable error. |
 
@@ -451,7 +451,8 @@ The hook is the **central component** — sole writer of status data.
 | **Bash** | Always | Append to `commands[]` history (truncated at 1000 chars), set `llm_state=active` |
 | **Stop** | Always | Set `llm_state=waiting` |
 | **StopFailure** | Always | Set `llm_state=error`, store `error_type` |
-| **PermissionRequest** | Always | Set `llm_state=permission`. **Observe only** — the hook never writes a `decision` to stdout. The auto-allow feature (`config.autoAllow`, `.autoallow-{sid}` flags, the monitor's `a` shortcut and `AutoAllowMenu`) was removed: Claude Code has its own auto-permission system, and the hook running in every session would have widened auto-approval to every directory on the machine. Do not reintroduce it. |
+| **PermissionRequest** | Auto-allow enabled **AND** `payload.tool_name` allowlisted | Set `llm_state=active` and write the allow decision to stdout: `{"hookSpecificOutput":{"hookEventName":"PermissionRequest","decision":{"behavior":"allow"}}}` (`decision` is an **object**). Written with a guarded `fs.writeSync(1, …)`, never `process.stdout.write` and never `console.log` — the dispatcher exits immediately after, and a buffered write can be dropped before flush |
+| **PermissionRequest** | Anything else | Set `llm_state=permission`, no stdout |
 | **PermissionDenied** | Always | Set `llm_state=active` |
 | **PostToolUseFailure** | `is_interrupt === true` | Set `llm_state=interrupted` |
 | **PostToolUseFailure** | `is_interrupt !== true` | Set `llm_state=active` |
@@ -461,6 +462,27 @@ The hook is the **central component** — sole writer of status data.
 | **SessionEnd** | Always | Delete `.alive-{session_id}`, preserve status file for resume recovery |
 
 All Read/Write/Edit gated by cwd scoping (pattern 11). History appends gated by `canAppendHistory()` (10MB max file size).
+
+### Auto-Allow — the ONE place the hook writes to stdout [CURRENT]
+
+This is the only feature that makes the hook emit anything on stdout. It was removed in `9e82367` and **deliberately restored** afterwards by explicit human decision. Do not remove it again without renegotiating with the human.
+
+**Why the removal happened, and why it no longer applies.** When the `_bmad/` walk-up stopped being a gate, `handlePermissionRequest()` became reachable in every directory on the machine, so a global `config.autoAllow` would have auto-approved *every* tool everywhere. The human was shown the BMAD-scoped alternative and **chose the machine-wide scope on purpose**. What makes that acceptable is the tool allowlist, not the scope: `AUTO_ALLOW_TOOLS` (`Bash`, `Read`, `Write`, `Edit`, `Glob`, `Grep`, `WebFetch`) plus the `mcp__` prefix. Nothing else is ever auto-approved, so no tool that asks the human a question can be auto-answered. `ExitPlanMode` does fire `PermissionRequest` and is deliberately absent from the list; `AskUserQuestion` requires no permission at all and never reaches the hook.
+
+**Invariants:**
+- Two conjuncts, both required: `isAutoAllowEnabled(sessionId) && isAutoAllowableTool(payload.tool_name)`. Either missing → observe only.
+- `isAutoAllowableTool` fails closed on anything that is not a non-empty string, and uses **set membership** (not prefix matching) for the named tools.
+- Flag precedence: `.autoallow-{sid}` (`on`/`off`) wins → else global `config.autoAllow === true` → else off. `isSafeId()` validates the session id before any path is built; corrupt reads fall through to disabled.
+- Allow only. Never `deny`, never `escalate`, never `updatedInput`.
+- Auto-allowing keeps `llm_state='active'` — never `'permission'`.
+- The decision goes out through `try { fs.writeSync(1, json); } catch {}`. **Never `process.stdout.write`**: the dispatcher calls `process.exit(0)` immediately after, stdout-to-a-pipe is asynchronous on POSIX, and an EPIPE would throw and break the silent-always contract.
+- **The global flag is App-owned config, not a file the UI writes.** `AutoAllowMenu` must never touch `config.json`; it calls the `setAutoAllow` callback threaded App → `MonitorScreen` → menu, and App commits through `writeInternalConfig` (atomic temp+rename) with `{ immediate: true }`. A direct write here is silently reverted — App loads the config at startup and full-replaces the file on quit — which once meant turning auto-allow *off* and quitting restored `autoAllow: true` while the user believed it was off. The per-session `.autoallow-{sid}` flag is NOT App-owned and stays a direct cache write.
+- `resolveAutoAllow()` in `monitor-utils.js` is the single source the monitor's red `Auto-allow` title indicator reads, **from disk**, so it reports what the hook will actually do rather than unsaved UI state. It mirrors the hook's flag precedence *and* its `isSafeId()` session-id guard. Change one, change the other.
+- Shipping a change to this feature requires bumping `package.json`'s `version`: `isDeployStale()` compares the deploy stamp to that version, so without a bump every existing install keeps running the previously deployed hook while the monitor UI reports the new behaviour.
+- Do **not** gate the global flag on `foundBmad`, and do **not** restore the removed `_bmad/` walk-up exit — non-BMAD session tracking depends on it.
+- Widening the allowlist, or making it implicit (wildcards, "allow unless denied", reading it from `config.json`), requires asking the human first.
+
+**Surface:** hook `AUTO_ALLOW_TOOLS` / `CONFIG_DIR` / `isAutoAllowEnabled` / `isAutoAllowableTool` / `handlePermissionRequest`; `monitor-utils.resolveAutoAllow`; `components/AutoAllowMenu.js`; `app.js` `setAutoAllow` + `updateConfig(..., { immediate })`; the monitor `a` shortcut (gated on an active session, since the handler requires one), title indicator, and footer branch in `MonitorScreen.js`. The `AutoAllowMenu` warning banner names the allowlisted tools **and** states that `Always` is machine-wide — a banner that overstates what happens, or omits the scope, is a defect. Keep its wording in step with `AUTO_ALLOW_TOOLS`.
 
 ---
 

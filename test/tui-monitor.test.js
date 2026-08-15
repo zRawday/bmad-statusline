@@ -14,7 +14,7 @@ import {
   getCommandFamily, buildFileTree, renderTreeLines,
   groupSessionsByProject, computeDisplayState, worstState,
   resolveSessionColor, resolveProjectColor, formatElapsed,
-  sessionLabel, MONITOR_IDLE_WINDOW_MS,
+  sessionLabel, resolveAutoAllow, MONITOR_IDLE_WINDOW_MS,
 } from '../src/tui/monitor/monitor-utils.js';
 import { MonitorScreen } from '../src/tui/monitor/MonitorScreen.js';
 import { renderBashSection } from '../src/tui/monitor/components/BashSection.js';
@@ -1139,5 +1139,267 @@ describe('ScrollableViewport — content correctness after scroll', () => {
     assert.ok(out1.includes('1 more'), 'should show 1 more above');
     assert.ok(out1.includes('4 more'), 'should show 4 more below');
     u1();
+  });
+});
+
+// ─── Auto-allow: Monitor integration tests ─────────────────────────────────
+
+describe('MonitorScreen — auto-allow', () => {
+  function seedSession(cacheDir, id) {
+    fs.writeFileSync(path.join(cacheDir, `.alive-${id}`), '');
+    fs.writeFileSync(path.join(cacheDir, `status-${id}.json`), JSON.stringify({
+      skill: 'bmad-dev', project: 'alpha', workflow: 'dev-story',
+      updated_at: new Date().toISOString(), llm_state: 'active',
+    }));
+  }
+
+  test('a key is ignored, and not advertised, without an active session', async () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'bmad-monitor-aa-'));
+    try {
+      const { stdin, lastFrame, unmount } = render(e(MonitorScreen, {
+        config: {},
+        navigate: () => {},
+        goBack: () => {},
+        isActive: true,
+        paths: { cachePath: tmpDir },
+        pollInterval: 10,
+      }));
+      await act(async () => { stdin.write('a'); });
+      const frame = lastFrame();
+      assert.ok(!frame.includes('WARNING'), 'a key should not open menu without session');
+      // The handler requires a sessionId, so advertising the key would be a lie.
+      assert.ok(!frame.includes('auto-allow'), 'shortcut bar must not advertise an inert key');
+      unmount();
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  test('shortcut bar shows auto-allow once a session exists', async () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'bmad-monitor-aa-bar-'));
+    try {
+      seedSession(tmpDir, 'bar1');
+      const { lastFrame, unmount } = render(e(MonitorScreen, {
+        config: {},
+        navigate: () => {},
+        goBack: () => {},
+        isActive: true,
+        paths: { cachePath: tmpDir },
+        pollInterval: 10,
+      }));
+      await act(async () => {});
+      assert.ok(lastFrame().includes('auto-allow'), 'shortcut bar should show auto-allow');
+      unmount();
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  test('a opens the menu, hides the viewport, and suspends the main useInput', async () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'bmad-monitor-aa-open-'));
+    const cfgDir = fs.mkdtempSync(path.join(os.tmpdir(), 'bmad-monitor-aa-cfg-'));
+    try {
+      seedSession(tmpDir, 'aa1');
+      const { stdin, lastFrame, unmount } = render(e(MonitorScreen, {
+        config: {},
+        navigate: () => {},
+        goBack: () => {},
+        isActive: true,
+        paths: { cachePath: tmpDir, configDir: cfgDir },
+        pollInterval: 10,
+      }));
+      await act(async () => {});
+      assert.ok(lastFrame().includes('1 session'), 'session should be polled in');
+
+      await act(async () => { stdin.write('a'); });
+      const open = lastFrame();
+      assert.ok(open.includes('WARNING'), 'menu should open');
+      assert.ok(open.includes('This session'), 'two-row menu');
+      assert.ok(open.includes('Always'), 'two-row menu');
+      assert.ok(!open.includes('auto-allow'), 'shortcut bar is replaced by the menu');
+
+      // Main useInput is suspended: 'b' (Bash toggle) must not reach the screen.
+      await act(async () => { stdin.write('b'); });
+      assert.ok(lastFrame().includes('WARNING'), 'menu stays open — main input is suspended');
+
+      // Esc closes and hands input back.
+      await act(async () => { stdin.write('\u001B'); });
+      const closed = lastFrame();
+      assert.ok(!closed.includes('WARNING'), 'Esc closes the menu');
+      assert.ok(closed.includes('auto-allow'), 'shortcut bar returns');
+      unmount();
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+      fs.rmSync(cfgDir, { recursive: true, force: true });
+    }
+  });
+
+  test('toggling Always delegates to setAutoAllow and never writes config.json here', async () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'bmad-monitor-aa-global-'));
+    const cfgDir = fs.mkdtempSync(path.join(os.tmpdir(), 'bmad-monitor-aa-gcfg-'));
+    try {
+      seedSession(tmpDir, 'aa2');
+      const calls = [];
+      const { stdin, lastFrame, unmount } = render(e(MonitorScreen, {
+        config: {},
+        setAutoAllow: v => calls.push(v),
+        navigate: () => {},
+        goBack: () => {},
+        isActive: true,
+        paths: { cachePath: tmpDir, configDir: cfgDir },
+        pollInterval: 10,
+      }));
+      await act(async () => {});
+      assert.ok(!lastFrame().includes('Auto-allow'), 'indicator off by default');
+
+      await act(async () => { stdin.write('a'); });
+      await act(async () => { stdin.write('\u001B[B'); }); // cursor to "Always"
+      await act(async () => { stdin.write('\r'); });       // toggle it on
+
+      assert.deepEqual(calls, [true], 'must route through the App-owned callback');
+      assert.ok(!fs.existsSync(path.join(cfgDir, 'config.json')),
+        'MonitorScreen/menu must not write config.json — App owns that file');
+      unmount();
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+      fs.rmSync(cfgDir, { recursive: true, force: true });
+    }
+  });
+
+  test('red Auto-allow indicator follows the global flag on disk', async () => {
+    // The indicator reads config.json, not App state, so it reports what the hook
+    // will actually do. Here we play App: persist the flag, then re-render.
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'bmad-monitor-aa-ind-'));
+    const cfgDir = fs.mkdtempSync(path.join(os.tmpdir(), 'bmad-monitor-aa-icfg-'));
+    try {
+      seedSession(tmpDir, 'aa4');
+      const props = {
+        config: {},
+        setAutoAllow: () => {},
+        navigate: () => {},
+        goBack: () => {},
+        isActive: true,
+        paths: { cachePath: tmpDir, configDir: cfgDir },
+        pollInterval: 10,
+      };
+      const { lastFrame, rerender, unmount } = render(e(MonitorScreen, props));
+      await act(async () => {});
+      assert.ok(!lastFrame().includes('Auto-allow'), 'indicator off by default');
+
+      fs.writeFileSync(path.join(cfgDir, 'config.json'), JSON.stringify({ autoAllow: true }));
+      await act(async () => { rerender(e(MonitorScreen, { ...props, config: { autoAllow: true } })); });
+      assert.ok(lastFrame().includes('Auto-allow'), 'indicator appears once the flag is on disk');
+
+      fs.writeFileSync(path.join(cfgDir, 'config.json'), JSON.stringify({ autoAllow: false }));
+      await act(async () => { rerender(e(MonitorScreen, { ...props, config: { autoAllow: false } })); });
+      assert.ok(!lastFrame().includes('Auto-allow'), 'indicator clears when the flag goes off');
+      unmount();
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+      fs.rmSync(cfgDir, { recursive: true, force: true });
+    }
+  });
+
+  test('indicator stays off when the session carries an off override', async () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'bmad-monitor-aa-ovr-'));
+    const cfgDir = fs.mkdtempSync(path.join(os.tmpdir(), 'bmad-monitor-aa-ocfg-'));
+    try {
+      seedSession(tmpDir, 'aa3');
+      fs.writeFileSync(path.join(cfgDir, 'config.json'), JSON.stringify({ autoAllow: true }));
+      fs.writeFileSync(path.join(tmpDir, '.autoallow-aa3'), 'off');
+      const { lastFrame, unmount } = render(e(MonitorScreen, {
+        config: {},
+        navigate: () => {},
+        goBack: () => {},
+        isActive: true,
+        paths: { cachePath: tmpDir, configDir: cfgDir },
+        pollInterval: 10,
+      }));
+      await act(async () => {});
+      assert.ok(!lastFrame().includes('Auto-allow'), 'session off must beat global on');
+      unmount();
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+      fs.rmSync(cfgDir, { recursive: true, force: true });
+    }
+  });
+});
+
+// ─── resolveAutoAllow — mirrors the hook's precedence ──────────────────────
+
+describe('resolveAutoAllow', () => {
+  let cacheDir, cfgDir;
+
+  beforeEach(() => {
+    cacheDir = fs.mkdtempSync(path.join(os.tmpdir(), 'bmad-rar-cache-'));
+    cfgDir = fs.mkdtempSync(path.join(os.tmpdir(), 'bmad-rar-cfg-'));
+  });
+  afterEach(() => {
+    fs.rmSync(cacheDir, { recursive: true, force: true });
+    fs.rmSync(cfgDir, { recursive: true, force: true });
+  });
+
+  test('no session id — false', () => {
+    assert.equal(resolveAutoAllow(cacheDir, cfgDir, null), false);
+  });
+
+  test('session flag on — true regardless of global', () => {
+    fs.writeFileSync(path.join(cacheDir, '.autoallow-s1'), 'on');
+    assert.equal(resolveAutoAllow(cacheDir, cfgDir, 's1'), true);
+  });
+
+  test('session flag off — false even when global is on', () => {
+    fs.writeFileSync(path.join(cacheDir, '.autoallow-s2'), 'off');
+    fs.writeFileSync(path.join(cfgDir, 'config.json'), JSON.stringify({ autoAllow: true }));
+    assert.equal(resolveAutoAllow(cacheDir, cfgDir, 's2'), false);
+  });
+
+  test('no session flag — falls through to the global flag', () => {
+    fs.writeFileSync(path.join(cfgDir, 'config.json'), JSON.stringify({ autoAllow: true }));
+    assert.equal(resolveAutoAllow(cacheDir, cfgDir, 's3'), true);
+  });
+
+  test('unsafe session id — false even when the global flag is on', () => {
+    // The hook's isAutoAllowEnabled rejects an unsafe id before reading anything,
+    // so the indicator must too. Without the isSafeId guard this falls through to
+    // the global flag and the indicator claims auto-allow the hook would refuse.
+    fs.writeFileSync(path.join(cfgDir, 'config.json'), JSON.stringify({ autoAllow: true }));
+    for (const bad of ['../../etc/passwd', 'a/b', 'a\\b', 'has space', '..', '', null, undefined, 42, {}]) {
+      assert.equal(resolveAutoAllow(cacheDir, cfgDir, bad), false, `must reject ${JSON.stringify(bad)}`);
+    }
+  });
+
+  test('unsafe session id cannot read a flag file outside the cache dir', () => {
+    const base = fs.mkdtempSync(path.join(os.tmpdir(), 'bmad-rar-esc-'));
+    try {
+      const nestedCache = path.join(base, 'cache');
+      fs.mkdirSync(nestedCache);
+      // '.autoallow-' + '../../../pwned' normalizes out of the cache dir entirely —
+      // seed the escaped target so this test fails loudly if the guard is removed.
+      const sid = '../../../pwned';
+      const escaped = path.join(nestedCache, '.autoallow-' + sid);
+      assert.ok(!escaped.startsWith(nestedCache), 'fixture sanity: the path really escapes');
+      fs.mkdirSync(path.dirname(escaped), { recursive: true });
+      fs.writeFileSync(escaped, 'on');
+      assert.equal(resolveAutoAllow(nestedCache, cfgDir, sid), false,
+        'traversal must not resolve to true');
+    } finally {
+      fs.rmSync(base, { recursive: true, force: true });
+    }
+  });
+
+  test('nothing set — false', () => {
+    assert.equal(resolveAutoAllow(cacheDir, cfgDir, 's4'), false);
+  });
+
+  test('corrupt config.json — false, never throws', () => {
+    fs.writeFileSync(path.join(cfgDir, 'config.json'), '{ not json');
+    assert.equal(resolveAutoAllow(cacheDir, cfgDir, 's5'), false);
+  });
+
+  test('garbage session flag falls through to global', () => {
+    fs.writeFileSync(path.join(cacheDir, '.autoallow-s6'), 'maybe');
+    fs.writeFileSync(path.join(cfgDir, 'config.json'), JSON.stringify({ autoAllow: true }));
+    assert.equal(resolveAutoAllow(cacheDir, cfgDir, 's6'), true);
   });
 });

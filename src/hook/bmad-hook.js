@@ -8,6 +8,11 @@ const os = require('os');
 
 // ─── 2. Constants ──────────────────────────────────────────────────────────────
 const CACHE_DIR = process.env.BMAD_CACHE_DIR || path.join(os.homedir(), '.cache', 'bmad-status');
+const CONFIG_DIR = process.env.BMAD_CONFIG_DIR || path.join(os.homedir(), '.config', 'bmad-statusline');
+// Auto-allow is machine-wide when the global flag is on (deliberate human decision),
+// so the allowlist is the guard: only tools that never ask the human a question can
+// ever be auto-approved. Anything not listed here falls through to Claude Code.
+const AUTO_ALLOW_TOOLS = new Set(['Bash', 'Read', 'Write', 'Edit', 'Glob', 'Grep', 'WebFetch']);
 const STORY_WORKFLOWS = ['create-story', 'dev-story', 'code-review'];
 const STORY_READ_WORKFLOWS = ['dev-story', 'code-review'];
 const STORY_WRITE_WORKFLOWS = ['create-story'];
@@ -62,6 +67,30 @@ function shouldUpdateStory(incomingPriority, currentPriority) {
   if (incomingPriority === STORY_PRIORITY.STORY_FILE && (!currentPriority || currentPriority === STORY_PRIORITY.CANDIDATE)) return true;
   if (incomingPriority === STORY_PRIORITY.CANDIDATE && !currentPriority) return true;
   return false;
+}
+
+function isAutoAllowEnabled(sid) {
+  if (!isSafeId(sid)) return false;
+  // 1. Per-session flag (highest priority)
+  try {
+    const flag = fs.readFileSync(path.join(CACHE_DIR, '.autoallow-' + sid), 'utf8').trim();
+    if (flag === 'off') return false;
+    if (flag === 'on') return true;
+  } catch {} // absent — fall through
+  // 2. Global flag in config.json
+  try {
+    const config = JSON.parse(fs.readFileSync(path.join(CONFIG_DIR, 'config.json'), 'utf8'));
+    return config.autoAllow === true;
+  } catch {}
+  return false;
+}
+
+// Fail closed on anything that is not a non-empty string, so a malformed payload can
+// never widen approval. MCP tool names are server-generated and cannot be enumerated
+// in advance, hence the prefix rule.
+function isAutoAllowableTool(name) {
+  if (typeof name !== 'string' || !name) return false;
+  return AUTO_ALLOW_TOOLS.has(name) || name.startsWith('mcp__');
 }
 
 function extractStep(filePath) {
@@ -647,7 +676,27 @@ function setLlmState(state, { subagent_type = null, error_type = null } = {}) {
 
 // ─── 13. handlePermissionRequest (direct permission signal) ─────────────────
 function handlePermissionRequest() {
-  // Observe only — permission decisions belong to Claude Code, not this hook.
+  // Both conjuncts are required: auto-allow enabled AND an allowlisted tool. Either
+  // missing → observe only, so a tool that asks the human a question is never
+  // auto-answered. The only decision ever emitted is allow; otherwise stay silent,
+  // never deny and never rewrite the tool arguments.
+  if (isAutoAllowEnabled(sessionId) && isAutoAllowableTool(payload.tool_name)) {
+    // Auto-allow: keep active state, respond with allow decision.
+    // fs.writeSync(1, …) not process.stdout.write: the dispatcher exits immediately
+    // after this returns, and stdout-to-a-pipe is asynchronous on POSIX, so a
+    // buffered write can be dropped before flush. The try/catch keeps an EPIPE
+    // (reader already gone) from throwing and breaking the silent-always contract.
+    setLlmState('active');
+    try {
+      fs.writeSync(1, JSON.stringify({
+        hookSpecificOutput: {
+          hookEventName: 'PermissionRequest',
+          decision: { behavior: 'allow' }
+        }
+      }));
+    } catch {}
+    return;
+  }
   setLlmState('permission');
 }
 
