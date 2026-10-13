@@ -40,7 +40,7 @@ function useSessionPolling(cachePath, pollInterval = 1500) {
   return sessions;
 }
 
-function getShortcuts(navMode, detailMode, toggleState, reorderMode, reorderGrabbed, { hasSubAgents, canScroll } = {}) {
+function getShortcuts(navMode, detailMode, toggleState, reorderMode, reorderGrabbed, { hasSubAgents, canScroll, hasSession } = {}) {
   if (reorderMode) {
     if (reorderGrabbed) {
       return [
@@ -83,12 +83,14 @@ function getShortcuts(navMode, detailMode, toggleState, reorderMode, reorderGrab
   shortcuts.push({ key: 'e', label: 'export', color: 'green' });
   if (hasSubAgents) shortcuts.push({ key: 'f', label: 'Subagents', color: 'magenta', checked: toggleState.showSubAgents });
   shortcuts.push({ key: 'b', label: 'Bash', color: 'magenta', checked: toggleState.showBash });
-  shortcuts.push({ key: 'a', label: 'auto-allow', color: 'red' });
+  // Gated: the handler requires an active session, so without one the bar would
+  // advertise a key that does nothing.
+  if (hasSession) shortcuts.push({ key: 'a', label: 'auto-allow', color: 'red' });
   shortcuts.push({ key: 'Esc', label: 'home' });
   return shortcuts;
 }
 
-export function MonitorScreen({ config, navigate, goBack, isActive, paths, pollInterval }) {
+export function MonitorScreen({ config, setAutoAllow, navigate, goBack, isActive, paths, pollInterval }) {
   const sessions = useSessionPolling(paths.cachePath, pollInterval);
   const { stdout } = useStdout();
   const [scrollOffset, setScrollOffset] = useState(0);
@@ -212,10 +214,14 @@ export function MonitorScreen({ config, navigate, goBack, isActive, paths, pollI
   // resolveAutoAllow, memoized so scroll re-renders don't hit the disk.
   // `sessions` re-runs it on each poll diff; `autoAllowMenu` on menu toggles.
   // Must stay ABOVE the detail-overlay early return (rules of hooks).
+  // `config && config.autoAllow` is a dep, not the source: the value still comes off
+  // disk so the indicator reports what the hook will actually read, but a toggle
+  // through App state re-runs the memo immediately instead of waiting for a poll.
   const configDir = paths.configDir || process.env.BMAD_CONFIG_DIR || path.join(os.homedir(), '.config', 'bmad-statusline');
+  const globalAutoAllow = !!(config && config.autoAllow);
   const isAutoAllowActive = useMemo(
     () => resolveAutoAllow(paths.cachePath, configDir, sessionId),
-    [paths.cachePath, configDir, sessionId, sessions, autoAllowMenu]
+    [paths.cachePath, configDir, sessionId, sessions, autoAllowMenu, globalAutoAllow]
   );
 
   useEffect(() => {
@@ -463,11 +469,11 @@ export function MonitorScreen({ config, navigate, goBack, isActive, paths, pollI
     e(Text, null, ' '),
     // Sticky bottom — shortcut bar, export prompt, or auto-allow menu
     autoAllowMenu
-      ? e(AutoAllowMenu, { sessionId, cachePath: paths.cachePath, configDir, isActive, onClose: () => setAutoAllowMenu(false) })
+      ? e(AutoAllowMenu, { sessionId, cachePath: paths.cachePath, globalFlag: globalAutoAllow, setAutoAllow, isActive, onClose: () => setAutoAllowMenu(false) })
       : exportMode === 'prompt'
         ? e(ExportPrompt, { onSelect: handleExport, onCancel: () => setExportMode(null), isActive })
         : exportMode === 'confirm'
           ? e(Text, { dimColor: true }, confirmPath.startsWith('Error:') ? confirmPath : 'Exported: ' + confirmPath)
-          : e(ShortcutBar, { actions: getShortcuts(mode, detailMode, { showSubAgents, showBash, sortMode, timeFormat }, reorderMode, reorderGrabbed, { hasSubAgents, canScroll: items.length > viewportHeight }) }),
+          : e(ShortcutBar, { actions: getShortcuts(mode, detailMode, { showSubAgents, showBash, sortMode, timeFormat }, reorderMode, reorderGrabbed, { hasSubAgents, canScroll: items.length > viewportHeight, hasSession: !!sessionId }) }),
   );
 }

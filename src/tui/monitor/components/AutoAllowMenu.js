@@ -13,13 +13,6 @@ function readSessionFlag(cachePath, sessionId) {
   } catch { return null; }
 }
 
-function readGlobalFlag(configDir) {
-  try {
-    const config = JSON.parse(fs.readFileSync(path.join(configDir, 'config.json'), 'utf8'));
-    return config.autoAllow === true;
-  } catch { return false; }
-}
-
 function writeSessionFlag(cachePath, sessionId, value) {
   try {
     if (value === null) {
@@ -30,24 +23,19 @@ function writeSessionFlag(cachePath, sessionId, value) {
   } catch {}
 }
 
-function writeGlobalFlag(configDir, value) {
-  try {
-    const configPath = path.join(configDir, 'config.json');
-    let config = {};
-    try { config = JSON.parse(fs.readFileSync(configPath, 'utf8')); } catch {}
-    config.autoAllow = value;
-    fs.mkdirSync(configDir, { recursive: true });
-    fs.writeFileSync(configPath, JSON.stringify(config, null, 2) + '\n');
-  } catch {}
-}
-
-export function AutoAllowMenu({ sessionId, cachePath, configDir, isActive, onClose }) {
+// The global flag is App-owned config state, reached through setAutoAllow — this
+// component must NEVER write config.json itself. App loads the config once and
+// full-replaces the file on quit and on every edit, so a direct write here is
+// silently reverted; turning the flag off and quitting would restore autoAllow:true
+// while the user believes machine-wide auto-approval is off. The per-session
+// .autoallow-{sid} flag is not App-owned and stays a direct cache write.
+export function AutoAllowMenu({ sessionId, cachePath, globalFlag: globalFlagProp, setAutoAllow, isActive, onClose }) {
   const [cursor, setCursor] = useState(0);
   const [, forceRender] = useState(0);
 
-  // Read current state on each render (synchronous, fast reads)
+  const globalFlag = globalFlagProp === true;
+  // Session flag is read on each render (synchronous, fast read)
   const sessionFlag = readSessionFlag(cachePath, sessionId);
-  const globalFlag = readGlobalFlag(configDir);
 
   // Compute effective display states
   let sessionDisplay, sessionSuffix;
@@ -80,8 +68,8 @@ export function AutoAllowMenu({ sessionId, cachePath, configDir, isActive, onClo
           writeSessionFlag(cachePath, sessionId, globalFlag ? 'off' : 'on');
         }
       } else {
-        // Toggle "Always"
-        writeGlobalFlag(configDir, !globalFlag);
+        // Toggle "Always" — through App-owned config, never a direct disk write
+        if (setAutoAllow) setAutoAllow(!globalFlag);
       }
       forceRender(n => n + 1);
       return;
@@ -98,8 +86,13 @@ export function AutoAllowMenu({ sessionId, cachePath, configDir, isActive, onClo
 
   return e(Box, { flexDirection: 'column' },
     e(Text, { color: 'red', bold: true }, '\u26A0  WARNING'),
-    e(Text, { dimColor: true }, 'All permission prompts will be approved automatically.'),
-    e(Text, { dimColor: true }, 'Tools will execute without human review.'),
+    // The hook allows only its allowlisted tools — a banner that promised more than
+    // that would be a defect. Keep this wording in step with AUTO_ALLOW_TOOLS, and
+    // keep the scope line: "Always" is machine-wide, which is what made the
+    // allowlist necessary in the first place.
+    e(Text, { dimColor: true }, 'Only Bash, Read, Write, Edit, Glob, Grep, WebFetch and mcp__* tools'),
+    e(Text, { dimColor: true }, 'have their permission prompts approved automatically, without review.'),
+    e(Text, { dimColor: true }, '"Always" applies to every session on this machine, in any directory.'),
     e(Text, null, ' '),
     row(0, 'This session', sessionDisplay, sessionSuffix),
     row(1, 'Always      ', globalFlag, ''),

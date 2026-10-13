@@ -145,6 +145,40 @@ describe('Target 2: ccstatusline settings.json', () => {
     } finally { teardown(baseDir); }
   });
 
+  it('seeds the reference ccstatusline layout on a fresh config', () => {
+    const { baseDir, paths } = setup();
+    try {
+      captureOutput(() => install(paths));
+      const config = JSON.parse(fs.readFileSync(paths.ccstatuslineSettings, 'utf8'));
+      const types = config.lines.map(l => l.map(w => w.type));
+      assert.deepEqual(types[0], ['custom-command'], 'line 0: bmad composite only');
+      assert.deepEqual(types[1], ['model', 'separator', 'thinking-effort', 'separator', 'custom-command'],
+        'line 1: ccstatusline widgets left of the bmad composite');
+      assert.deepEqual(types[2], ['tokens-total', 'separator', 'custom-command'],
+        'line 2: tokens-total left of the bmad composite');
+      // Seeded widgets must not carry the bmad- prefix, or cleanup/uninstall would eat them
+      const seeded = config.lines.flat().filter(w => w.type !== 'custom-command');
+      assert.ok(seeded.every(w => !w.id.startsWith('bmad-')), 'seeded ids are user-owned UUIDs');
+      assert.equal(new Set(seeded.map(w => w.id)).size, seeded.length, 'seeded ids are unique');
+      // Only `lines` is seeded — ccstatusline's own display defaults stay unset
+      assert.deepEqual(Object.keys(config).sort(), ['lines', 'version']);
+    } finally { teardown(baseDir); }
+  });
+
+  it('never seeds into an existing ccstatusline config', () => {
+    const { baseDir, paths } = setup();
+    try {
+      const userConfig = { version: 3, lines: [[], [], []] };
+      fs.mkdirSync(paths.ccstatuslineDir, { recursive: true });
+      fs.writeFileSync(paths.ccstatuslineSettings, JSON.stringify(userConfig, null, 2));
+      captureOutput(() => install(paths));
+      const config = JSON.parse(fs.readFileSync(paths.ccstatuslineSettings, 'utf8'));
+      const nonBmad = config.lines.flat().filter(w => w.type !== 'custom-command');
+      assert.equal(nonBmad.length, 0, 'an existing layout is never seeded into');
+      assert.equal(config.lines.flat().length, 3, 'only the 3 bmad composites added');
+    } finally { teardown(baseDir); }
+  });
+
   it('preserves existing user widgets on other lines', () => {
     const { baseDir, paths } = setup();
     try {
@@ -270,9 +304,9 @@ describe('Target 5: hook config injection', () => {
       // 12 event types
       const eventTypes = Object.keys(config.hooks);
       assert.equal(eventTypes.length, 12, 'should have 12 event types');
-      // UserPromptSubmit — regex
+      // UserPromptSubmit — wildcard
       assert.equal(config.hooks.UserPromptSubmit.length, 1);
-      assert.equal(config.hooks.UserPromptSubmit[0].matcher, '(?:bmad|gds|wds)[:-]');
+      assert.equal(config.hooks.UserPromptSubmit[0].matcher, '');
       // PreToolUse — single wildcard
       assert.equal(config.hooks.PreToolUse.length, 1, 'PreToolUse: 1 wildcard matcher');
       assert.equal(config.hooks.PreToolUse[0].matcher, '');
@@ -393,7 +427,7 @@ describe('Target 5: hook config injection', () => {
       assert.equal(config.hooks.PostToolUse.length, 4, 'should have 4 PostToolUse matchers');
       // UserPromptSubmit, Stop, SessionStart added
       assert.equal(config.hooks.UserPromptSubmit.length, 1);
-      assert.equal(config.hooks.UserPromptSubmit[0].matcher, '(?:bmad|gds|wds)[:-]');
+      assert.equal(config.hooks.UserPromptSubmit[0].matcher, '');
       assert.equal(config.hooks.Stop.length, 1, 'Stop matcher added');
       assert.equal(config.hooks.SessionStart.length, 1);
       assert.equal(config.hooks.SessionStart[0].matcher, '');
@@ -475,9 +509,9 @@ describe('Target 5: hook config injection', () => {
       const output = captureOutput(() => install(paths));
       assert.ok(output.includes('hook config injected'), 'should log injected for upgrade');
       const config = JSON.parse(fs.readFileSync(paths.claudeSettings, 'utf8'));
-      // Existing Rev.4 matchers preserved
-      assert.equal(config.hooks.UserPromptSubmit.length, 1, 'UserPromptSubmit preserved');
-      assert.equal(config.hooks.UserPromptSubmit[0].matcher, '(?:bmad|gds|wds)[:-]', 'UserPromptSubmit matcher preserved');
+      // Existing Rev.4 matchers preserved — except UserPromptSubmit, widened in place
+      assert.equal(config.hooks.UserPromptSubmit.length, 1, 'UserPromptSubmit not duplicated');
+      assert.equal(config.hooks.UserPromptSubmit[0].matcher, '', 'legacy UserPromptSubmit matcher widened');
       // PreToolUse: existing 4 specific + 1 new wildcard = 5
       assert.equal(config.hooks.PreToolUse.length, 5, 'PreToolUse: 4 existing + 1 wildcard');
       assert.ok(config.hooks.PreToolUse.some(e => e.matcher === ''), 'PreToolUse wildcard added');
@@ -537,6 +571,136 @@ describe('Target 5: hook config injection', () => {
       assert.equal(bmadEntries.length, 1, 'exactly one bmad SessionStart entry (no duplicate)');
       assert.equal(config.hooks.SessionStart.length, 1, 'SessionStart has a single entry');
       assert.equal(config.hooks.SessionStart[0].matcher, '', "matcher upgraded 'resume' → ''");
+    } finally { teardown(baseDir); }
+  });
+
+  it("widens the legacy bmad UserPromptSubmit matcher → '' without duplicating", () => {
+    const { baseDir, paths } = setup();
+    try {
+      const existing = {
+        statusLine: { type: 'command', command: 'npx -y ccstatusline@latest', padding: 0 },
+        hooks: {
+          UserPromptSubmit: [
+            { matcher: '(?:bmad|gds|wds)[:-]', hooks: [{ type: 'command', command: `node "${paths.hookDest}"` }] }
+          ]
+        }
+      };
+      fs.mkdirSync(paths.claudeDir, { recursive: true });
+      fs.writeFileSync(paths.claudeSettings, JSON.stringify(existing, null, 2) + '\n');
+      captureOutput(() => install(paths));
+      const config = JSON.parse(fs.readFileSync(paths.claudeSettings, 'utf8'));
+      const bmadEntries = config.hooks.UserPromptSubmit.filter(e =>
+        Array.isArray(e.hooks) && e.hooks.some(h => h.command && h.command.includes('bmad-hook.js')));
+      assert.equal(bmadEntries.length, 1, 'exactly one bmad UserPromptSubmit entry (no duplicate)');
+      assert.equal(config.hooks.UserPromptSubmit.length, 1, 'UserPromptSubmit has a single entry');
+      assert.equal(config.hooks.UserPromptSubmit[0].matcher, '', "matcher widened to ''");
+    } finally { teardown(baseDir); }
+  });
+
+  it("drops a legacy SessionStart 'resume' entry when a wildcard bmad entry already exists", () => {
+    const { baseDir, paths } = setup();
+    try {
+      const cmd = { type: 'command', command: `node "${paths.hookDest}"` };
+      const existing = {
+        statusLine: { type: 'command', command: 'npx -y ccstatusline@latest', padding: 0 },
+        hooks: {
+          SessionStart: [
+            { matcher: 'resume', hooks: [cmd] },
+            { matcher: '', hooks: [cmd] }
+          ]
+        }
+      };
+      fs.mkdirSync(paths.claudeDir, { recursive: true });
+      fs.writeFileSync(paths.claudeSettings, JSON.stringify(existing, null, 2) + '\n');
+      captureOutput(() => install(paths));
+      const config = JSON.parse(fs.readFileSync(paths.claudeSettings, 'utf8'));
+      assert.equal(config.hooks.SessionStart.length, 1, 'no double-fire on SessionStart');
+      assert.equal(config.hooks.SessionStart[0].matcher, '');
+    } finally { teardown(baseDir); }
+  });
+
+  it("widens an older-release UserPromptSubmit matcher '(?:bmad|gds|wds)-' too", () => {
+    const { baseDir, paths } = setup();
+    try {
+      const existing = {
+        statusLine: { type: 'command', command: 'npx -y ccstatusline@latest', padding: 0 },
+        hooks: {
+          UserPromptSubmit: [
+            { matcher: '(?:bmad|gds|wds)-', hooks: [{ type: 'command', command: `node "${paths.hookDest}"` }] }
+          ]
+        }
+      };
+      fs.mkdirSync(paths.claudeDir, { recursive: true });
+      fs.writeFileSync(paths.claudeSettings, JSON.stringify(existing, null, 2) + '\n');
+      captureOutput(() => install(paths));
+      const config = JSON.parse(fs.readFileSync(paths.claudeSettings, 'utf8'));
+      assert.equal(config.hooks.UserPromptSubmit.length, 1, 'no duplicate bmad entry');
+      assert.equal(config.hooks.UserPromptSubmit[0].matcher, '', 'pre-[:-] matcher widened');
+    } finally { teardown(baseDir); }
+  });
+
+  it('drops a legacy UserPromptSubmit entry when a wildcard bmad entry already exists', () => {
+    const { baseDir, paths } = setup();
+    try {
+      const cmd = { type: 'command', command: `node "${paths.hookDest}"` };
+      const existing = {
+        statusLine: { type: 'command', command: 'npx -y ccstatusline@latest', padding: 0 },
+        hooks: {
+          UserPromptSubmit: [
+            { matcher: '(?:bmad|gds|wds)[:-]', hooks: [cmd] },
+            { matcher: '', hooks: [cmd] }
+          ]
+        }
+      };
+      fs.mkdirSync(paths.claudeDir, { recursive: true });
+      fs.writeFileSync(paths.claudeSettings, JSON.stringify(existing, null, 2) + '\n');
+      captureOutput(() => install(paths));
+      const config = JSON.parse(fs.readFileSync(paths.claudeSettings, 'utf8'));
+      assert.equal(config.hooks.UserPromptSubmit.length, 1, 'legacy duplicate removed, not widened');
+      assert.equal(config.hooks.UserPromptSubmit[0].matcher, '');
+    } finally { teardown(baseDir); }
+  });
+
+  it('installs the bmad entry alongside a foreign wildcard UserPromptSubmit hook', () => {
+    const { baseDir, paths } = setup();
+    try {
+      const existing = {
+        statusLine: { type: 'command', command: 'npx -y ccstatusline@latest', padding: 0 },
+        hooks: {
+          UserPromptSubmit: [
+            { matcher: '', hooks: [{ type: 'command', command: 'node /somewhere/other-tool.js' }] }
+          ]
+        }
+      };
+      fs.mkdirSync(paths.claudeDir, { recursive: true });
+      fs.writeFileSync(paths.claudeSettings, JSON.stringify(existing, null, 2) + '\n');
+      captureOutput(() => install(paths));
+      const config = JSON.parse(fs.readFileSync(paths.claudeSettings, 'utf8'));
+      assert.equal(config.hooks.UserPromptSubmit.length, 2, 'foreign wildcard must not mask the bmad entry');
+      assert.ok(config.hooks.UserPromptSubmit.some(e =>
+        e.hooks.some(h => h.command.includes('bmad-hook.js'))), 'bmad hook installed');
+    } finally { teardown(baseDir); }
+  });
+
+  it('leaves a non-bmad UserPromptSubmit entry with the legacy matcher untouched', () => {
+    const { baseDir, paths } = setup();
+    try {
+      const existing = {
+        statusLine: { type: 'command', command: 'npx -y ccstatusline@latest', padding: 0 },
+        hooks: {
+          UserPromptSubmit: [
+            { matcher: '(?:bmad|gds|wds)[:-]', hooks: [{ type: 'command', command: 'node /somewhere/other-tool.js' }] }
+          ]
+        }
+      };
+      fs.mkdirSync(paths.claudeDir, { recursive: true });
+      fs.writeFileSync(paths.claudeSettings, JSON.stringify(existing, null, 2) + '\n');
+      captureOutput(() => install(paths));
+      const config = JSON.parse(fs.readFileSync(paths.claudeSettings, 'utf8'));
+      assert.equal(config.hooks.UserPromptSubmit.length, 2, 'foreign entry kept, bmad entry added');
+      const foreign = config.hooks.UserPromptSubmit.find(e =>
+        e.hooks.some(h => h.command.includes('other-tool.js')));
+      assert.equal(foreign.matcher, '(?:bmad|gds|wds)[:-]', 'foreign matcher untouched');
     } finally { teardown(baseDir); }
   });
 });

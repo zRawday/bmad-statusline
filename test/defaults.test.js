@@ -77,8 +77,8 @@ describe('src/defaults.js config templates', () => {
 
   it('getHookConfig matchers have correct values and commands', () => {
     const result = getHookConfig('/test/path/bmad-hook.js');
-    // UserPromptSubmit — regex matcher
-    assert.equal(result.hooks.UserPromptSubmit[0].matcher, '(?:bmad|gds|wds)[:-]');
+    // UserPromptSubmit — wildcard: non-BMAD prompts must be tracked too
+    assert.equal(result.hooks.UserPromptSubmit[0].matcher, '');
     assert.equal(result.hooks.UserPromptSubmit[0].hooks[0].type, 'command');
     assert.ok(result.hooks.UserPromptSubmit[0].hooks[0].command.includes('/test/path/bmad-hook.js'));
     // PreToolUse — single wildcard

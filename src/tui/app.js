@@ -45,14 +45,16 @@ export function App({ paths }) {
   const [editingLine, setEditingLine] = useState(null);
 
   // Pattern 15 — updateConfig(mutator): structuredClone -> mutate -> debounced write -> sync -> return
+  // `immediate` commits in the same tick instead of debouncing, for settings that
+  // must not be lost to a signal-driven exit inside the 300ms window.
   const writeTimerRef = React.useRef(null);
-  function updateConfig(mutator) {
+  function updateConfig(mutator, { immediate = false } = {}) {
     setConfig(prev => {
       const next = structuredClone(prev);
       mutator(next);
       const occupancyChanged = syncCcstatuslineIfNeeded(prev, next, paths);
       if (writeTimerRef.current) clearTimeout(writeTimerRef.current);
-      if (occupancyChanged) {
+      if (occupancyChanged || immediate) {
         // ccstatusline settings were just rewritten — commit config.json in the
         // same tick, or a signal-driven exit inside the 300ms debounce window
         // persists the two files out of step.
@@ -62,6 +64,15 @@ export function App({ paths }) {
       }
       return next;
     });
+  }
+
+  // Auto-allow global flag — App-owned config, NOT a direct disk write. The monitor
+  // menu used to write config.json itself, which App's own full-replace write then
+  // silently undid: turning the flag off and quitting restored autoAllow: true while
+  // the user believed machine-wide auto-approval was off. Committed immediately so
+  // the hook (which reads config.json) and the title indicator agree at once.
+  function setAutoAllow(value) {
+    updateConfig(cfg => { cfg.autoAllow = value === true; }, { immediate: true });
   }
 
   // BF2-safe reset — no useEffect involved
@@ -155,10 +166,18 @@ export function App({ paths }) {
   if (screen === 'monitor') {
     return e(MonitorScreen, {
       config,
+      setAutoAllow,
       navigate,
       goBack,
       isActive: true,
-      paths: { cachePath, outputFolder: path.join(process.cwd(), '_bmad-output') },
+      paths: {
+        cachePath,
+        outputFolder: path.join(process.cwd(), '_bmad-output'),
+        // The title indicator reads config.json from disk to mirror the hook. Point it
+        // at the same file App writes; undefined in production, where both sides fall
+        // back to BMAD_CONFIG_DIR / ~/.config/bmad-statusline.
+        configDir: paths?.internalConfig ? path.dirname(paths.internalConfig) : undefined,
+      },
     });
   }
 

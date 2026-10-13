@@ -9,6 +9,10 @@ const os = require('os');
 // ─── 2. Constants ──────────────────────────────────────────────────────────────
 const CACHE_DIR = process.env.BMAD_CACHE_DIR || path.join(os.homedir(), '.cache', 'bmad-status');
 const CONFIG_DIR = process.env.BMAD_CONFIG_DIR || path.join(os.homedir(), '.config', 'bmad-statusline');
+// Auto-allow is machine-wide when the global flag is on (deliberate human decision),
+// so the allowlist is the guard: only tools that never ask the human a question can
+// ever be auto-approved. Anything not listed here falls through to Claude Code.
+const AUTO_ALLOW_TOOLS = new Set(['Bash', 'Read', 'Write', 'Edit', 'Glob', 'Grep', 'WebFetch']);
 const STORY_WORKFLOWS = ['create-story', 'dev-story', 'code-review'];
 const STORY_READ_WORKFLOWS = ['dev-story', 'code-review'];
 const STORY_WRITE_WORKFLOWS = ['create-story'];
@@ -92,6 +96,14 @@ function isAutoAllowEnabled(sid) {
   return false;
 }
 
+// Fail closed on anything that is not a non-empty string, so a malformed payload can
+// never widen approval. MCP tool names are server-generated and cannot be enumerated
+// in advance, hence the prefix rule.
+function isAutoAllowableTool(name) {
+  if (typeof name !== 'string' || !name) return false;
+  return AUTO_ALLOW_TOOLS.has(name) || name.startsWith('mcp__');
+}
+
 function extractStep(filePath) {
   const match = normalize(filePath).match(STEP_REGEX);
   if (!match) return null;
@@ -112,7 +124,7 @@ try {
   process.exit(0);
 }
 
-// ─── 3b. Early SessionEnd: delete alive file before _bmad guard can exit ─────
+// ─── 3b. Early SessionEnd: delete alive file, then exit before any cwd work ──
 {
   const _ev = payload.hook_event_name;
   const _sid = payload.session_id;
@@ -127,24 +139,30 @@ try {
 // npx cache entry can lose its bin shims (ccstatusline.cmd/.ps1), leaving the
 // status line blank while the monitor keeps working. Purge only structurally
 // broken ccstatusline entries so the next npx call regenerates them cleanly.
-// Runs before the _bmad guard because the status line is global. Always silent.
+// Runs before the _bmad walk-up, which is where cwd gets resolved. Always silent.
 if (payload.hook_event_name === 'SessionStart') {
   try { healCcstatuslineNpxCache(); } catch {}
 }
 
-// ─── 4. Guard: _bmad/ existence (walk up to find it) ─────────────────────────
+// ─── 4. Detect: _bmad/ existence (walk up to find it) ────────────────────────
+// Detection, NOT a gate: a missing _bmad/ means a non-BMAD session, which we still
+// track (project + llm state + history) so the widgets and monitor keep working.
+// Path-derived fields (step, story, document_name) stay null there since nothing
+// resolves against a bmadRoot. skill/workflow are prompt-derived, not path-derived,
+// so a `/bmad-*` command typed outside a BMAD project still names the workflow.
 let cwd = payload.cwd;
 if (!cwd) process.exit(0);
 let bmadRoot = cwd;
 let walkDepth = 0;
+let foundBmad = true;
 const MAX_WALK_DEPTH = 20;
 while (!fs.existsSync(path.join(bmadRoot, '_bmad'))) {
   const parent = path.dirname(bmadRoot);
-  if (parent === bmadRoot) process.exit(0); // reached filesystem root
-  if (++walkDepth > MAX_WALK_DEPTH) process.exit(0); // depth limit
+  if (parent === bmadRoot) { foundBmad = false; break; } // reached filesystem root
+  if (++walkDepth > MAX_WALK_DEPTH) { foundBmad = false; break; } // depth limit
   bmadRoot = parent;
 }
-cwd = bmadRoot;
+if (foundBmad) cwd = bmadRoot; // else keep payload.cwd — non-BMAD session
 
 // ─── 5. Alive touch ──────────────────────────────────────────────────────────
 const sessionId = payload.session_id;
@@ -187,7 +205,10 @@ if (!earlyStatus.project) {
   // sequences into a value the reader prints verbatim) and cap the length.
   if (pm) earlyStatus.project = pm[1].trim().replace(/[\x00-\x1f\x7f]/g, '').slice(0, 100);
   if (!earlyStatus.project) {
-    earlyStatus.project = normalize(cwd).split('/').pop();
+    // basename is '' when cwd is a filesystem root ('/' normalizes to ''), which would
+    // leave project falsy and rewrite the status file on every event. Reachable now that
+    // a rootless cwd no longer exits at the walk-up.
+    earlyStatus.project = normalize(cwd).split('/').pop() || normalize(cwd) || 'root';
   }
   earlyDirty = true;
 }
@@ -272,6 +293,11 @@ function handleUserPrompt() {
   status.llm_state_since = now;
   status.subagent_type = null;
   status.error_type = null;
+
+  // Timer anchor: first prompt of the session. In a BMAD session the skill-change
+  // branch below overwrites this, so per-workflow timing is unchanged; outside BMAD
+  // no skill ever matches, so this is the only thing that makes the timer tick.
+  if (!status.started_at) status.started_at = now;
 
   // Skill detection — only update skill fields when prompt matches
   const prompt = payload.prompt;
@@ -699,15 +725,25 @@ function setLlmState(state, { subagent_type = null, error_type = null } = {}) {
 
 // ─── 13. handlePermissionRequest (direct permission signal) ─────────────────
 function handlePermissionRequest() {
-  if (isAutoAllowEnabled(sessionId)) {
-    // Auto-allow: keep active state, respond with allow decision
+  // Both conjuncts are required: auto-allow enabled AND an allowlisted tool. Either
+  // missing → observe only, so a tool that asks the human a question is never
+  // auto-answered. The only decision ever emitted is allow; otherwise stay silent,
+  // never deny and never rewrite the tool arguments.
+  if (isAutoAllowEnabled(sessionId) && isAutoAllowableTool(payload.tool_name)) {
+    // Auto-allow: keep active state, respond with allow decision.
+    // fs.writeSync(1, …) not process.stdout.write: the dispatcher exits immediately
+    // after this returns, and stdout-to-a-pipe is asynchronous on POSIX, so a
+    // buffered write can be dropped before flush. The try/catch keeps an EPIPE
+    // (reader already gone) from throwing and breaking the silent-always contract.
     setLlmState('active');
-    process.stdout.write(JSON.stringify({
-      hookSpecificOutput: {
-        hookEventName: 'PermissionRequest',
-        decision: { behavior: 'allow' }
-      }
-    }));
+    try {
+      fs.writeSync(1, JSON.stringify({
+        hookSpecificOutput: {
+          hookEventName: 'PermissionRequest',
+          decision: { behavior: 'allow' }
+        }
+      }));
+    } catch {}
     return;
   }
   setLlmState('permission');

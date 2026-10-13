@@ -52,11 +52,15 @@ export function pollSessions(cachePath) {
         if (cached && cached.mtimeMs === st.mtimeMs && cached.size === st.size) {
           session = cached.session;
         } else {
-          session = { ...JSON.parse(fs.readFileSync(statusPath, 'utf8')), sessionId };
+          const parsed = JSON.parse(fs.readFileSync(statusPath, 'utf8'));
+          // No skill filter: non-BMAD sessions have skill=null and are listed too. The
+          // shape check replaces the guard the skill filter used to provide implicitly —
+          // JSON.parse('null') would otherwise spread into a contentless ghost session.
+          if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) continue;
+          session = { ...parsed, sessionId };
           statusCache.set(sessionId, { mtimeMs: st.mtimeMs, size: st.size, session });
         }
         seen.add(sessionId);
-        if (!session.skill) continue;
         sessions.push(session);
       } catch { /* skip corrupted/missing */ }
     }
@@ -64,10 +68,12 @@ export function pollSessions(cachePath) {
     for (const key of statusCache.keys()) {
       if (!seen.has(key)) statusCache.delete(key);
     }
-    // Sort by started_at (stable) — avoids tab reordering on LLM activity
+    // Sort by started_at (stable) — avoids tab reordering on LLM activity. A session
+    // that has not prompted yet has no anchor; sort it last so it cannot evict an
+    // established session at the MAX_SESSIONS cut.
     sessions.sort((a, b) => {
-      const ta = a.started_at ? new Date(a.started_at).getTime() : 0;
-      const tb = b.started_at ? new Date(b.started_at).getTime() : 0;
+      const ta = a.started_at ? new Date(a.started_at).getTime() : Infinity;
+      const tb = b.started_at ? new Date(b.started_at).getTime() : Infinity;
       return ta - tb;
     });
     return sessions.slice(0, MAX_SESSIONS);
@@ -76,12 +82,18 @@ export function pollSessions(cachePath) {
 
 // --- Auto-allow resolution ---
 
+// Same validation as the hook's isSafeId (bmad-hook.js). Duplicated rather than
+// shared because the hook is a standalone zero-dependency CJS file that cannot
+// import from here — keep the two regexes identical.
+function isSafeId(id) { return typeof id === 'string' && /^[a-zA-Z0-9_-]+$/.test(id); }
+
 // Mirrors the hook's isAutoAllowEnabled fall-through exactly (bmad-hook.js):
 // session flag 'on' → true, 'off' → false, anything else/missing → global config.
 // Single source for the MonitorScreen indicator so it can't lie about what the
-// hook will actually do.
+// hook will actually do — including the session-id guard, without which the
+// indicator could read an arbitrary path the hook would never look at.
 export function resolveAutoAllow(cachePath, configDir, sessionId) {
-  if (!sessionId) return false;
+  if (!isSafeId(sessionId)) return false;
   try {
     const flag = fs.readFileSync(path.join(cachePath, '.autoallow-' + sessionId), 'utf8').trim();
     if (flag === 'on') return true;
@@ -136,6 +148,15 @@ export function resolveProjectColor(projectName, config) {
 // --- Story/document context helpers ---
 
 // STORY_WORKFLOWS imported from defaults.js
+
+// Tab label for a session. Non-BMAD sessions have no workflow/skill — fall back to a
+// short session id rather than the full UUID, which would blow out the tab row.
+export function sessionLabel(session) {
+  if (!session) return '';
+  if (session.workflow) return session.workflow;
+  if (session.skill) return session.skill;
+  return session.sessionId ? String(session.sessionId).slice(0, 8) : '';
+}
 
 export function extractStoryNumber(story) {
   if (!story) return '';

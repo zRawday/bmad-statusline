@@ -5,3 +5,5 @@ node_modules/
 .claude/worktrees/
 _bmad/**/config.user.yaml
 _bmad/**/config.yaml
+_bmad/config.toml
+_bmad/config.user.toml

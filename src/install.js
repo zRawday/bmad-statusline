@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { getStatusLineConfig, getWidgetDefinitions, getHookConfig } from './defaults.js';
+import { getStatusLineConfig, getWidgetDefinitions, getHookConfig, getCcstatuslineSeedLines } from './defaults.js';
 import { DEPLOY_FILES, getPackageVersion, VERSION_STAMP } from './deploy.js';
 import { createDefaultConfig } from './tui/widget-registry.js';
 import { G, R, D, B, _, logSuccess, logSkipped, logError, logSection, readJsonFile, backupFile, writeJsonSafe } from './cli-utils.js';
@@ -71,7 +71,9 @@ function installTarget2(paths) {
     if (fs.existsSync(paths.ccstatuslineSettings)) {
       config = readJsonFile(paths.ccstatuslineSettings);
     } else {
-      config = { version: 3, lines: [[], [], []] };
+      // Fresh config only — seed ccstatusline's own widgets so a first install
+      // reproduces the reference layout instead of three bare bmad composites.
+      config = { version: 3, lines: getCcstatuslineSeedLines() };
     }
 
     // Ensure lines array exists
@@ -177,6 +179,30 @@ function installTarget4(paths) {
   }
 }
 
+// Widen a narrowed bmad matcher to the wildcard '' and drop the redundant duplicate when
+// a bmad wildcard entry is already present. Mutates `entries` in place, returns true when
+// anything changed. One implementation shared by every matcher upgrade — the SessionStart
+// and UserPromptSubmit copies had already drifted apart.
+function widenBmadMatchers(entries) {
+  if (!Array.isArray(entries)) return false;
+  const isBmadEntry = entry => entry && Array.isArray(entry.hooks) &&
+    entry.hooks.some(h => h.command && h.command.includes('bmad-hook.js'));
+  let hasWildcard = entries.some(e => e && e.matcher === '' && isBmadEntry(e));
+  let changed = false;
+  const kept = [];
+  for (const entry of entries) {
+    if (entry && entry.matcher !== '' && isBmadEntry(entry)) {
+      changed = true;
+      if (hasWildcard) continue; // redundant bmad entry — drop instead of widening
+      entry.matcher = '';
+      hasWildcard = true;
+    }
+    kept.push(entry);
+  }
+  if (kept.length !== entries.length) entries.splice(0, entries.length, ...kept);
+  return changed;
+}
+
 function installTarget5(paths) {
   const target = '~/.claude/settings.json hooks';
   let backedUp = false;
@@ -206,18 +232,16 @@ function installTarget5(paths) {
       if (config.hooks.PostToolUse.length < before) changed = true;
     }
 
-    // Upgrade: widen bmad SessionStart matcher 'resume' → '' so the npx-cache
-    // auto-repair runs on fresh sessions too. Rewrite in place to avoid a duplicate.
-    if (Array.isArray(config.hooks.SessionStart)) {
-      for (const entry of config.hooks.SessionStart) {
-        if (entry.matcher === 'resume' &&
-          Array.isArray(entry.hooks) &&
-          entry.hooks.some(h => h.command && h.command.includes('bmad-hook.js'))) {
-          entry.matcher = '';
-          changed = true;
-        }
-      }
-    }
+    // Upgrade: widen a narrowed bmad matcher to the wildcard ''. Rewrite in place — the
+    // merge loop below keys on matcher equality, so a surviving narrowed entry would get a
+    // second bmad entry added beside it and double-fire the hook on every event matching
+    // both (the concurrent-write race that loses widget state). A second narrowed entry is
+    // dropped rather than widened, so a part-upgraded file cannot end up with two wildcards.
+    // SessionStart ('resume' → '') runs the npx-cache repair on fresh sessions too;
+    // UserPromptSubmit widens so non-BMAD prompts are tracked — shipped releases have used
+    // both '(?:bmad|gds|wds)-' and '(?:bmad|gds|wds)[:-]', hence "any non-empty matcher".
+    if (widenBmadMatchers(config.hooks.SessionStart)) changed = true;
+    if (widenBmadMatchers(config.hooks.UserPromptSubmit)) changed = true;
 
     // Per-event-type granular merge: add only missing bmad matchers
     for (const [event, desiredEntries] of Object.entries(desired.hooks)) {

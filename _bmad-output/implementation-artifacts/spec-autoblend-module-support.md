@@ -78,6 +78,7 @@ context: ['{project-root}/_bmad-output/project-context.md']
 - Job mode is evaluated at the moment of each event; leaving job mode (e.g. a later Skill call to a non-job skill) does not clear a `document_name` already set — it just stops being updated.
 - `detectJob` also runs on a Skill call's `args` (path tokens + bare words) whenever the call leaves the session in job mode.
 - Not touched (outside the spec): `_bmad-output/project-context.md` still describes PreToolUse as "Always set llm_state=active".
+- Base correction (2026-10-13): this spec was planned, implemented and reviewed on v1.6.1 (`baseline_commit`), while the published line was at v1.8.0 (8 commits ahead on `origin/main`). The change was then merged with `origin/main`: source files merged without textual conflict except `src/tui/widget-registry.js` (Document widget is enabled by default upstream; kept, with this spec's hint). Code Map line numbers refer to the v1.6.1 base. Full suite on the merged tree: 872/872. Review row B1 is partly superseded: since v1.7.0 the Monitor lists sessions without a typed skill and the timer is anchored to the first prompt; what remains is recorded in `deferred-work.md`.
 
 ## Spec Change Log
 
