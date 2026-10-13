@@ -186,7 +186,7 @@ describe('config-writer v2', () => {
 
       // line 0: was non-empty -> now empty, line 1: was empty -> now non-empty
       const oldConfig = makeConfig(['bmad-project']);
-      const newConfig = makeConfig([], ['bmad-story']);
+      const newConfig = makeConfig([], ['bmad-currentitem']);
 
       syncCcstatuslineIfNeeded(oldConfig, newConfig, makePaths());
 
@@ -310,7 +310,7 @@ describe('config-writer v2', () => {
       const ccConfig = { version: 3, lines: [[], [], []] };
       writeCcConfig(ccConfig);
 
-      const config = makeConfig(['bmad-project'], ['bmad-story']);
+      const config = makeConfig(['bmad-project'], ['bmad-currentitem']);
       syncCcstatuslineFromScratch(config, makePaths());
 
       const updated = JSON.parse(fs.readFileSync(ccConfigPath(), 'utf8'));

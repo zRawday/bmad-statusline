@@ -5,13 +5,16 @@ import path from 'node:path';
 import os from 'node:os';
 import { createDefaultConfig, getIndividualWidgets } from './widget-registry.js';
 import { writeInternalConfig } from './config-writer.js';
+import { migrateLegacyWidgets } from '../defaults.js';
 
 const CONFIG_DIR = process.env.BMAD_CONFIG_DIR || path.join(os.homedir(), '.config', 'bmad-statusline');
 const CONFIG_PATH = path.join(CONFIG_DIR, 'config.json');
 
 /**
  * Load v2 internal config:
- *   1. config.json exists + valid v2 -> return directly
+ *   1. config.json exists + valid v2 -> return it (a config still listing the Story and
+ *      Document widgets is converted to Current Item first: the original is copied to
+ *      config.json.bak, then the converted file is written at once)
  *   2. First install -> createDefaultConfig() -> write + return
  *   Corrupted config.json -> createDefaultConfig() -> return (no write)
  */
@@ -24,7 +27,12 @@ export function loadConfig(paths = {}) {
       const raw = fs.readFileSync(configPath, 'utf8');
       const config = JSON.parse(raw);
       if (isValidV2(config)) {
-        return ensureWidgetOrder(config);
+        // Convert before ensureWidgetOrder: it would otherwise prune the old ids from
+        // widgetOrder and append the new one last, losing the widget's position.
+        const converted = migrateLegacyWidgets(config);
+        const ready = ensureWidgetOrder(config);
+        if (converted) persistConversion(configPath, ready);
+        return ready;
       }
     } catch {
       // Corrupted JSON -> fall back to defaults, but preserve the user's file:
@@ -42,6 +50,20 @@ export function loadConfig(paths = {}) {
   const defaults = createDefaultConfig();
   writeInternalConfig(defaults, { internalConfig: configPath });
   return defaults;
+}
+
+// Best effort and silent: the in-memory config is already converted, and the deployed
+// reader converts on its own. The original is copied to config.json.bak first and the file
+// is only overwritten if that copy succeeded. If the copy fails, this load leaves
+// config.json alone (still unconverted on disk), but the first TUI edit writes the
+// converted config over it with no .bak.
+function persistConversion(configPath, config) {
+  try {
+    fs.copyFileSync(configPath, configPath + '.bak');
+  } catch {
+    return;
+  }
+  writeInternalConfig(config, { internalConfig: configPath });
 }
 
 function preserveCorruptConfig(configPath) {

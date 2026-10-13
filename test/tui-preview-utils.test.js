@@ -11,10 +11,10 @@ import {
 
 describe('preview-utils', () => {
   describe('SAMPLE_VALUES', () => {
-    test('has all 13 widget keys', () => {
+    test('has all 12 widget keys', () => {
       const expectedKeys = [
         'bmad-llmstate', 'bmad-project', 'bmad-workflow', 'bmad-activeskill', 'bmad-nextstep',
-        'bmad-progressstep', 'bmad-story', 'bmad-docname', 'bmad-timer',
+        'bmad-progressstep', 'bmad-currentitem', 'bmad-timer',
         'bmad-fileread', 'bmad-filewrite', 'bmad-contextpct', 'bmad-weeklyusage',
       ];
       for (const key of expectedKeys) {
@@ -23,12 +23,34 @@ describe('preview-utils', () => {
       }
     });
 
-    test('has exactly 13 keys', () => {
-      assert.equal(Object.keys(SAMPLE_VALUES).length, 13);
+    test('has exactly 12 keys', () => {
+      assert.equal(Object.keys(SAMPLE_VALUES).length, 12);
+    });
+
+    test('has no sample left for the old Story and Document widgets', () => {
+      assert.ok(!('bmad-story' in SAMPLE_VALUES));
+      assert.ok(!('bmad-docname' in SAMPLE_VALUES));
     });
 
     test('bmad-weeklyusage sample is the compact SWEET SPOT zone text', () => {
       assert.equal(SAMPLE_VALUES['bmad-weeklyusage'], 'Weekly: SWEET SPOT');
+    });
+  });
+
+  describe('getSampleValue — bmad-currentitem displayMode', () => {
+    test('full (or unset) returns the story sample with its title', () => {
+      assert.equal(getSampleValue('bmad-currentitem', {}), '4-2 Auth Login');
+      assert.equal(
+        getSampleValue('bmad-currentitem', { 'bmad-currentitem': { displayMode: 'full' } }),
+        '4-2 Auth Login',
+      );
+    });
+
+    test('compact returns the story number only', () => {
+      assert.equal(
+        getSampleValue('bmad-currentitem', { 'bmad-currentitem': { displayMode: 'compact' } }),
+        '4-2',
+      );
     });
   });
 
@@ -98,6 +120,14 @@ describe('preview-utils', () => {
     test('returns red when project fixed mode has no fixedColor', () => {
       const colorModes = { 'bmad-project': { mode: 'fixed' } };
       assert.equal(resolvePreviewColor('bmad-project', colorModes), 'red');
+    });
+
+    test('bmad-currentitem previews in the story color (saved, else the default)', () => {
+      assert.equal(
+        resolvePreviewColor('bmad-currentitem', { 'bmad-currentitem': { mode: 'fixed', fixedColor: 'red', documentColor: 'blue' } }),
+        'red'
+      );
+      assert.equal(resolvePreviewColor('bmad-currentitem', {}), 'magenta');
     });
 
     test('returns white for unknown widget with no colorModes entry', () => {

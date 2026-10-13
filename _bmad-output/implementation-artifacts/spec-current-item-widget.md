@@ -2,8 +2,9 @@
 title: 'Merge Story and Document widgets into one Current Item widget; Monitor labels a session by its active skill'
 type: 'feature'
 created: '2026-10-13'
-status: 'ready-for-dev'
+status: 'done'
 route: 'dispatch'
+baseline_commit: '07834f1dde880cabc9011b52ddb126933856d13c'
 review_loop_iteration: 0
 context: []
 ---
@@ -71,14 +72,14 @@ context: []
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `src/reader/shared-constants.cjs`, `src/defaults.js` -- add the id constant, default document color, `resolveCurrentItem`, `migrateLegacyWidgets`; bridge them -- one rule for reader, loader and Monitor.
-- [ ] `src/reader/bmad-sl-reader.js` -- `currentitem` command replacing `story` and `docname`; in-memory conversion of the config read; per-kind color in the line path -- merged rendering, old configs keep working.
-- [ ] `src/tui/widget-registry.js` -- single `Current Item` entry (hint: `Story, AutoBlend job, or document`), default colorMode with `documentColor` -- registry is the source of every id list.
-- [ ] `src/tui/config-loader.js` -- convert on load before `ensureWidgetOrder`; when changed, back up the original to `config.json.bak` then write -- persisted conversion with a way back.
-- [ ] `src/tui/screens/EditLineScreen.js`, `src/tui/preview-utils.js` -- move the mode toggle to the merged widget; color cycle and every default-colorMode site keep `documentColor`; new key `d` cycles the document/job color (visible widget only, shown in the shortcut bar for that row); the row shows both color names, each in its own color; preview samples for the new id -- both colors stay editable.
-- [ ] `src/tui/monitor/monitor-utils.js`, `src/tui/monitor/MonitorScreen.js` -- `sessionLabel`: workflow, then skill, then `active_skill`, then short id; badge name follows the same order (without the id); `contextLabel` through `resolveCurrentItem` -- active-skill naming, one item rule.
-- [ ] `test/` -- update the tests and fixtures listed in the Code Map to the new id and count (keep one legacy-shaped fixture or inline config for conversion tests); add unit tests for every matrix row: conversion (lines, presets, idempotence, malformed input), loader persistence + backup, reader rendering and color per kind, reader with an unconverted config, `d` key and color-cycle preservation, `sessionLabel` and its color.
-- [ ] `README.md`, `_bmad-output/project-context.md` -- 12 widgets, merged widget described (story / AutoBlend job / document, one color each, `m` and `d` keys), Monitor naming by active skill -- docs match behavior.
+- [x] `src/reader/shared-constants.cjs`, `src/defaults.js` -- add the id constant, default document color, `resolveCurrentItem`, `migrateLegacyWidgets`; bridge them -- one rule for reader, loader and Monitor.
+- [x] `src/reader/bmad-sl-reader.js` -- `currentitem` command replacing `story` and `docname`; in-memory conversion of the config read; per-kind color in the line path -- merged rendering, old configs keep working.
+- [x] `src/tui/widget-registry.js` -- single `Current Item` entry (hint: `Story, AutoBlend job, or document`), default colorMode with `documentColor` -- registry is the source of every id list.
+- [x] `src/tui/config-loader.js` -- convert on load before `ensureWidgetOrder`; when changed, back up the original to `config.json.bak` then write -- persisted conversion with a way back.
+- [x] `src/tui/screens/EditLineScreen.js`, `src/tui/preview-utils.js` -- move the mode toggle to the merged widget; color cycle and every default-colorMode site keep `documentColor`; new key `d` cycles the document/job color (visible widget only, shown in the shortcut bar for that row); the row shows both color names, each in its own color; preview samples for the new id -- both colors stay editable.
+- [x] `src/tui/monitor/monitor-utils.js`, `src/tui/monitor/MonitorScreen.js` -- `sessionLabel`: workflow, then skill, then `active_skill`, then short id; badge name follows the same order (without the id); `contextLabel` through `resolveCurrentItem` -- active-skill naming, one item rule.
+- [x] `test/` -- update the tests and fixtures listed in the Code Map to the new id and count (keep one legacy-shaped fixture or inline config for conversion tests); add unit tests for every matrix row: conversion (lines, presets, idempotence, malformed input), loader persistence + backup, reader rendering and color per kind, reader with an unconverted config, `d` key and color-cycle preservation, `sessionLabel` and its color.
+- [x] `README.md`, `_bmad-output/project-context.md` -- 12 widgets, merged widget described (story / AutoBlend job / document, one color each, `m` and `d` keys), Monitor naming by active skill -- docs match behavior.
 
 **Acceptance Criteria:**
 - Given a config saved by v1.8.0 with any combination of the two widgets on any line or preset, when the TUI loads it, then each line and preset shows the merged widget where the first of the two stood, with both colors and the story mode preserved, and `config.json.bak` holds the pre-conversion file.
@@ -91,6 +92,28 @@ context: []
 ## Spec Change Log
 
 ## Review Triage Log
+
+Pass 1 (2026-10-13) — layers: blind-hunter (BH), edge-case-hunter (EC), verification-gap (VG).
+
+| # | Source | Finding | Verdict | Evidence | Route |
+|---|--------|---------|---------|----------|-------|
+| 1 | VG | Loader "write failure is silent" test cannot tell a converted config from a fall-back to defaults, asserts nothing on disk | medium | Filed pre-verified: legacy fixture converts to exactly `createDefaultConfig()`; a throw would rename the file to `.corrupt` and the test stays green | patch |
+| 2 | VG | Gap after a long name in Edit Line is not asserted | low | Filed pre-verified: reverting to `padEnd(18)` keeps all tests green; one-line assertion closes it | patch |
+| 3 | VG, BH, EC ×2 | When the backup copy fails, the first TUI edit writes the converted config with no `.bak`; comment and project-context claim the opposite | low | True: `persistConversion` returns, `loadConfig` returns the converted config, `app.js:51-66` writes it. A copy failing while a later write in the same directory succeeds is rare; a retry mechanism would add state. The false claim is a direct correction | patch (wording only) |
+| 4 | VG, BH, EC | `config.json.bak` is also the installer's corrupt-config backup name (`install.js:305`); each overwrites the other | low | True, but reachable only after a corrupt-config `install`; what is lost is a file the user never restored. Fix needs a new name (frozen matrix names `config.json.bak`) or extra branches | rejected (low, unlikely, fix not a direct correction) |
+| 5 | VG, BH, EC | A deployment stamped 1.8.0 keeps the old reader while the TUI converts `config.json`; the old reader skips `bmad-currentitem` | medium | True for a dev-tree run on a machine whose stamp is already 1.8.0 (`deploy.js:56-61` compares versions only). Not reachable through npm: 1.8.0 cannot be republished, so a release carries a new version and the self-heal fires. Stamp-equality staleness is pre-existing (same exposure for any unreleased reader change); version bumps are release commits made by the human | defer |
+| 6 | BH, EC | Current Item row is 89-99 columns in Edit Line, wraps at 80 | low | Measured 89 with defaults; other rows ≤ 80 except Weekly Usage (112, pre-existing). Shorter hint brings the default row to 78 | patch |
+| 7 | BH | Document / job color has no preview | false | The row renders the document color name in that color as specified; the three-line preview shows one sample per widget by design. Improvement idea, not a defect | rejected |
+| 8 | BH, EC | `formatStoryTitle` alias has no importer left | low | Confirmed by search in `src/` and `test/` | patch |
+| 9 | BH | `SessionTabs.js:32` re-derives the story rule inline | false | Same condition as `resolveCurrentItem` (story workflow + story), untouched by this change, no divergent output | rejected |
+| 10 | BH | Session named by `active_skill` while the item rule keys on `workflow`: a model-launched story skill shows no story | low | True and pre-existing: the hook detects stories only for a typed story skill (`bmad-hook.js:356, 527, 600, 669`); the intent forbids hook changes. Newly visible because the tab now shows the skill name | defer |
+| 11 | BH | README does not say what visibly changes after conversion | low | True: only "carried over" is stated | patch |
+| 12 | BH | Standalone `story` / `docname` reader commands removed with no alias | low | True, but no supported setup calls them (install removes v1 per-widget commands, README never documents standalone use); aliases would guard an undemonstrated setup | rejected (low, unlikely) |
+| 13 | BH | `d` cycles forward only; a hand-edited unknown color jumps to `red` | low | As specified; jumping to the first color from an unknown value is sound | rejected (design choice) |
+| 14 | BH | Test gaps: `d` without a saved colorMode; pre-existing `.bak`; color test calls the helper directly; migration test tied to `createDefaultConfig()`; stale test titles | low | First item is a real uncovered branch (patch). The others name no reachable bad outcome | patch (first item), rejected (rest) |
+| 15 | BH | Brittle pieces: positional shortcut picks, hardcoded id in `preview-utils.js`, `storyMode` name, mode label | false | No named harm: `preview-utils.js` hardcodes every widget id the same way; the positional pick breaks only on a future reorder | rejected |
+| 16 | EC | Story and Document on two different lines render the item on both | low | True and accepted in Design Notes (per-line conversion); documented in README by patch 11 | rejected (accepted behavior) |
+| 17 | EC | Split across two lines, each line shows the other kind in the default color, not the saved one | low | True (measured by the reviewer). Both saved colors survive, each on its own line; a cross-line fallback adds a second pass for a rare layout | rejected (low, unlikely, fix adds complexity) |
 
 ## Design Notes
 

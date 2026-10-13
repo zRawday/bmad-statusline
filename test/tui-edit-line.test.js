@@ -25,7 +25,7 @@ function makeScreenProps(overrides = {}) {
 }
 
 describe('EditLineScreen', () => {
-  test('renders all 7 widgets from registry', () => {
+  test('renders all 12 widgets from registry', () => {
     const { lastFrame, unmount } = render(e(EditLineScreen, makeScreenProps()));
     const frame = lastFrame();
     const allWidgets = getIndividualWidgets();
@@ -160,7 +160,7 @@ describe('EditLineScreen', () => {
     unmount();
   });
 
-  test('m key toggles displayMode on story widget', async () => {
+  test('m key toggles displayMode on the Current Item widget', async () => {
     let updatedCfg = null;
     const config = createDefaultConfig();
     const props = makeScreenProps({
@@ -172,17 +172,20 @@ describe('EditLineScreen', () => {
       },
     });
     const { stdin, unmount } = render(e(EditLineScreen, props));
-    // Navigate down to story widget (index 4: llmstate=0, project=1, workflow=2, activeskill=3, story=4)
+    // Navigate down to Current Item (index 4: llmstate=0, project=1, workflow=2, activeskill=3, currentitem=4)
     for (let i = 0; i < 4; i++) {
       await act(async () => { stdin.write('\x1B[B'); });
     }
     await act(async () => { stdin.write('m'); });
     assert.ok(updatedCfg, 'updateConfig was called');
-    assert.equal(updatedCfg.lines[0].colorModes['bmad-story'].displayMode, 'compact', 'should toggle to compact');
+    assert.equal(updatedCfg.lines[0].colorModes['bmad-currentitem'].displayMode, 'compact', 'should toggle to compact');
+    // Both colors stay as they were
+    assert.equal(updatedCfg.lines[0].colorModes['bmad-currentitem'].fixedColor, 'magenta');
+    assert.equal(updatedCfg.lines[0].colorModes['bmad-currentitem'].documentColor, 'brightYellow');
     unmount();
   });
 
-  test('m key on non-story widget does nothing', async () => {
+  test('m key on a widget without display mode does nothing', async () => {
     let updatedCfg = null;
     const props = makeScreenProps({
       updateConfig: (mutator) => {
@@ -194,20 +197,21 @@ describe('EditLineScreen', () => {
     const { stdin, unmount } = render(e(EditLineScreen, props));
     // Cursor is on project (index 0) — m should do nothing
     await act(async () => { stdin.write('m'); });
-    assert.equal(updatedCfg, null, 'updateConfig should NOT be called for non-story widget');
+    assert.equal(updatedCfg, null, 'updateConfig should NOT be called for a widget without display mode');
     unmount();
   });
 
-  test('shows displayMode hint on story widget', () => {
+  test('shows displayMode hint on the Current Item widget', () => {
     const { lastFrame, unmount } = render(e(EditLineScreen, makeScreenProps()));
     const frame = lastFrame();
-    assert.ok(frame.includes('(full)'), 'should show (full) hint for story widget');
+    assert.ok(frame.includes('Current Item (full)'), 'should show (full) hint for Current Item');
+    assert.ok(frame.includes('Current Item (full) ■'), 'a gap separates the long name from the status marker');
     unmount();
   });
 
   test('shows Mode shortcut label', async () => {
     const { lastFrame, stdin, unmount } = render(e(EditLineScreen, makeScreenProps()));
-    // Move cursor to bmad-story (index 4: llmstate, project, workflow, activeskill, story)
+    // Move cursor to bmad-currentitem (index 4: llmstate, project, workflow, activeskill, currentitem)
     for (let i = 0; i < 4; i++) {
       await act(async () => { stdin.write('\x1B[B'); }); // arrow down
     }
@@ -296,6 +300,157 @@ describe('EditLineScreen', () => {
     const { lastFrame, unmount } = render(e(EditLineScreen, makeScreenProps()));
     const frame = lastFrame();
     assert.ok(frame.includes('hidden'), 'hidden status shown');
+    unmount();
+  });
+});
+
+describe('EditLineScreen — Current Item (two colors)', () => {
+  const CURRENT_ITEM_INDEX = 4; // llmstate, project, workflow, activeskill, currentitem
+
+  async function pressDown(stdin, times) {
+    for (let i = 0; i < times; i++) {
+      await act(async () => { stdin.write('\x1B[B'); });
+    }
+  }
+
+  function renderOnCurrentItem(config, editingLine = 0) {
+    const state = { updatedCfg: null };
+    const props = makeScreenProps({
+      config,
+      editingLine,
+      updateConfig: (mutator) => {
+        const cfg = structuredClone(config);
+        mutator(cfg);
+        state.updatedCfg = cfg;
+      },
+    });
+    return { state, ...render(e(EditLineScreen, props)) };
+  }
+
+  test('the row shows the story color and the document color', () => {
+    const config = createDefaultConfig();
+    config.lines[0].colorModes['bmad-currentitem'] = { mode: 'fixed', fixedColor: 'red', documentColor: 'blue' };
+    const { lastFrame, unmount } = render(e(EditLineScreen, makeScreenProps({ config })));
+    const row = lastFrame().split('\n').find(l => l.includes('Current Item'));
+    assert.ok(row, 'Current Item row rendered');
+    assert.ok(row.indexOf('red') > -1 && row.indexOf('blue') > row.indexOf('red'), 'story color then document color');
+    unmount();
+  });
+
+  test('the shortcut bar offers d (document color) on the Current Item row only', async () => {
+    const { stdin, lastFrame, unmount } = render(e(EditLineScreen, makeScreenProps()));
+    assert.ok(!lastFrame().includes('Doc color'), 'not offered on another row');
+    await pressDown(stdin, CURRENT_ITEM_INDEX);
+    const frame = lastFrame();
+    assert.ok(frame.includes('Doc color'), 'd shortcut shown for Current Item');
+    assert.ok(frame.includes('Story color'), 'arrows are labelled as the story color there');
+    assert.ok(frame.includes('Mode'), 'm shortcut still shown');
+    unmount();
+  });
+
+  test('d cycles only the document color', async () => {
+    const config = createDefaultConfig();
+    config.lines[0].colorModes['bmad-currentitem'] = { mode: 'fixed', fixedColor: 'red', documentColor: 'blue', displayMode: 'compact' };
+    const { state, stdin, unmount } = renderOnCurrentItem(config);
+    await pressDown(stdin, CURRENT_ITEM_INDEX);
+    await act(async () => { stdin.write('d'); });
+    assert.ok(state.updatedCfg, 'updateConfig was called');
+    assert.deepStrictEqual(state.updatedCfg.lines[0].colorModes['bmad-currentitem'], {
+      mode: 'fixed', fixedColor: 'red', documentColor: 'magenta', displayMode: 'compact',
+    });
+    unmount();
+  });
+
+  test('d on a visible Current Item without a saved colorMode starts from the defaults', async () => {
+    const config = createDefaultConfig();
+    delete config.lines[0].colorModes['bmad-currentitem'];
+    const { state, stdin, unmount } = renderOnCurrentItem(config);
+    await pressDown(stdin, CURRENT_ITEM_INDEX);
+    await act(async () => { stdin.write('d'); });
+    // default document color brightYellow → next in the ANSI list is brightBlue
+    assert.deepStrictEqual(state.updatedCfg.lines[0].colorModes['bmad-currentitem'], {
+      mode: 'fixed', fixedColor: 'magenta', documentColor: 'brightBlue',
+    });
+    unmount();
+  });
+
+  test('d wraps around the color list', async () => {
+    const config = createDefaultConfig();
+    config.lines[0].colorModes['bmad-currentitem'] = { mode: 'fixed', fixedColor: 'red', documentColor: 'brightBlack' };
+    const { state, stdin, unmount } = renderOnCurrentItem(config);
+    await pressDown(stdin, CURRENT_ITEM_INDEX);
+    await act(async () => { stdin.write('d'); });
+    assert.equal(state.updatedCfg.lines[0].colorModes['bmad-currentitem'].documentColor, 'red');
+    unmount();
+  });
+
+  test('right and left arrows cycle only the story color', async () => {
+    const config = createDefaultConfig();
+    config.lines[0].colorModes['bmad-currentitem'] = { mode: 'fixed', fixedColor: 'red', documentColor: 'blue', displayMode: 'compact' };
+    const { state, stdin, unmount } = renderOnCurrentItem(config);
+    await pressDown(stdin, CURRENT_ITEM_INDEX);
+    await act(async () => { stdin.write('\x1B[C'); });
+    assert.deepStrictEqual(state.updatedCfg.lines[0].colorModes['bmad-currentitem'], {
+      mode: 'fixed', fixedColor: 'green', documentColor: 'blue', displayMode: 'compact',
+    });
+    state.updatedCfg = null;
+    await act(async () => { stdin.write('\x1B[D'); });
+    assert.deepStrictEqual(state.updatedCfg.lines[0].colorModes['bmad-currentitem'], {
+      mode: 'fixed', fixedColor: 'brightBlack', documentColor: 'blue', displayMode: 'compact',
+    });
+    unmount();
+  });
+
+  test('the story color cycle supplies the default document color when none was saved', async () => {
+    const config = createDefaultConfig();
+    config.lines[0].colorModes['bmad-currentitem'] = { mode: 'fixed', fixedColor: 'magenta' };
+    const { state, stdin, unmount } = renderOnCurrentItem(config);
+    await pressDown(stdin, CURRENT_ITEM_INDEX);
+    await act(async () => { stdin.write('\x1B[C'); });
+    assert.equal(state.updatedCfg.lines[0].colorModes['bmad-currentitem'].documentColor, 'brightYellow');
+    unmount();
+  });
+
+  test('d does nothing on a hidden Current Item', async () => {
+    const config = createDefaultConfig();
+    config.lines[0].widgets = config.lines[0].widgets.filter(id => id !== 'bmad-currentitem');
+    const { state, stdin, unmount } = renderOnCurrentItem(config);
+    await pressDown(stdin, CURRENT_ITEM_INDEX);
+    await act(async () => { stdin.write('d'); });
+    assert.equal(state.updatedCfg, null);
+    unmount();
+  });
+
+  test('d does nothing on any other widget', async () => {
+    const { state, stdin, unmount } = renderOnCurrentItem(createDefaultConfig());
+    await pressDown(stdin, 1); // project
+    await act(async () => { stdin.write('d'); });
+    assert.equal(state.updatedCfg, null);
+    unmount();
+  });
+
+  test('showing a hidden Current Item creates a colorMode that carries both colors', async () => {
+    const config = createDefaultConfig();
+    config.lines[1].widgetOrder = [...config.lines[0].widgetOrder];
+    const { state, stdin, unmount } = renderOnCurrentItem(config, 1);
+    await pressDown(stdin, CURRENT_ITEM_INDEX);
+    await act(async () => { stdin.write('h'); });
+    assert.ok(state.updatedCfg.lines[1].widgets.includes('bmad-currentitem'), 'shown on line 2');
+    assert.deepStrictEqual(state.updatedCfg.lines[1].colorModes['bmad-currentitem'], {
+      mode: 'fixed', fixedColor: 'magenta', documentColor: 'brightYellow',
+    });
+    unmount();
+  });
+
+  test('m on a Current Item without a saved colorMode creates one with both colors', async () => {
+    const config = createDefaultConfig();
+    delete config.lines[0].colorModes['bmad-currentitem'];
+    const { state, stdin, unmount } = renderOnCurrentItem(config);
+    await pressDown(stdin, CURRENT_ITEM_INDEX);
+    await act(async () => { stdin.write('m'); });
+    assert.deepStrictEqual(state.updatedCfg.lines[0].colorModes['bmad-currentitem'], {
+      mode: 'fixed', fixedColor: 'magenta', documentColor: 'brightYellow', displayMode: 'compact',
+    });
     unmount();
   });
 });

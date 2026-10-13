@@ -65,6 +65,105 @@ function formatStoryName(slug, displayMode) {
   return `${match[1]} ${title}`;
 }
 
+// --- Current Item widget (Story + Document merged) ---
+
+const CURRENT_ITEM_WIDGET = 'bmad-currentitem';
+const DEFAULT_STORY_COLOR = 'magenta';
+const DEFAULT_DOCUMENT_COLOR = 'brightYellow';
+
+// What the Current Item widget shows for a status: the story in a story workflow,
+// otherwise the AutoBlend job or output-folder document name. `value` is the raw
+// stored string (story slug or document/job name) — callers format it. Null when
+// there is nothing to show; a stale document_name never shows in a story workflow.
+function resolveCurrentItem(status) {
+  if (!status || typeof status !== 'object') return null;
+  if (STORY_WORKFLOWS.includes(status.workflow)) {
+    return status.story ? { kind: 'story', value: status.story } : null;
+  }
+  return status.document_name ? { kind: 'document', value: status.document_name } : null;
+}
+
+// Configs saved up to v1.8.0 hold two widgets, Story and Document, that Current Item
+// replaced. These two ids exist only here, for the conversion below.
+const LEGACY_STORY_WIDGET = 'bmad-story';
+const LEGACY_DOCUMENT_WIDGET = 'bmad-docname';
+
+function isPlainObject(v) {
+  return v !== null && typeof v === 'object' && !Array.isArray(v);
+}
+
+function isLegacyWidgetId(id) {
+  return id === LEGACY_STORY_WIDGET || id === LEGACY_DOCUMENT_WIDGET;
+}
+
+// In-place: the first legacy id (or Current Item) keeps the slot, later ones drop.
+function replaceLegacyWidgetIds(list) {
+  if (!Array.isArray(list) || !list.some(isLegacyWidgetId)) return false;
+  const out = [];
+  for (const id of list) {
+    if (isLegacyWidgetId(id) || id === CURRENT_ITEM_WIDGET) {
+      if (!out.includes(CURRENT_ITEM_WIDGET)) out.push(CURRENT_ITEM_WIDGET);
+    } else {
+      out.push(id);
+    }
+  }
+  list.splice(0, list.length, ...out);
+  return true;
+}
+
+function savedFixedColor(colorMode) {
+  return isPlainObject(colorMode) && typeof colorMode.fixedColor === 'string' && colorMode.fixedColor
+    ? colorMode.fixedColor
+    : null;
+}
+
+// The merged colorMode keeps one color per kind and the story display mode. It is only
+// written when a legacy colorMode exists: a widget that never had one stays uncolored.
+function replaceLegacyColorModes(colorModes) {
+  const hasStory = Object.hasOwn(colorModes, LEGACY_STORY_WIDGET);
+  const hasDocument = Object.hasOwn(colorModes, LEGACY_DOCUMENT_WIDGET);
+  if (!hasStory && !hasDocument) return false;
+  if (!isPlainObject(colorModes[CURRENT_ITEM_WIDGET])) {
+    const story = colorModes[LEGACY_STORY_WIDGET];
+    const merged = {
+      mode: 'fixed',
+      fixedColor: savedFixedColor(story) || DEFAULT_STORY_COLOR,
+      documentColor: savedFixedColor(colorModes[LEGACY_DOCUMENT_WIDGET]) || DEFAULT_DOCUMENT_COLOR,
+    };
+    if (isPlainObject(story) && story.displayMode) merged.displayMode = story.displayMode;
+    colorModes[CURRENT_ITEM_WIDGET] = merged;
+  }
+  delete colorModes[LEGACY_STORY_WIDGET];
+  delete colorModes[LEGACY_DOCUMENT_WIDGET];
+  return true;
+}
+
+function migrateLegacyLine(line) {
+  if (!isPlainObject(line)) return false;
+  let changed = replaceLegacyWidgetIds(line.widgets);
+  changed = replaceLegacyWidgetIds(line.widgetOrder) || changed;
+  if (isPlainObject(line.colorModes)) changed = replaceLegacyColorModes(line.colorModes) || changed;
+  return changed;
+}
+
+// Converts a config from Story + Document to Current Item, in place, on every line and
+// every preset. Idempotent; tolerates malformed input (skipped, never thrown).
+// Returns whether anything changed.
+function migrateLegacyWidgets(config) {
+  if (!isPlainObject(config)) return false;
+  let changed = false;
+  if (Array.isArray(config.lines)) {
+    for (const line of config.lines) changed = migrateLegacyLine(line) || changed;
+  }
+  if (Array.isArray(config.presets)) {
+    for (const preset of config.presets) {
+      if (!isPlainObject(preset) || !Array.isArray(preset.lines)) continue;
+      for (const line of preset.lines) changed = migrateLegacyLine(line) || changed;
+    }
+  }
+  return changed;
+}
+
 const CONTEXT_GRADIENT_PALETTE = ['brightGreen', 'green', 'yellow', 'brightYellow', 'brightRed', 'red'];
 
 function getGradientColor(percentage, thresholdLow, thresholdHigh) {
@@ -136,6 +235,11 @@ module.exports = {
   computeDisplayState,
   formatTimer,
   formatStoryName,
+  CURRENT_ITEM_WIDGET,
+  DEFAULT_STORY_COLOR,
+  DEFAULT_DOCUMENT_COLOR,
+  resolveCurrentItem,
+  migrateLegacyWidgets,
   CONTEXT_GRADIENT_PALETTE,
   getGradientColor,
   WEEK_MS,

@@ -261,3 +261,15 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-autoblend-module-support.md`
   summary: `_bmad-output/project-context.md` still states that PreToolUse only ever sets `llm_state=active`; it now also records the Skill tool's active skill and scans shell commands for the AutoBlend job.
   evidence: Agent-context file (lines ~380, 434, 703 per review), out of the implementation's write scope; the hook change is in `src/hook/bmad-hook.js` (`handleSkillTool`, PreToolUse dispatch).
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-current-item-widget.md`
+  summary: A deployment stamped with the same version as the package keeps its old reader, so running the Current Item build from the source tree on a machine already at 1.8.0 converts `config.json` while the deployed reader still ignores `bmad-currentitem`.
+  evidence: `isDeployStale` (`src/deploy.js:56-61`) compares the version stamp only, and `package.json` stays at 1.8.0 until the release commit. Unreachable through npm (1.8.0 cannot be republished, so the release carries a new version and the self-heal in `bin/cli.js:38-45` fires). Settled by bumping the version at release; until then `bmad-statusline install` re-copies the reader. A content comparison in `isDeployStale` would remove the dependency on the bump.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-current-item-widget.md`
+  summary: A story skill launched by the model (active skill only, nothing typed) names the Monitor session but never gets a story: story detection in the hook keys on the typed skill.
+  evidence: `src/hook/bmad-hook.js:356, 527, 600, 669` test `STORY_WORKFLOWS.includes(status.workflow)`; with `workflow: null, active_skill: 'dev-story'` the item rule takes the document branch. Pre-existing; newly visible because the tab and badge now read `dev-story`. Product decision: whether story detection should follow the active skill.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-current-item-widget.md`
+  summary: Resolved by this spec — the two entries above "Merge the Document widget (`bmad-docname`) and the Story widget (`bmad-story`)…" and "In the Monitor, a session whose skill was launched by the model…" are delivered.
+  evidence: `bmad-currentitem` replaces both widgets with a config conversion (`migrateLegacyWidgets`); `sessionLabel` falls back to `active_skill` (`src/tui/monitor/monitor-utils.js`).

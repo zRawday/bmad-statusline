@@ -7,8 +7,7 @@
         "bmad-project",
         "bmad-workflow",
         "bmad-activeskill",
-        "bmad-story",
-        "bmad-docname",
+        "bmad-currentitem",
         "bmad-progressstep",
         "bmad-timer"
       ],
@@ -17,8 +16,7 @@
         "bmad-project",
         "bmad-workflow",
         "bmad-activeskill",
-        "bmad-story",
-        "bmad-docname",
+        "bmad-currentitem",
         "bmad-progressstep",
         "bmad-nextstep",
         "bmad-fileread",
@@ -37,13 +35,10 @@
         "bmad-activeskill": {
           "mode": "dynamic"
         },
-        "bmad-story": {
+        "bmad-currentitem": {
           "mode": "fixed",
-          "fixedColor": "magenta"
-        },
-        "bmad-docname": {
-          "mode": "fixed",
-          "fixedColor": "brightYellow"
+          "fixedColor": "magenta",
+          "documentColor": "brightYellow"
         },
         "bmad-progressstep": {
           "mode": "fixed",
@@ -64,8 +59,7 @@
         "bmad-project",
         "bmad-workflow",
         "bmad-activeskill",
-        "bmad-story",
-        "bmad-docname",
+        "bmad-currentitem",
         "bmad-progressstep",
         "bmad-nextstep",
         "bmad-fileread",
@@ -93,8 +87,7 @@
         "bmad-project",
         "bmad-workflow",
         "bmad-activeskill",
-        "bmad-story",
-        "bmad-docname",
+        "bmad-currentitem",
         "bmad-progressstep",
         "bmad-nextstep",
         "bmad-fileread",

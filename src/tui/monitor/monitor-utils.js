@@ -4,9 +4,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { getDefaultSkillColor } from '../skill-catalog.js';
 import { toInkColor } from '../preview-utils.js';
-import { ALIVE_MAX_AGE_MS, STORY_WORKFLOWS, hashProjectColor, computeDisplayState, formatTimer as formatElapsed, formatStoryName, LLM_STATE_PRIORITY } from '../../defaults.js';
+import { ALIVE_MAX_AGE_MS, STORY_WORKFLOWS, hashProjectColor, computeDisplayState, formatTimer as formatElapsed, formatStoryName, LLM_STATE_PRIORITY, resolveCurrentItem } from '../../defaults.js';
 
-export { ALIVE_MAX_AGE_MS, STORY_WORKFLOWS, computeDisplayState, formatElapsed, formatStoryName as formatStoryTitle };
+export { ALIVE_MAX_AGE_MS, STORY_WORKFLOWS, computeDisplayState, formatElapsed };
 
 export const MONITOR_IDLE_WINDOW_MS = 4 * 60 * 60 * 1000; // 4 hours — keep idle sessions visible
 const MAX_SESSIONS = 20;
@@ -149,13 +149,28 @@ export function resolveProjectColor(projectName, config) {
 
 // STORY_WORKFLOWS imported from defaults.js
 
-// Tab label for a session. Non-BMAD sessions have no workflow/skill — fall back to a
-// short session id rather than the full UUID, which would blow out the tab row.
+// Skill that names a session: the typed one (workflow, then skill), else the skill the
+// model launched itself (active_skill). Empty when the session never ran a skill.
+export function sessionSkillName(session) {
+  if (!session) return '';
+  return session.workflow || session.skill || session.active_skill || '';
+}
+
+// Tab label for a session. Sessions with no skill at all fall back to a short session
+// id rather than the full UUID, which would blow out the tab row.
 export function sessionLabel(session) {
   if (!session) return '';
-  if (session.workflow) return session.workflow;
-  if (session.skill) return session.skill;
+  const name = sessionSkillName(session);
+  if (name) return name;
   return session.sessionId ? String(session.sessionId).slice(0, 8) : '';
+}
+
+// What the badge shows next to the skill: the story in a story workflow, otherwise the
+// output-folder document or AutoBlend job — the same rule as the Current Item widget.
+export function currentItemLabel(session) {
+  const item = resolveCurrentItem(session);
+  if (!item) return '';
+  return item.kind === 'story' ? formatStoryName(item.value) : item.value;
 }
 
 export function extractStoryNumber(story) {
@@ -164,8 +179,7 @@ export function extractStoryNumber(story) {
   return m ? m[1] : '';
 }
 
-// formatStoryTitle (aliased from formatStoryName), formatElapsed (aliased from formatTimer)
-// imported and re-exported from defaults.js
+// formatElapsed (aliased from formatTimer) imported and re-exported from defaults.js
 
 // --- File tree building (Pattern 26) ---
 

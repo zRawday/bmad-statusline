@@ -14,7 +14,7 @@ const MOCK_ITEMS = [
   { id: 'bmad-project', label: 'project' },
   { id: 'bmad-workflow', label: 'workflow' },
   { id: 'bmad-progressstep', label: 'progressstep' },
-  { id: 'bmad-story', label: 'story' },
+  { id: 'bmad-currentitem', label: 'currentitem' },
   { id: 'bmad-timer', label: 'timer' },
 ];
 
@@ -32,7 +32,7 @@ describe('ReorderList', () => {
     assert.ok(frame.includes('1. project'), 'first widget numbered');
     assert.ok(frame.includes('2. workflow'), 'second widget numbered');
     assert.ok(frame.includes('3. progressstep'), 'third widget numbered');
-    assert.ok(frame.includes('4. story'), 'fourth widget numbered');
+    assert.ok(frame.includes('4. currentitem'), 'fourth widget numbered');
     assert.ok(frame.includes('5. timer'), 'fifth widget numbered');
     // Cursor on first item
     assert.ok(frame.includes('> 1. project'), 'cursor on first item');

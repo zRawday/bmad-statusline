@@ -4,7 +4,7 @@
   "lines": [
     {
       "widgets": ["bmad-project", "bmad-workflow", "bmad-progressstep"],
-      "widgetOrder": ["bmad-project", "bmad-workflow", "bmad-nextstep", "bmad-progressstep", "bmad-story", "bmad-timer", "bmad-activeskill", "bmad-fileread", "bmad-filewrite", "bmad-docname", "bmad-llmstate", "bmad-contextpct", "bmad-weeklyusage"],
+      "widgetOrder": ["bmad-project", "bmad-workflow", "bmad-nextstep", "bmad-progressstep", "bmad-currentitem", "bmad-timer", "bmad-activeskill", "bmad-fileread", "bmad-filewrite", "bmad-llmstate", "bmad-contextpct", "bmad-weeklyusage"],
       "colorModes": {
         "bmad-project": { "mode": "fixed", "fixedColor": "cyan" },
         "bmad-workflow": { "mode": "dynamic" },
@@ -12,14 +12,14 @@
       }
     },
     {
-      "widgets": ["bmad-story", "bmad-timer"],
-      "widgetOrder": ["bmad-project", "bmad-workflow", "bmad-nextstep", "bmad-progressstep", "bmad-story", "bmad-timer", "bmad-activeskill", "bmad-fileread", "bmad-filewrite", "bmad-docname", "bmad-llmstate", "bmad-contextpct", "bmad-weeklyusage"],
+      "widgets": ["bmad-currentitem", "bmad-timer"],
+      "widgetOrder": ["bmad-project", "bmad-workflow", "bmad-nextstep", "bmad-progressstep", "bmad-currentitem", "bmad-timer", "bmad-activeskill", "bmad-fileread", "bmad-filewrite", "bmad-llmstate", "bmad-contextpct", "bmad-weeklyusage"],
       "colorModes": {
-        "bmad-story": { "mode": "fixed", "fixedColor": "magenta" },
+        "bmad-currentitem": { "mode": "fixed", "fixedColor": "magenta", "documentColor": "brightYellow" },
         "bmad-timer": { "mode": "fixed", "fixedColor": "brightBlack" }
       }
     },
-    { "widgets": [], "widgetOrder": ["bmad-project", "bmad-workflow", "bmad-nextstep", "bmad-progressstep", "bmad-story", "bmad-timer", "bmad-activeskill", "bmad-fileread", "bmad-filewrite", "bmad-docname", "bmad-llmstate", "bmad-contextpct", "bmad-weeklyusage"], "colorModes": {} }
+    { "widgets": [], "widgetOrder": ["bmad-project", "bmad-workflow", "bmad-nextstep", "bmad-progressstep", "bmad-currentitem", "bmad-timer", "bmad-activeskill", "bmad-fileread", "bmad-filewrite", "bmad-llmstate", "bmad-contextpct", "bmad-weeklyusage"], "colorModes": {} }
   ],
   "skillColors": {},
   "projectColors": {},

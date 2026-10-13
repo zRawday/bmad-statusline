@@ -11,7 +11,7 @@ import { createDefaultConfig } from '../src/tui/widget-registry.js';
 
 const e = React.createElement;
 
-const ALL_IDS = ['bmad-project', 'bmad-workflow', 'bmad-activeskill', 'bmad-story', 'bmad-progressstep', 'bmad-nextstep', 'bmad-timer'];
+const ALL_IDS = ['bmad-project', 'bmad-workflow', 'bmad-activeskill', 'bmad-currentitem', 'bmad-progressstep', 'bmad-nextstep', 'bmad-timer'];
 
 function makePreset(name, line0Widgets = [], line1Widgets = [], line2Widgets = []) {
   return {
@@ -211,8 +211,8 @@ describe('PresetLoadScreen', () => {
   test('load replaces all lines and separator, preserves colors', async () => {
     let updatedCfg = null;
     const config = createDefaultConfig();
-    config.lines[1].widgets = ['bmad-story'];
-    config.lines[1].colorModes = { 'bmad-story': { mode: 'fixed', fixedColor: 'magenta' } };
+    config.lines[1].widgets = ['bmad-currentitem'];
+    config.lines[1].colorModes = { 'bmad-currentitem': { mode: 'fixed', fixedColor: 'magenta', documentColor: 'brightYellow' } };
     const originalColorModes1 = structuredClone(config.lines[1].colorModes);
     config.presets[0] = makePreset('test', ['bmad-timer'], ['bmad-project'], []);
     const { stdin, unmount } = render(e(PresetLoadScreen, makeScreenProps({

@@ -11,8 +11,7 @@ export const SAMPLE_VALUES = {
   'bmad-activeskill': 'code-review',
   'bmad-progressstep': 'Step 2/7 Discover',
   'bmad-nextstep': 'Design',
-  'bmad-story': '4-2 Auth Login',
-  'bmad-docname': 'architecture.md',
+  'bmad-currentitem': '4-2 Auth Login',
   'bmad-timer': '12m34s',
   'bmad-fileread': 'read src/hook/bmad-hook.js',
   'bmad-filewrite': 'edit _bmad-output/prd.md',
@@ -31,7 +30,7 @@ export function toInkColor(name) {
 }
 
 export function getSampleValue(widgetId, colorModes) {
-  if (widgetId === 'bmad-story' && colorModes && colorModes[widgetId]?.displayMode === 'compact') {
+  if (widgetId === 'bmad-currentitem' && colorModes && colorModes[widgetId]?.displayMode === 'compact') {
     return '4-2';
   }
   if (widgetId === 'bmad-contextpct' && colorModes && colorModes[widgetId]?.displayMode === 'compact') {

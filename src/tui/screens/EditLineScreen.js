@@ -3,8 +3,9 @@
 import React, { useState } from 'react';
 import { Box, Text, useInput } from 'ink';
 import { ScreenLayout } from '../components/ScreenLayout.js';
-import { getIndividualWidgets, ANSI_COLORS } from '../widget-registry.js';
+import { getIndividualWidgets, defaultColorMode, ANSI_COLORS } from '../widget-registry.js';
 import { toInkColor } from '../preview-utils.js';
+import { CURRENT_ITEM_WIDGET } from '../../defaults.js';
 
 const e = React.createElement;
 
@@ -18,13 +19,28 @@ const BASE_NAVIGATE_SHORTCUTS = [
   { key: 'Enter', label: 'Edit skills' },
   { key: 'Esc', label: 'Back' },
 ];
-const STORY_MODE_SHORTCUT = { key: 'm', label: 'Mode' };
+const MODE_SHORTCUT = { key: 'm', label: 'Mode' };
+// Current Item has two colors (story, document / AutoBlend job) and Enter does nothing on
+// it — Enter drops out of the bar so the longer row still fits an 80-column terminal.
+const CURRENT_ITEM_SHORTCUTS = [
+  BASE_NAVIGATE_SHORTCUTS[0], BASE_NAVIGATE_SHORTCUTS[1], BASE_NAVIGATE_SHORTCUTS[2],
+  { key: BASE_NAVIGATE_SHORTCUTS[3].key, label: 'Story color' },
+  { key: 'd', label: 'Doc color' },
+  MODE_SHORTCUT,
+  BASE_NAVIGATE_SHORTCUTS[5],
+];
+// Widgets with a display mode toggled by `m`
+const MODE_WIDGETS = [CURRENT_ITEM_WIDGET, 'bmad-contextpct', 'bmad-weeklyusage'];
 
 const GRAB_SHORTCUTS = [
   { key: '\u2191\u2193', label: 'Move' },
   { key: 'g', label: 'Drop' },
   { key: 'Esc', label: 'Cancel' },
 ];
+
+function getDocumentColorName(colorModes, widget) {
+  return colorModes[widget.id]?.documentColor || widget.defaultDocumentColor || 'white';
+}
 
 function getColorOptions(widgetId) {
   if (widgetId === 'bmad-llmstate' || widgetId === 'bmad-contextpct' || widgetId === 'bmad-weeklyusage') return [];
@@ -143,11 +159,7 @@ export function EditLineScreen({ config, updateConfig, previewOverride, setPrevi
             if (wIdx >= 0) insertAt = wIdx + 1;
           }
           ln.widgets.splice(insertAt, 0, widget.id);
-          if (!ln.colorModes[widget.id]) {
-            ln.colorModes[widget.id] = widget.defaultMode === 'dynamic'
-              ? { mode: 'dynamic' }
-              : { mode: 'fixed', fixedColor: widget.defaultColor };
-          }
+          if (!ln.colorModes[widget.id]) ln.colorModes[widget.id] = defaultColorMode(widget);
         }
       });
     } else if (input === 'g') {
@@ -155,7 +167,7 @@ export function EditLineScreen({ config, updateConfig, previewOverride, setPrevi
       setGrabMode(true);
     } else if (input === 'm') {
       const widget = widgetList[cursorIndex];
-      if (!widget || (widget.id !== 'bmad-story' && widget.id !== 'bmad-contextpct' && widget.id !== 'bmad-weeklyusage')) return;
+      if (!widget || !MODE_WIDGETS.includes(widget.id)) return;
       if (!line.widgets.includes(widget.id)) return;
       updateConfig(cfg => {
         const ln = cfg.lines[editingLine];
@@ -164,7 +176,7 @@ export function EditLineScreen({ config, updateConfig, previewOverride, setPrevi
             ? { mode: 'dynamic', thresholdLow: 0, thresholdHigh: 100, displayMode: 'full' }
             : widget.id === 'bmad-weeklyusage'
             ? { mode: 'dynamic', displayMode: 'compact' }
-            : { mode: 'fixed', fixedColor: 'magenta' };
+            : defaultColorMode(widget);
         }
         const cm = ln.colorModes[widget.id];
         if (widget.id === 'bmad-weeklyusage') {
@@ -172,6 +184,16 @@ export function EditLineScreen({ config, updateConfig, previewOverride, setPrevi
         } else {
           cm.displayMode = cm.displayMode === 'compact' ? 'full' : 'compact';
         }
+      });
+    } else if (input === 'd') {
+      // Current Item only: cycle the document / AutoBlend job color (←/→ cycles the story color)
+      const widget = widgetList[cursorIndex];
+      if (!widget || widget.id !== CURRENT_ITEM_WIDGET || !line.widgets.includes(widget.id)) return;
+      const current = getDocumentColorName(line.colorModes, widget);
+      const nextColor = ANSI_COLORS[(ANSI_COLORS.indexOf(current) + 1) % ANSI_COLORS.length];
+      updateConfig(cfg => {
+        const ln = cfg.lines[editingLine];
+        ln.colorModes[widget.id] = { ...(ln.colorModes[widget.id] || defaultColorMode(widget)), documentColor: nextColor };
       });
     } else if (key.leftArrow || key.rightArrow) {
       const widget = widgetList[cursorIndex];
@@ -190,6 +212,7 @@ export function EditLineScreen({ config, updateConfig, previewOverride, setPrevi
           ? { mode: 'dynamic' }
           : { mode: 'fixed', fixedColor: nextColor };
         if (prev?.displayMode) base.displayMode = prev.displayMode;
+        if (widget.id === CURRENT_ITEM_WIDGET) base.documentColor = getDocumentColorName(cfg.lines[editingLine].colorModes, widget);
         cfg.lines[editingLine].colorModes[widget.id] = base;
       });
     }
@@ -201,9 +224,11 @@ export function EditLineScreen({ config, updateConfig, previewOverride, setPrevi
     config,
     previewOverride,
     shortcuts: grabMode ? GRAB_SHORTCUTS
-      : (widgetList[cursorIndex]?.id === 'bmad-story' || widgetList[cursorIndex]?.id === 'bmad-contextpct' || widgetList[cursorIndex]?.id === 'bmad-weeklyusage')
-        ? [...BASE_NAVIGATE_SHORTCUTS.slice(0, 4), STORY_MODE_SHORTCUT, ...BASE_NAVIGATE_SHORTCUTS.slice(4)]
-        : BASE_NAVIGATE_SHORTCUTS,
+      : widgetList[cursorIndex]?.id === CURRENT_ITEM_WIDGET
+        ? CURRENT_ITEM_SHORTCUTS
+        : MODE_WIDGETS.includes(widgetList[cursorIndex]?.id)
+          ? [...BASE_NAVIGATE_SHORTCUTS.slice(0, 4), MODE_SHORTCUT, ...BASE_NAVIGATE_SHORTCUTS.slice(4)]
+          : BASE_NAVIGATE_SHORTCUTS,
   },
     e(Box, { flexDirection: 'column' },
       ...widgetList.map((widget, i) => {
@@ -224,8 +249,8 @@ export function EditLineScreen({ config, updateConfig, previewOverride, setPrevi
             `${statusIcon} ${isVisible ? 'visible' : 'hidden'}`));
         }
 
-        // Display mode hint for story widget — shown in name column
-        const storyMode = isVisible && (widget.id === 'bmad-story' || widget.id === 'bmad-contextpct' || widget.id === 'bmad-weeklyusage')
+        // Display mode hint (Current Item, Context %, Weekly Usage) — shown in name column
+        const storyMode = isVisible && MODE_WIDGETS.includes(widget.id)
           ? (line.colorModes[widget.id]?.displayMode || (widget.id === 'bmad-weeklyusage' ? 'compact' : 'full'))
           : null;
         const displayName = storyMode ? `${widget.name} (${storyMode})` : widget.name;
@@ -233,15 +258,23 @@ export function EditLineScreen({ config, updateConfig, previewOverride, setPrevi
         // Compute padding so hints align vertically
         const statusLen = isVisible ? 9 : 8; // "■ visible" or "□ hidden"
         const colorDisplay = widget.id === 'bmad-llmstate' ? '(auto)' : colorName;
-        const colorLen = isVisible ? 2 + colorDisplay.length : 0; // "  {color}"
+        // Current Item shows its second (document / job) color after the story color
+        const documentColorName = widget.id === CURRENT_ITEM_WIDGET ? getDocumentColorName(line.colorModes, widget) : null;
+        const colorLen = isVisible ? 2 + colorDisplay.length + (documentColorName ? 2 + documentColorName.length : 0) : 0; // "  {color}"
         const grabLen = isGrabbed ? 3 : 0; // "  ↕"
         const hintPad = ' '.repeat(Math.max(2, 26 - statusLen - colorLen - grabLen));
 
         return e(Text, { key: widget.id, bold: isGrabbed },
           prefix,
-          e(Text, null, displayName.padEnd(18)),
+          e(Text, null, displayName.padEnd(Math.max(18, displayName.length + 1))), // a long name ("Current Item (full)") still keeps a gap
           ...statusParts,
-          isVisible ? e(Text, { dimColor: true }, `  ${widget.id === 'bmad-llmstate' ? '(auto)' : colorName}`) : null,
+          isVisible && documentColorName
+            ? e(Text, { key: 'story-color', color: toInkColor(colorName) }, `  ${colorName}`)
+            : null,
+          isVisible && documentColorName
+            ? e(Text, { key: 'document-color', color: toInkColor(documentColorName) }, `  ${documentColorName}`)
+            : null,
+          isVisible && !documentColorName ? e(Text, { dimColor: true }, `  ${widget.id === 'bmad-llmstate' ? '(auto)' : colorName}`) : null,
           isGrabbed ? e(Text, { dimColor: true }, '  \u2195') : null,
           widget.hint ? e(Text, { dimColor: true }, `${hintPad}${widget.hint}`) : null,
         );

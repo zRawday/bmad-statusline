@@ -15,7 +15,7 @@ import {
   getCommandFamily, buildFileTree, renderTreeLines,
   groupSessionsByProject, computeDisplayState, worstState,
   resolveSessionColor, resolveProjectColor, formatElapsed,
-  sessionLabel, resolveAutoAllow, MONITOR_IDLE_WINDOW_MS,
+  sessionLabel, sessionSkillName, currentItemLabel, resolveAutoAllow, MONITOR_IDLE_WINDOW_MS,
 } from '../src/tui/monitor/monitor-utils.js';
 import { SKILL_MODULES, getDefaultSkillColor } from '../src/tui/skill-catalog.js';
 import { MonitorScreen } from '../src/tui/monitor/MonitorScreen.js';
@@ -172,6 +172,37 @@ describe('MonitorScreen', () => {
       }));
       await act(async () => { stdin.write('\x1B'); });
       assert.ok(goBackCalled);
+      unmount();
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  test('a model-launched skill names the tab and the badge, with the job as context', async () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'bmad-monitor-activeskill-'));
+    try {
+      const status = {
+        project: 'test-proj', workflow: null, skill: null, active_skill: 'autoblend-builder',
+        document_name: 'zouzou', llm_state: 'active', updated_at: new Date().toISOString(),
+      };
+      for (const sid of ['sess-ab1', 'sess-ab2']) {
+        fs.writeFileSync(path.join(tmpDir, `.alive-${sid}`), '');
+        fs.writeFileSync(path.join(tmpDir, `status-${sid}.json`), JSON.stringify(status));
+      }
+      const { lastFrame, unmount } = render(e(MonitorScreen, {
+        config: {},
+        navigate: () => {},
+        goBack: () => {},
+        isActive: true,
+        paths: { cachePath: tmpDir },
+        pollInterval: 10,
+      }));
+      await act(async () => {});
+      const frame = lastFrame();
+      assert.ok(frame.includes('[⬤ autoblend-builder]'), 'tab reads the active skill, not a session id');
+      assert.ok(frame.includes('ACTIVE autoblend-builder'), 'badge reads the active skill');
+      assert.ok(frame.includes('zouzou'), 'badge context shows the job');
+      assert.ok(!frame.includes('sess-ab1'.slice(0, 8)), 'no short session id fallback');
       unmount();
     } finally {
       fs.rmSync(tmpDir, { recursive: true, force: true });
@@ -413,6 +444,58 @@ describe('sessionLabel', () => {
   test('returns empty string when nothing identifies the session', () => {
     assert.equal(sessionLabel({}), '');
     assert.equal(sessionLabel(null), '');
+  });
+
+  test('a skill the model launched itself (active_skill only) names the session', () => {
+    assert.equal(
+      sessionLabel({ workflow: null, skill: null, active_skill: 'autoblend-builder', sessionId: '27748989-4a8a-40ae-ae6c-297489894a8a' }),
+      'autoblend-builder'
+    );
+  });
+
+  test('the typed skill stays the name whenever one exists, even with a different active_skill', () => {
+    assert.equal(sessionLabel({ workflow: 'dev-story', active_skill: 'code-review', sessionId: 'abcdef123456' }), 'dev-story');
+    assert.equal(sessionLabel({ skill: 'bmad-dev-story', active_skill: 'code-review', sessionId: 'abcdef123456' }), 'bmad-dev-story');
+  });
+
+  test('no skill at all (not even active_skill) keeps the 8-char session id', () => {
+    assert.equal(sessionLabel({ workflow: null, skill: null, active_skill: null, sessionId: '27748989-4a8a-40ae-ae6c-297489894a8a' }), '27748989');
+  });
+
+  test('the tab of a model-launched skill takes the color of that skill', () => {
+    const label = sessionLabel({ workflow: null, skill: null, active_skill: 'autoblend-builder', sessionId: 'abcdef123456' });
+    assert.equal(resolveSessionColor(label, {}), 'cyanBright'); // autoblend-builder = brightCyan
+    assert.equal(resolveSessionColor(label, { skillColors: { 'autoblend-builder': 'red' } }), 'red');
+  });
+});
+
+describe('sessionSkillName (badge name)', () => {
+  test('follows the tab order — workflow, skill, active_skill — without the session id', () => {
+    assert.equal(sessionSkillName({ workflow: 'dev-story', skill: 'bmad-dev-story', active_skill: 'code-review' }), 'dev-story');
+    assert.equal(sessionSkillName({ skill: 'bmad-dev-story', active_skill: 'code-review' }), 'bmad-dev-story');
+    assert.equal(sessionSkillName({ workflow: null, skill: null, active_skill: 'autoblend-builder' }), 'autoblend-builder');
+    assert.equal(sessionSkillName({ sessionId: '27748989-4a8a' }), '');
+    assert.equal(sessionSkillName(null), '');
+  });
+});
+
+describe('currentItemLabel (badge context)', () => {
+  test('story workflow shows the formatted story', () => {
+    assert.equal(currentItemLabel({ workflow: 'dev-story', story: '4-2-auth-login' }), '4-2 Auth Login');
+  });
+
+  test('story workflow with no story yet shows nothing, even with a stale document_name', () => {
+    assert.equal(currentItemLabel({ workflow: 'dev-story', story: null, document_name: 'prd.md' }), '');
+  });
+
+  test('other workflows and AutoBlend jobs show the document / job name verbatim', () => {
+    assert.equal(currentItemLabel({ workflow: 'create-prd', document_name: 'prd.md' }), 'prd.md');
+    assert.equal(currentItemLabel({ workflow: null, active_skill: 'autoblend-builder', document_name: 'zouzou' }), 'zouzou');
+  });
+
+  test('nothing to show returns an empty string', () => {
+    assert.equal(currentItemLabel({ workflow: 'create-prd' }), '');
+    assert.equal(currentItemLabel({}), '');
   });
 });
 

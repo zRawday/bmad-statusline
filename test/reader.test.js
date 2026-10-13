@@ -147,9 +147,9 @@ describe('reader color output', () => {
     );
   });
 
-  it('docname prints the AutoBlend job id verbatim', () => {
+  it('currentitem prints the AutoBlend job id verbatim', () => {
     writeStatus('docname-job', { document_name: 'zouzou' });
-    assert.equal(execReader('docname', 'docname-job'), 'zouzou');
+    assert.equal(execReader('currentitem', 'docname-job'), 'zouzou');
   });
 
   it('outputs unknown workflow as plain text', () => {
@@ -188,9 +188,9 @@ describe('reader color output', () => {
     assert.equal(result, 'Step 2/4');
   });
 
-  it('story returns plain text', () => {
-    writeStatus('pt7', { story: '1-3-reader-colors' });
-    const result = execReader('story', 'pt7');
+  it('currentitem returns the story as plain text in a story workflow', () => {
+    writeStatus('pt7', { workflow: 'dev-story', story: '1-3-reader-colors' });
+    const result = execReader('currentitem', 'pt7');
     assert.equal(result, '1-3 Reader Colors');
     assert.ok(!result.includes(ESC));
   });
@@ -240,32 +240,32 @@ describe('reader color output', () => {
   // --- Story name formatting (AC #6) ---
 
   it('formats story slug 5-3-auth-login to 5-3 Auth Login (AC #6)', () => {
-    writeStatus('fmt1', { story: '5-3-auth-login' });
-    const result = execReader('story', 'fmt1');
+    writeStatus('fmt1', { workflow: 'dev-story', story: '5-3-auth-login' });
+    const result = execReader('currentitem', 'fmt1');
     assert.equal(result, '5-3 Auth Login');
   });
 
   it('formats story slug 4-2-user-registration-flow (AC #6)', () => {
-    writeStatus('fmt2', { story: '4-2-user-registration-flow' });
-    const result = execReader('story', 'fmt2');
+    writeStatus('fmt2', { workflow: 'create-story', story: '4-2-user-registration-flow' });
+    const result = execReader('currentitem', 'fmt2');
     assert.equal(result, '4-2 User Registration Flow');
   });
 
   it('formats story slug with double-hyphen 5-3-auth--login to 5-3 Auth Login', () => {
-    writeStatus('fmt5', { story: '5-3-auth--login' });
-    const result = execReader('story', 'fmt5');
+    writeStatus('fmt5', { workflow: 'code-review', story: '5-3-auth--login' });
+    const result = execReader('currentitem', 'fmt5');
     assert.equal(result, '5-3 Auth Login');
   });
 
   it('returns non-matching slug as-is (AC #6)', () => {
-    writeStatus('fmt3', { story: 'some-other-thing' });
-    const result = execReader('story', 'fmt3');
+    writeStatus('fmt3', { workflow: 'dev-story', story: 'some-other-thing' });
+    const result = execReader('currentitem', 'fmt3');
     assert.equal(result, 'some-other-thing');
   });
 
   it('returns empty string for empty story (AC #6)', () => {
     writeStatus('fmt4', {});
-    const result = execReader('story', 'fmt4');
+    const result = execReader('currentitem', 'fmt4');
     assert.equal(result, '');
   });
 
@@ -274,9 +274,9 @@ describe('reader color output', () => {
   it('story compact mode returns only number prefix via line command', () => {
     const configDir = fs.mkdtempSync(path.join(os.tmpdir(), 'bmad-cfg-'));
     const config = JSON.parse(fs.readFileSync(FIXTURE_CONFIG_PATH, 'utf8'));
-    config.lines[0].colorModes['bmad-story'] = { mode: 'fixed', fixedColor: 'magenta', displayMode: 'compact' };
+    config.lines[0].colorModes['bmad-currentitem'] = { mode: 'fixed', fixedColor: 'magenta', documentColor: 'brightYellow', displayMode: 'compact' };
     fs.writeFileSync(path.join(configDir, 'config.json'), JSON.stringify(config));
-    writeStatus('compact1', { story: '7-5-auth-login' });
+    writeStatus('compact1', { workflow: 'dev-story', story: '7-5-auth-login' });
     const result = execReaderWithConfig('line 0', 'compact1', configDir);
     assert.ok(result.includes('7-5'), 'should contain story number');
     assert.ok(!result.includes('Auth Login'), 'should NOT contain title in compact mode');
@@ -288,22 +288,22 @@ describe('reader color output', () => {
     const config = JSON.parse(fs.readFileSync(FIXTURE_CONFIG_PATH, 'utf8'));
     // No displayMode set — should default to full
     fs.writeFileSync(path.join(configDir, 'config.json'), JSON.stringify(config));
-    writeStatus('full1', { story: '7-5-auth-login' });
+    writeStatus('full1', { workflow: 'dev-story', story: '7-5-auth-login' });
     const result = execReaderWithConfig('line 0', 'full1', configDir);
     assert.ok(result.includes('7-5 Auth Login'), 'should contain full story name');
     fs.rmSync(configDir, { recursive: true, force: true });
   });
 
-  it('standalone story command always returns full format (no lineConfig)', () => {
-    writeStatus('standalone1', { story: '7-5-auth-login' });
-    const result = execReader('story', 'standalone1');
+  it('standalone currentitem command always returns full format (no lineConfig)', () => {
+    writeStatus('standalone1', { workflow: 'dev-story', story: '7-5-auth-login' });
+    const result = execReader('currentitem', 'standalone1');
     assert.equal(result, '7-5 Auth Login');
   });
 
   it('compact mode with no story returns empty string', () => {
     const configDir = fs.mkdtempSync(path.join(os.tmpdir(), 'bmad-cfg-'));
     const config = JSON.parse(fs.readFileSync(FIXTURE_CONFIG_PATH, 'utf8'));
-    config.lines[0].colorModes['bmad-story'] = { mode: 'fixed', fixedColor: 'magenta', displayMode: 'compact' };
+    config.lines[0].colorModes['bmad-currentitem'] = { mode: 'fixed', fixedColor: 'magenta', documentColor: 'brightYellow', displayMode: 'compact' };
     fs.writeFileSync(path.join(configDir, 'config.json'), JSON.stringify(config));
     writeStatus('compact-empty', {});
     const result = execReaderWithConfig('line 0', 'compact-empty', configDir);
@@ -314,9 +314,9 @@ describe('reader color output', () => {
   it('compact mode with non-matching slug returns slug as-is', () => {
     const configDir = fs.mkdtempSync(path.join(os.tmpdir(), 'bmad-cfg-'));
     const config = JSON.parse(fs.readFileSync(FIXTURE_CONFIG_PATH, 'utf8'));
-    config.lines[0].colorModes['bmad-story'] = { mode: 'fixed', fixedColor: 'magenta', displayMode: 'compact' };
+    config.lines[0].colorModes['bmad-currentitem'] = { mode: 'fixed', fixedColor: 'magenta', documentColor: 'brightYellow', displayMode: 'compact' };
     fs.writeFileSync(path.join(configDir, 'config.json'), JSON.stringify(config));
-    writeStatus('compact-nomatch', { story: 'no-match' });
+    writeStatus('compact-nomatch', { workflow: 'dev-story', story: 'no-match' });
     const result = execReaderWithConfig('line 0', 'compact-nomatch', configDir);
     assert.ok(result.includes('no-match'), 'non-matching slug should pass through');
     fs.rmSync(configDir, { recursive: true, force: true });
@@ -572,14 +572,14 @@ describe('reader color output', () => {
 
   // --- getStoryOrRequest returns story only (AC #11) — direct import ---
 
-  it('getStoryOrRequest returns story, ignores missing request (AC #11)', () => {
-    const result = reader.COMMANDS.story({ story: 'my-story' }, null);
+  it('currentitem returns the story in a story workflow (AC #11)', () => {
+    const result = reader.COMMANDS.currentitem({ workflow: 'dev-story', story: 'my-story' }, null);
     assert.equal(result, 'my-story');
   });
 
-  it('getStoryOrRequest returns empty when no story (AC #11)', () => {
-    const result = reader.COMMANDS.story({}, null);
-    assert.equal(result, '');
+  it('currentitem returns empty when there is nothing to show (AC #11)', () => {
+    assert.equal(reader.COMMANDS.currentitem({}, null), '');
+    assert.equal(reader.COMMANDS.currentitem({ workflow: 'dev-story' }, null), '');
   });
 
   // --- Individual extractors with valid data (AC #12) — direct import, no process spawn ---
@@ -598,7 +598,10 @@ describe('reader color output', () => {
     assert.equal(reader.COMMANDS.workflow(status, null), `${ESC}35mcreate-architecture${RESET}`);
     assert.equal(reader.COMMANDS.nextstep(status, null), 'decisions');
     assert.equal(reader.COMMANDS.progressstep(status, null), 'Step 3/8 starter');
-    assert.equal(reader.COMMANDS.story(status, null), '3-1 Hook Detection');
+    // create-architecture is no story workflow: a stale story is ignored, the document shows
+    assert.equal(reader.COMMANDS.currentitem(status, null), '');
+    assert.equal(reader.COMMANDS.currentitem({ ...status, document_name: 'architecture.md' }, null), 'architecture.md');
+    assert.equal(reader.COMMANDS.currentitem({ ...status, workflow: 'dev-story' }, null), '3-1 Hook Detection');
     const timer = reader.COMMANDS.timer(status, null);
     assert.ok(timer.includes('m'), 'timer should show minutes');
   });
@@ -1167,5 +1170,186 @@ describe('weekly-usage reader', () => {
     assert.ok(!out.includes(`${ESC}35m`), 'does NOT emit the magenta fixed color (excluded from generic wrap)');
     assert.ok(out.includes('Weekly: SWEET SPOT'), 'renders the sweet zone status word');
     fs.rmSync(configDir, { recursive: true, force: true });
+  });
+});
+
+// --- Current Item widget (Story + Document merged) ---
+
+describe('reader Current Item widget', () => {
+  const LEGACY_FIXTURE_PATH = path.resolve(__dirname, 'fixtures', 'internal-config-legacy-story-docname.json');
+  const SEP = ' ┃ '; // modere separator of both fixtures
+  let cacheDir;
+  const tmpConfigDirs = [];
+
+  before(() => { cacheDir = fs.mkdtempSync(path.join(os.tmpdir(), 'bmad-ci-cache-')); });
+  after(() => {
+    fs.rmSync(cacheDir, { recursive: true, force: true });
+    for (const d of tmpConfigDirs) fs.rmSync(d, { recursive: true, force: true });
+  });
+
+  function writeStatus(sid, status) {
+    fs.writeFileSync(path.join(cacheDir, `status-${sid}.json`), JSON.stringify(status));
+    fs.writeFileSync(path.join(cacheDir, `.alive-${sid}`), ''); // skip the process-tree probe
+  }
+
+  function makeConfigDir(config) {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'bmad-ci-cfg-'));
+    tmpConfigDirs.push(dir);
+    fs.writeFileSync(path.join(dir, 'config.json'), typeof config === 'string' ? config : JSON.stringify(config));
+    return dir;
+  }
+
+  function renderLine(configDir, sid, lineIndex = 0) {
+    return execSync(`node "${READER_PATH}" line ${lineIndex}`, {
+      input: JSON.stringify({ session_id: sid }),
+      encoding: 'utf8',
+      env: { ...process.env, BMAD_CACHE_DIR: cacheDir, BMAD_CONFIG_DIR: configDir },
+    });
+  }
+
+  const EMPTY_LINE = { widgets: [], colorModes: {} };
+
+  // Config showing only the given widgets on line 0
+  function lineZeroConfig(widgets, colorModes) {
+    return { separator: 'modere', lines: [{ widgets, colorModes }, EMPTY_LINE, EMPTY_LINE] };
+  }
+
+  function itemOnlyConfig(colorMode) {
+    return lineZeroConfig(['bmad-currentitem'], colorMode ? { 'bmad-currentitem': colorMode } : {});
+  }
+
+  it('the command table has currentitem and no longer story / docname', () => {
+    assert.equal(typeof reader.COMMANDS.currentitem, 'function');
+    assert.ok(!('story' in reader.COMMANDS));
+    assert.ok(!('docname' in reader.COMMANDS));
+  });
+
+  it('story workflow: the story in the story color', () => {
+    writeStatus('ci-story', { workflow: 'dev-story', story: '5-3-auth-login' });
+    const dir = makeConfigDir(itemOnlyConfig({ mode: 'fixed', fixedColor: 'red', documentColor: 'blue' }));
+    assert.equal(renderLine(dir, 'ci-story'), `${ESC}31m5-3 Auth Login${RESET}`);
+  });
+
+  it('other workflow: the document name verbatim in the document color', () => {
+    writeStatus('ci-doc', { workflow: 'create-prd', document_name: 'prd.md' });
+    const dir = makeConfigDir(itemOnlyConfig({ mode: 'fixed', fixedColor: 'red', documentColor: 'blue' }));
+    assert.equal(renderLine(dir, 'ci-doc'), `${ESC}34mprd.md${RESET}`);
+  });
+
+  it('job mode: the job id in the document color', () => {
+    writeStatus('ci-job', { workflow: null, active_skill: 'autoblend-builder', document_name: 'zouzou' });
+    const dir = makeConfigDir(itemOnlyConfig({ mode: 'fixed', fixedColor: 'red', documentColor: 'blue' }));
+    assert.equal(renderLine(dir, 'ci-job'), `${ESC}34mzouzou${RESET}`);
+  });
+
+  it('a colorMode without documentColor falls back to the default document color', () => {
+    writeStatus('ci-nodoc', { workflow: 'create-prd', document_name: 'prd.md' });
+    const dir = makeConfigDir(itemOnlyConfig({ mode: 'fixed', fixedColor: 'red' }));
+    assert.equal(renderLine(dir, 'ci-nodoc'), `${ESC}93mprd.md${RESET}`);
+  });
+
+  it('compact applies to the story and leaves a document untouched', () => {
+    const dir = makeConfigDir(itemOnlyConfig({ mode: 'fixed', fixedColor: 'magenta', documentColor: 'brightYellow', displayMode: 'compact' }));
+    writeStatus('ci-compact-story', { workflow: 'code-review', story: '4-2-auth-login' });
+    assert.equal(renderLine(dir, 'ci-compact-story'), `${ESC}35m4-2${RESET}`);
+    writeStatus('ci-compact-doc', { workflow: 'create-prd', document_name: 'architecture.md' });
+    assert.equal(renderLine(dir, 'ci-compact-doc'), `${ESC}93marchitecture.md${RESET}`);
+  });
+
+  it('story workflow with no story yet renders nothing, even with a stale document_name', () => {
+    writeStatus('ci-stale', { workflow: 'dev-story', story: null, document_name: 'prd.md' });
+    const dir = makeConfigDir(itemOnlyConfig({ mode: 'fixed', fixedColor: 'red', documentColor: 'blue' }));
+    assert.equal(renderLine(dir, 'ci-stale'), '');
+  });
+
+  it('empty document_name outside a story workflow renders nothing', () => {
+    writeStatus('ci-empty', { workflow: 'create-prd', document_name: null, story: '4-2-auth-login' });
+    const dir = makeConfigDir(itemOnlyConfig({ mode: 'fixed', fixedColor: 'red', documentColor: 'blue' }));
+    assert.equal(renderLine(dir, 'ci-empty'), '');
+  });
+
+  it('no colorMode at all renders the plain value', () => {
+    writeStatus('ci-plain', { workflow: 'create-prd', document_name: 'prd.md' });
+    const dir = makeConfigDir(itemOnlyConfig(null));
+    assert.equal(renderLine(dir, 'ci-plain'), 'prd.md');
+  });
+
+  it('default layout: story, document and job renders match the v1.8.0 output byte for byte', () => {
+    // Expected strings captured from the v1.8.0 reader on the v1.8.0 default config
+    const dir = makeConfigDir(fs.readFileSync(FIXTURE_CONFIG_PATH, 'utf8'));
+    writeStatus('ci-def-story', { project: 'Toulou', workflow: 'dev-story', story: '5-3-auth-login', step: { current: 3, total: 6, current_name: 'coding' } });
+    assert.equal(
+      renderLine(dir, 'ci-def-story'),
+      [`${ESC}35mToulou${RESET}`, `${ESC}36mdev-story${RESET}`, `${ESC}35m5-3 Auth Login${RESET}`, `${ESC}96mStep 3/6 coding${RESET}`].join(SEP)
+    );
+    writeStatus('ci-def-doc', { project: 'Toulou', workflow: 'create-prd', document_name: 'prd.md', step: { current: 1, total: 6, current_name: 'init' } });
+    assert.equal(
+      renderLine(dir, 'ci-def-doc'),
+      [`${ESC}35mToulou${RESET}`, `${ESC}33mcreate-prd${RESET}`, `${ESC}93mprd.md${RESET}`, `${ESC}96mStep 1/6 init${RESET}`].join(SEP)
+    );
+    writeStatus('ci-def-job', { project: 'Toulou', workflow: null, active_skill: 'autoblend-builder', document_name: 'zouzou' });
+    assert.equal(
+      renderLine(dir, 'ci-def-job'),
+      [`${ESC}35mToulou${RESET}`, `${ESC}96mautoblend-builder${RESET}`, `${ESC}93mzouzou${RESET}`].join(SEP)
+    );
+  });
+
+  describe('a config not yet converted (Story and Document still listed)', () => {
+    it('the v1.8.0 default config renders exactly what the converted default renders', () => {
+      const legacyDir = makeConfigDir(fs.readFileSync(LEGACY_FIXTURE_PATH, 'utf8'));
+      const convertedDir = makeConfigDir(fs.readFileSync(FIXTURE_CONFIG_PATH, 'utf8'));
+      const statuses = {
+        'ci-leg-story': { project: 'Toulou', workflow: 'dev-story', story: '5-3-auth-login', step: { current: 3, total: 6, current_name: 'coding' } },
+        'ci-leg-doc': { project: 'Toulou', workflow: 'create-prd', document_name: 'prd.md' },
+        'ci-leg-job': { project: 'Toulou', workflow: null, active_skill: 'autoblend-builder', document_name: 'zouzou' },
+      };
+      for (const [sid, status] of Object.entries(statuses)) {
+        writeStatus(sid, status);
+        const legacyOut = renderLine(legacyDir, sid);
+        assert.ok(legacyOut.length > 0, `${sid} renders something`);
+        assert.equal(legacyOut, renderLine(convertedDir, sid), `same output for ${sid}`);
+      }
+    });
+
+    it('never writes the file: config.json is byte-identical after rendering', () => {
+      const raw = fs.readFileSync(LEGACY_FIXTURE_PATH, 'utf8');
+      const dir = makeConfigDir(raw);
+      writeStatus('ci-leg-ro', { project: 'Toulou', workflow: 'dev-story', story: '5-3-auth-login' });
+      renderLine(dir, 'ci-leg-ro');
+      assert.equal(fs.readFileSync(path.join(dir, 'config.json'), 'utf8'), raw);
+      assert.deepStrictEqual(fs.readdirSync(dir), ['config.json'], 'no .bak or temp file created');
+    });
+
+    it('both widgets listed render the merged widget once, each kind in its own saved color', () => {
+      const dir = makeConfigDir(lineZeroConfig(['bmad-story', 'bmad-docname'], {
+        'bmad-story': { mode: 'fixed', fixedColor: 'red', displayMode: 'compact' },
+        'bmad-docname': { mode: 'fixed', fixedColor: 'blue' },
+      }));
+      writeStatus('ci-leg-both-story', { workflow: 'dev-story', story: '5-3-auth-login' });
+      assert.equal(renderLine(dir, 'ci-leg-both-story'), `${ESC}31m5-3${RESET}`);
+      writeStatus('ci-leg-both-doc', { workflow: 'create-prd', document_name: 'prd.md' });
+      assert.equal(renderLine(dir, 'ci-leg-both-doc'), `${ESC}34mprd.md${RESET}`);
+    });
+
+    it('only Story listed: a document still shows, in the default document color', () => {
+      const dir = makeConfigDir(lineZeroConfig(['bmad-story'], { 'bmad-story': { mode: 'fixed', fixedColor: 'red' } }));
+      writeStatus('ci-leg-s-doc', { workflow: 'create-prd', document_name: 'prd.md' });
+      assert.equal(renderLine(dir, 'ci-leg-s-doc'), `${ESC}93mprd.md${RESET}`);
+    });
+
+    it('only Document listed: a story still shows, in the default story color', () => {
+      const dir = makeConfigDir(lineZeroConfig(['bmad-docname'], { 'bmad-docname': { mode: 'fixed', fixedColor: 'blue' } }));
+      writeStatus('ci-leg-d-story', { workflow: 'dev-story', story: '5-3-auth-login' });
+      assert.equal(renderLine(dir, 'ci-leg-d-story'), `${ESC}35m5-3 Auth Login${RESET}`);
+    });
+
+    it('the saved colorMode of the hidden widget is honored for the kind it covered', () => {
+      const dir = makeConfigDir(lineZeroConfig(['bmad-story'], {
+        'bmad-story': { mode: 'fixed', fixedColor: 'red' },
+        'bmad-docname': { mode: 'fixed', fixedColor: 'cyan' },
+      }));
+      writeStatus('ci-leg-hidden', { workflow: 'create-prd', document_name: 'prd.md' });
+      assert.equal(renderLine(dir, 'ci-leg-hidden'), `${ESC}36mprd.md${RESET}`);
+    });
   });
 });

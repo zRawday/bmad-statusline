@@ -160,4 +160,155 @@ describe('config-loader v2', () => {
     assert.equal(result.separator, 'modere');
     assert.equal(result.lines[1].widgets.length, 2);
   });
+
+  // --- Story + Document → Current Item conversion ---
+
+  describe('conversion of a config saved with the Story and Document widgets', () => {
+    const LEGACY_FIXTURE = path.join(import.meta.dirname, 'fixtures', 'internal-config-legacy-story-docname.json');
+
+    function writeRaw(raw) {
+      fs.writeFileSync(internalConfigPath(), raw);
+    }
+
+    function readDisk() {
+      return JSON.parse(fs.readFileSync(internalConfigPath(), 'utf8'));
+    }
+
+    it('converts the in-memory config: each line shows Current Item where Story stood', () => {
+      writeRaw(fs.readFileSync(LEGACY_FIXTURE, 'utf8'));
+
+      const result = loadConfig(makePaths());
+
+      assert.deepStrictEqual(result.lines[0].widgets, [
+        'bmad-project', 'bmad-workflow', 'bmad-activeskill', 'bmad-currentitem', 'bmad-progressstep', 'bmad-timer',
+      ]);
+      for (const l of result.lines) {
+        assert.equal(l.widgetOrder.length, 12);
+        assert.equal(l.widgetOrder.indexOf('bmad-currentitem'), 4, 'position of Story kept in widgetOrder, not appended last');
+        assert.ok(!l.widgetOrder.includes('bmad-story') && !l.widgetOrder.includes('bmad-docname'));
+      }
+      assert.deepStrictEqual(result.lines[0].colorModes['bmad-currentitem'], {
+        mode: 'fixed', fixedColor: 'magenta', documentColor: 'brightYellow',
+      });
+    });
+
+    it('copies the original to config.json.bak and writes the converted file at once', () => {
+      const raw = fs.readFileSync(LEGACY_FIXTURE, 'utf8');
+      writeRaw(raw);
+
+      const result = loadConfig(makePaths());
+
+      assert.equal(fs.readFileSync(internalConfigPath() + '.bak', 'utf8'), raw, '.bak holds the pre-conversion file, byte for byte');
+      assert.deepStrictEqual(readDisk(), result, 'the file on disk is the converted config');
+      assert.ok(!JSON.stringify(readDisk()).includes('bmad-story'));
+      assert.ok(!JSON.stringify(readDisk()).includes('bmad-docname'));
+    });
+
+    it('keeps both colors and the story mode of a customized config', () => {
+      const cfg = JSON.parse(fs.readFileSync(LEGACY_FIXTURE, 'utf8'));
+      cfg.lines[0].colorModes['bmad-story'] = { mode: 'fixed', fixedColor: 'red', displayMode: 'compact' };
+      cfg.lines[0].colorModes['bmad-docname'] = { mode: 'fixed', fixedColor: 'blue' };
+      writeInternalConfig(cfg);
+
+      const result = loadConfig(makePaths());
+
+      assert.deepStrictEqual(result.lines[0].colorModes['bmad-currentitem'], {
+        mode: 'fixed', fixedColor: 'red', documentColor: 'blue', displayMode: 'compact',
+      });
+      assert.deepStrictEqual(readDisk().lines[0].colorModes['bmad-currentitem'], result.lines[0].colorModes['bmad-currentitem']);
+    });
+
+    it('converts presets too', () => {
+      const cfg = JSON.parse(fs.readFileSync(LEGACY_FIXTURE, 'utf8'));
+      cfg.presets = [
+        { name: 'mine', lines: [
+          { widgets: ['bmad-project', 'bmad-docname', 'bmad-story'], widgetOrder: ['bmad-docname', 'bmad-project', 'bmad-story'] },
+          { widgets: [], widgetOrder: [] },
+          { widgets: ['bmad-story'], widgetOrder: ['bmad-story'] },
+        ], separator: 'serre', customSeparator: null },
+        null,
+        { name: 'v1 shape', widgets: ['bmad-story'], colorModes: {} },
+      ];
+      writeInternalConfig(cfg);
+
+      const result = loadConfig(makePaths());
+
+      assert.deepStrictEqual(result.presets[0].lines[0], { widgets: ['bmad-project', 'bmad-currentitem'], widgetOrder: ['bmad-currentitem', 'bmad-project'] });
+      assert.deepStrictEqual(result.presets[0].lines[2], { widgets: ['bmad-currentitem'], widgetOrder: ['bmad-currentitem'] });
+      assert.equal(result.presets[1], null);
+      assert.deepStrictEqual(result.presets[2], cfg.presets[2], 'malformed preset left alone');
+      assert.deepStrictEqual(readDisk().presets, result.presets);
+    });
+
+    it('a second load changes nothing: no rewrite, the .bak keeps the original', () => {
+      const raw = fs.readFileSync(LEGACY_FIXTURE, 'utf8');
+      writeRaw(raw);
+      const first = loadConfig(makePaths());
+      const onDisk = fs.readFileSync(internalConfigPath(), 'utf8');
+
+      const second = loadConfig(makePaths());
+
+      assert.deepStrictEqual(second, first);
+      assert.equal(fs.readFileSync(internalConfigPath(), 'utf8'), onDisk, 'file not rewritten');
+      assert.equal(fs.readFileSync(internalConfigPath() + '.bak', 'utf8'), raw, '.bak still the original');
+    });
+
+    it('an already converted config is not backed up nor rewritten', () => {
+      const current = fs.readFileSync(path.join(import.meta.dirname, 'fixtures', 'internal-config-default.json'), 'utf8');
+      writeRaw(current);
+
+      loadConfig(makePaths());
+
+      assert.ok(!fs.existsSync(internalConfigPath() + '.bak'), 'no .bak');
+      assert.equal(fs.readFileSync(internalConfigPath(), 'utf8'), current, 'file untouched');
+    });
+
+    // A customized legacy config: it does not convert to the default config, so a result
+    // carrying these values proves the user's config was converted, not replaced by defaults.
+    function writeCustomizedLegacy() {
+      const cfg = JSON.parse(fs.readFileSync(LEGACY_FIXTURE, 'utf8'));
+      cfg.lines[0].colorModes['bmad-story'] = { mode: 'fixed', fixedColor: 'red', displayMode: 'compact' };
+      cfg.lines[0].colorModes['bmad-docname'] = { mode: 'fixed', fixedColor: 'blue' };
+      writeInternalConfig(cfg);
+      return fs.readFileSync(internalConfigPath(), 'utf8');
+    }
+
+    function assertConvertedInMemory(result) {
+      assert.deepStrictEqual(result.lines[0].colorModes['bmad-currentitem'], {
+        mode: 'fixed', fixedColor: 'red', documentColor: 'blue', displayMode: 'compact',
+      });
+      assert.ok(result.lines[0].widgets.includes('bmad-currentitem'));
+      assert.ok(!result.lines[0].widgets.includes('bmad-story'));
+      assert.ok(!fs.existsSync(internalConfigPath() + '.corrupt'), 'not treated as a corrupt config');
+    }
+
+    it('a backup failure is silent: the config is still converted in memory, the file stays as it was', () => {
+      const raw = writeCustomizedLegacy();
+      fs.mkdirSync(internalConfigPath() + '.bak'); // a directory in the way: copyFileSync fails
+
+      let result;
+      assert.doesNotThrow(() => { result = loadConfig(makePaths()); });
+
+      assertConvertedInMemory(result);
+      assert.equal(fs.readFileSync(internalConfigPath(), 'utf8'), raw, 'original not overwritten without a backup');
+    });
+
+    it('a write failure is silent: the config is still converted in memory, the file stays as it was', () => {
+      const raw = writeCustomizedLegacy();
+      // The writer goes through config.json.tmp: a directory there makes the write fail
+      fs.mkdirSync(internalConfigPath() + '.tmp');
+
+      let result;
+      assert.doesNotThrow(() => { result = loadConfig(makePaths()); });
+
+      assertConvertedInMemory(result);
+      assert.equal(fs.readFileSync(internalConfigPath(), 'utf8'), raw, 'config.json untouched by the failed write');
+    });
+
+    it('writes only config.json and config.json.bak, next to the given path', () => {
+      writeRaw(fs.readFileSync(LEGACY_FIXTURE, 'utf8'));
+      loadConfig(makePaths());
+      assert.deepStrictEqual(fs.readdirSync(internalDir).sort(), ['config.json', 'config.json.bak']);
+    });
+  });
 });

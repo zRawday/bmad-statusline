@@ -627,24 +627,24 @@ Read by: Reader (for `line N` command) and TUI (on launch)
   "customSeparator": null,
   "lines": [
     {
-      "widgets": ["bmad-project", "bmad-workflow", "bmad-story", "bmad-progressstep", "bmad-timer"],
-      "widgetOrder": ["bmad-project", "bmad-workflow", "bmad-story", "...all 13 widget IDs..."],
+      "widgets": ["bmad-project", "bmad-workflow", "bmad-currentitem", "bmad-progressstep", "bmad-timer"],
+      "widgetOrder": ["bmad-project", "bmad-workflow", "bmad-currentitem", "...all 12 widget IDs..."],
       "colorModes": {
         "bmad-project": { "mode": "dynamic" },
         "bmad-workflow": { "mode": "dynamic" },
-        "bmad-story": { "mode": "fixed", "fixedColor": "magenta" },
+        "bmad-currentitem": { "mode": "fixed", "fixedColor": "magenta", "documentColor": "brightYellow" },
         "bmad-progressstep": { "mode": "fixed", "fixedColor": "brightCyan" },
         "bmad-timer": { "mode": "fixed", "fixedColor": "brightBlack" }
       }
     },
     {
       "widgets": ["bmad-llmstate"],
-      "widgetOrder": ["...all 13 widget IDs..."],
+      "widgetOrder": ["...all 12 widget IDs..."],
       "colorModes": { "bmad-llmstate": { "mode": "dynamic" } }
     },
     {
       "widgets": ["bmad-contextpct"],
-      "widgetOrder": ["...all 13 widget IDs..."],
+      "widgetOrder": ["...all 12 widget IDs..."],
       "colorModes": { "bmad-contextpct": { "mode": "dynamic", "thresholdLow": 0, "thresholdHigh": 100, "displayMode": "compact" } }
     }
   ],
@@ -659,17 +659,18 @@ Read by: Reader (for `line N` command) and TUI (on launch)
 - `customSeparator` is a string, only used when `separator === "custom"`. Null otherwise.
 - `lines` is always length 3. Each line has `widgets`, `widgetOrder`, and `colorModes`.
 - `widgets` array contains only **visible** widgets in **display order**. A widget not in any line's `widgets` is hidden everywhere.
-- `widgetOrder` array contains **all 13 widget IDs** — controls the order widgets appear in the Edit Line screen (including hidden ones). Managed by `ensureWidgetOrder()` on load: prunes stale IDs, appends new widgets (e.g. `bmad-contextpct` is appended to existing pre-v1.2 configs on load; `bmad-weeklyusage` is likewise appended to pre-Rev.7 configs).
+- `widgetOrder` array contains **all 12 widget IDs** — controls the order widgets appear in the Edit Line screen (including hidden ones). Managed by `ensureWidgetOrder()` on load: prunes stale IDs, appends new widgets (e.g. `bmad-contextpct` is appended to existing pre-v1.2 configs on load; `bmad-weeklyusage` is likewise appended to pre-Rev.7 configs).
 - `colorModes` contains entries for all widgets configured on this line (including hidden ones — preserves color across hide/show cycles).
 - `colorModes[id].mode` is `"dynamic"` (valid for `bmad-workflow`, `bmad-project`, `bmad-activeskill`, `bmad-llmstate`, `bmad-contextpct`, `bmad-weeklyusage`) or `"fixed"`. When `"fixed"`, `fixedColor` is an ANSI color name.
 - **Extended colorMode fields (widget-specific):**
-  - `bmad-story` colorMode may carry `displayMode` — passed to `formatStoryName(slug, displayMode)` (`'compact'` → number prefix only).
+  - `bmad-currentitem` colorMode keeps **one color per kind**: `fixedColor` colors the story, `documentColor` colors the output-folder document or AutoBlend job (default `brightYellow` when absent). It may also carry `displayMode` — passed to `formatStoryName(slug, displayMode)` for a story (`'compact'` → number prefix only; a document or job name is always verbatim).
   - `bmad-contextpct` colorMode carries `thresholdLow` (default 0), `thresholdHigh` (default 100), and `displayMode` (`'compact'` → `Ctx: X.X%` text; otherwise a 25-char gradient bar). Color is computed by `getGradientColor(pct, low, high)` — `fixedColor` is ignored for contextpct.
 - `skillColors` is a top-level object — maps workflow name (e.g. `"dev-story"`) to ANSI color name. Overrides hardcoded `WORKFLOW_COLORS`.
 - `projectColors` is a top-level object — maps project name to ANSI color name. Overrides `hashProjectColor()` deterministic default.
-- `presets` is always length 3. Each slot is null (empty) or a preset object `{ name, widgets, colorModes }`.
+- `presets` is always length 3. Each slot is null (empty) or a preset object `{ name, lines: [{ widgets, widgetOrder }], separator, customSeparator }` (colors are never stored in a preset).
+- **Story + Document → Current Item:** configs saved up to v1.8.0 list two widgets, `bmad-story` and `bmad-docname`, which became the single `bmad-currentitem`. `migrateLegacyWidgets(config)` (in `shared-constants.cjs`, the only place that still names the old ids) converts lines **and** presets in place: the first of the two ids takes the slot in `widgets` and `widgetOrder`, the saved colors become `fixedColor` (story) / `documentColor` (document), the story `displayMode` is kept, a missing color falls back to its default (`magenta` / `brightYellow`). It is idempotent and never throws on malformed input. Two consumers, one rule: the TUI loader (`loadConfig`) converts **before** `ensureWidgetOrder`, copies the original to `config.json.bak`, then writes the converted file at once (best effort and silent: the conversion overwrites the file only if the `.bak` copy succeeded; if the copy fails the load leaves `config.json` unconverted on disk, and the first TUI edit then writes the converted config with no `.bak`); the deployed reader (`readConfig`) converts **in memory only** and never writes. A converted config is not understood by an older reader — `config.json.bak` is the way back when the backup succeeded.
 
-**13 widgets (widget registry — `src/tui/widget-registry.js` `INDIVIDUAL_WIDGETS`):**
+**12 widgets (widget registry — `src/tui/widget-registry.js` `INDIVIDUAL_WIDGETS`):**
 
 | Widget ID | Command | Name | Default Enabled | Default Color | Default Mode |
 |-----------|---------|------|----------------|---------------|-------------|
@@ -677,8 +678,7 @@ Read by: Reader (for `line N` command) and TUI (on launch)
 | `bmad-project` | `project` | Project | true | — | dynamic |
 | `bmad-workflow` | `workflow` | Initial Skill | true | — | dynamic |
 | `bmad-activeskill` | `activeskill` | Active Skill | **true** | — | dynamic |
-| `bmad-story` | `story` | Story | true | magenta | fixed |
-| `bmad-docname` | `docname` | Document | **true** | brightYellow | fixed |
+| `bmad-currentitem` | `currentitem` | Current Item | true | magenta (story) + brightYellow (document / job, `defaultDocumentColor`) | fixed |
 | `bmad-progressstep` | `progressstep` | Step | true | brightCyan | fixed |
 | `bmad-nextstep` | `nextstep` | Next Step | false | yellow | fixed |
 | `bmad-fileread` | `fileread` | File Read | false | cyan | fixed |
@@ -687,7 +687,7 @@ Read by: Reader (for `line N` command) and TUI (on launch)
 | `bmad-timer` | `timer` | Timer | true | brightBlack | fixed |
 | `bmad-weeklyusage` | `weeklyusage` | Weekly Usage | false (**default on line 1, extended**) | — | dynamic |
 
-Default layout (`createDefaultConfig()`) — mirrors the reference setup, do not change casually: Line 0 = all default-enabled widgets **except** `bmad-contextpct` (= [project, workflow, activeskill, story, docname, progressstep, timer]). Line 1 = [weeklyusage] (colorMode `{ mode: 'dynamic', displayMode: 'extended' }`, plus a preserved `bmad-llmstate` colorMode though it is hidden). Line 2 = [contextpct] (colorMode `{ mode: 'dynamic', thresholdLow: 0, thresholdHigh: 100, displayMode: 'compact' }`). `bmad-contextpct` is segregated onto its own line via the hardcoded line-2 object; `bmad-weeklyusage` keeps `defaultEnabled: false` (so it is **not** auto-added to line 0) and is placed on **line 1** by the same mechanism. `bmad-llmstate` ships **hidden** (`defaultEnabled: false`) — the LLM state is already conveyed by Claude Code itself; it stays selectable via `widgetOrder`.
+Default layout (`createDefaultConfig()`) — mirrors the reference setup, do not change casually: Line 0 = all default-enabled widgets **except** `bmad-contextpct` (= [project, workflow, activeskill, currentitem, progressstep, timer]). Line 1 = [weeklyusage] (colorMode `{ mode: 'dynamic', displayMode: 'extended' }`, plus a preserved `bmad-llmstate` colorMode though it is hidden). Line 2 = [contextpct] (colorMode `{ mode: 'dynamic', thresholdLow: 0, thresholdHigh: 100, displayMode: 'compact' }`). `bmad-contextpct` is segregated onto its own line via the hardcoded line-2 object; `bmad-weeklyusage` keeps `defaultEnabled: false` (so it is **not** auto-added to line 0) and is placed on **line 1** by the same mechanism. `bmad-llmstate` ships **hidden** (`defaultEnabled: false`) — the LLM state is already conveyed by Claude Code itself; it stays selectable via `widgetOrder`.
 
 **Intentional asymmetry (Rev.7 — deliberate, not a bug):** the `bmad-weeklyusage` **statusline widget** renders only inside a tracked session — the `line N` reader returns `''` when there is no `status-<sid>.json` for the session (consistent with every other widget). The hook now tracks every session, BMAD or not, so in practice this only blanks the widget in the window before the session's first hook event. But the **TUI "Weekly usage" screen** works anywhere, because the reader calls `persistUsageSnapshot(stdin)` to write the account-global `weekly-usage.json` **before** the `line N` no-status early-return (`bmad-sl-reader.js:261`). Do not "fix" the widget to render outside a session, and do not move the snapshot write after the early-return.
 
@@ -767,7 +767,10 @@ const LLM_STATES = {
 | `hashProjectColor(name)` | Deterministic hash → color | Reader + TUI (default project colors) |
 | `computeDisplayState(status)` | `status.llm_state \|\| 'waiting'` | Reader (LLM badge) |
 | `formatTimer(startedAt)` | Duration formatter | Reader (timer widget) |
-| `formatStoryName(slug, displayMode)` | Story slug → display name | Reader (story widget) |
+| `formatStoryName(slug, displayMode)` | Story slug → display name | Reader (Current Item widget), Monitor badge |
+| `CURRENT_ITEM_WIDGET`, `DEFAULT_STORY_COLOR`, `DEFAULT_DOCUMENT_COLOR` | `'bmad-currentitem'`, `'magenta'`, `'brightYellow'` | Reader + TUI (Current Item widget) |
+| `resolveCurrentItem(status)` | `{ kind: 'story' \| 'document', value }` or `null` — story in a story workflow, else `document_name` | Reader (widget + per-kind color), Monitor badge (`currentItemLabel`) |
+| `migrateLegacyWidgets(config)` | Story + Document → Current Item, lines and presets, in place; returns whether anything changed | Reader (in memory), TUI loader (persisted with `.bak`) |
 
 ### ESM Bridge
 
@@ -990,7 +993,7 @@ function canAppendHistory(sid) {
 - Monitor: `src/tui/monitor/` — real-time session dashboard, cache read-only
 - Writes to internal config (Boundary 4) and ccstatusline config
 - Monitor reads status files directly (Boundary 1 output) — read-only consumer
-- `pollSessions()` lists **every** live session, BMAD or not — it has no `status.skill` filter. `sessionLabel(session)` = `workflow || skill || sessionId.slice(0, 8)` is the single source for tab labels; never re-derive it inline
+- `pollSessions()` lists **every** live session, BMAD or not — it has no `status.skill` filter. `sessionLabel(session)` = `workflow || skill || active_skill || sessionId.slice(0, 8)` is the single source for tab labels (a skill the model launched itself, nothing typed, names the session and gives the tab its color); `sessionSkillName(session)` is the same order without the id fallback and names the badge. The typed skill always wins over `active_skill` (Initial Skill and Active Skill stay distinct). The badge context is `currentItemLabel(session)`, built on the shared `resolveCurrentItem` rule. Never re-derive any of these inline
 
 ### Boundary 9: TUI Lifecycle (process management)
 
@@ -1069,7 +1072,7 @@ Three bugs from TUI v1 are eliminated by architectural decisions in v2. Document
 
 | Bug | Root Cause (v1) | Elimination (v2) |
 |-----|----------------|-------------------|
-| **BF1:** Hidden widgets can't be shown | `widgetOrder` derived from ccstatusline — hidden widgets absent | Edit Line renders all 13 widgets from `INDIVIDUAL_WIDGETS`. Visibility = presence in `config.lines[N].widgets`. |
+| **BF1:** Hidden widgets can't be shown | `widgetOrder` derived from ccstatusline — hidden widgets absent | Edit Line renders all 12 widgets from `INDIVIDUAL_WIDGETS`. Visibility = presence in `config.lines[N].widgets`. |
 | **BF2:** Reset causes infinite render loop | `setTuiState(snapshot)` triggers re-render → effect → write → re-render | No `useEffect` that reads+writes config. Write inside `setConfig` callback. `snapshot` via `useState` — never changes. |
 | **BF3:** Preview shows no colors | Color values not mapped to Ink `<Text>` props | `resolvePreviewColor()` (pattern 19) + `<Text color={resolved}>`. Centralized in `preview-utils.js`. |
 
@@ -1109,6 +1112,7 @@ test/
   tui-reorder-lines.test.js       # ReorderLinesScreen
   tui-select-preview.test.js      # SelectWithPreview component
   tui-widget-order.test.js        # Widget order persistence, drag operations
+  current-item-migration.test.js  # resolveCurrentItem, migrateLegacyWidgets (Story + Document → Current Item)
   tui-lifecycle.test.js           # PID registry, signal handlers, TTY watch
   tui-monitor.test.js             # MonitorScreen polling, session grouping
   tui-monitor-components.test.js  # Monitor components: FileTree, BashSection, LlmBadge

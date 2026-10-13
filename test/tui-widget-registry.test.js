@@ -7,14 +7,15 @@ import os from 'node:os';
 import {
   getIndividualWidgets,
   createDefaultConfig,
+  defaultColorMode,
   ANSI_COLORS,
 } from '../src/tui/widget-registry.js';
 import { loadConfig } from '../src/tui/config-loader.js';
 
 describe('widget-registry', () => {
-  it('getIndividualWidgets returns all 13 individual widgets', () => {
+  it('getIndividualWidgets returns all 12 individual widgets', () => {
     const widgets = getIndividualWidgets();
-    assert.equal(widgets.length, 13);
+    assert.equal(widgets.length, 12);
     for (const w of widgets) {
       assert.ok(w.id.startsWith('bmad-'), `widget id ${w.id} should start with bmad-`);
       assert.ok(w.command, `widget ${w.id} should have a command`);
@@ -58,8 +59,7 @@ describe('widget-registry', () => {
       'bmad-project': null,
       'bmad-workflow': null,
       'bmad-activeskill': null,
-      'bmad-story': 'magenta',
-      'bmad-docname': 'brightYellow',
+      'bmad-currentitem': 'magenta',
       'bmad-progressstep': 'brightCyan',
       'bmad-nextstep': 'yellow',
       'bmad-timer': 'brightBlack',
@@ -93,6 +93,37 @@ describe('widget-registry', () => {
   });
 });
 
+describe('Current Item registry entry', () => {
+  it('takes the Story slot with both default colors and the new hint', () => {
+    const widgets = getIndividualWidgets();
+    const idx = widgets.findIndex(w => w.id === 'bmad-currentitem');
+    assert.equal(idx, 4, 'right after Active Skill');
+    assert.deepStrictEqual(widgets[idx], {
+      id: 'bmad-currentitem',
+      command: 'currentitem',
+      name: 'Current Item',
+      hint: 'Story, job or document',
+      defaultEnabled: true,
+      defaultColor: 'magenta',
+      defaultDocumentColor: 'brightYellow',
+      defaultMode: 'fixed',
+    });
+  });
+
+  it('defaultColorMode carries documentColor for Current Item only', () => {
+    const byId = Object.fromEntries(getIndividualWidgets().map(w => [w.id, w]));
+    assert.deepStrictEqual(defaultColorMode(byId['bmad-currentitem']), { mode: 'fixed', fixedColor: 'magenta', documentColor: 'brightYellow' });
+    assert.deepStrictEqual(defaultColorMode(byId['bmad-timer']), { mode: 'fixed', fixedColor: 'brightBlack' });
+    assert.deepStrictEqual(defaultColorMode(byId['bmad-project']), { mode: 'dynamic' });
+  });
+
+  it('no old widget id is left in the registry', () => {
+    const ids = getIndividualWidgets().map(w => w.id);
+    assert.ok(!ids.includes('bmad-story'));
+    assert.ok(!ids.includes('bmad-docname'));
+  });
+});
+
 describe('createDefaultConfig', () => {
   it('returns valid default config shape', () => {
     const config = createDefaultConfig();
@@ -107,7 +138,7 @@ describe('createDefaultConfig', () => {
 
   it('line 0 contains default-enabled widgets without llmstate or contextpct', () => {
     const config = createDefaultConfig();
-    const expectedWidgets = ['bmad-project', 'bmad-workflow', 'bmad-activeskill', 'bmad-story', 'bmad-docname', 'bmad-progressstep', 'bmad-timer'];
+    const expectedWidgets = ['bmad-project', 'bmad-workflow', 'bmad-activeskill', 'bmad-currentitem', 'bmad-progressstep', 'bmad-timer'];
     assert.deepStrictEqual(config.lines[0].widgets, expectedWidgets);
   });
 
@@ -118,9 +149,10 @@ describe('createDefaultConfig', () => {
     assert.deepStrictEqual(cm['bmad-project'], { mode: 'dynamic' });
     assert.deepStrictEqual(cm['bmad-workflow'], { mode: 'dynamic' });
     assert.deepStrictEqual(cm['bmad-progressstep'], { mode: 'fixed', fixedColor: 'brightCyan' });
-    assert.deepStrictEqual(cm['bmad-story'], { mode: 'fixed', fixedColor: 'magenta' });
+    assert.deepStrictEqual(cm['bmad-currentitem'], { mode: 'fixed', fixedColor: 'magenta', documentColor: 'brightYellow' });
     assert.deepStrictEqual(cm['bmad-timer'], { mode: 'fixed', fixedColor: 'brightBlack' });
-    assert.deepStrictEqual(cm['bmad-docname'], { mode: 'fixed', fixedColor: 'brightYellow' });
+    assert.equal(cm['bmad-story'], undefined);
+    assert.equal(cm['bmad-docname'], undefined);
   });
 
   it('line 1 has weeklyusage (extended, llmstate hidden), line 2 has contextpct by default', () => {
@@ -134,8 +166,8 @@ describe('createDefaultConfig', () => {
     assert.deepStrictEqual(config.lines[2].colorModes, {
       'bmad-contextpct': { mode: 'dynamic', thresholdLow: 0, thresholdHigh: 100, displayMode: 'compact' },
     });
-    assert.equal(config.lines[1].widgetOrder.length, 13);
-    assert.equal(config.lines[2].widgetOrder.length, 13);
+    assert.equal(config.lines[1].widgetOrder.length, 12);
+    assert.equal(config.lines[2].widgetOrder.length, 12);
   });
 
   it('bmad-contextpct appears in registry before bmad-timer', () => {
@@ -155,10 +187,10 @@ describe('createDefaultConfig', () => {
 });
 
 describe('10.3 — bmad-weeklyusage registry + preview integration', () => {
-  it('AC1: 13th INDIVIDUAL_WIDGETS entry has exact fields', () => {
+  it('AC1: last INDIVIDUAL_WIDGETS entry has exact fields', () => {
     const widgets = getIndividualWidgets();
-    assert.equal(widgets.length, 13);
-    const w = widgets[12];
+    assert.equal(widgets.length, 12);
+    const w = widgets[11];
     assert.deepStrictEqual(w, {
       id: 'bmad-weeklyusage',
       command: 'weeklyusage',
@@ -182,14 +214,14 @@ describe('10.3 — bmad-weeklyusage registry + preview integration', () => {
     );
     for (const line of config.lines) {
       assert.ok(line.widgetOrder.includes('bmad-weeklyusage'), 'must be selectable via widgetOrder');
-      assert.equal(line.widgetOrder.length, 13);
+      assert.equal(line.widgetOrder.length, 12);
     }
   });
 
   it('AC3: ensureWidgetOrder appends bmad-weeklyusage to a legacy config that omits it', () => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'bmad-tui-1003-'));
     try {
-      // pre-10.3 registry order (12 ids, omitting bmad-weeklyusage)
+      // pre-10.3 registry order (12 ids, omitting bmad-weeklyusage; Story and Document still separate)
       const legacyOrder = [
         'bmad-llmstate', 'bmad-project', 'bmad-workflow', 'bmad-activeskill', 'bmad-story',
         'bmad-docname', 'bmad-progressstep', 'bmad-nextstep', 'bmad-fileread', 'bmad-filewrite',
@@ -215,8 +247,10 @@ describe('10.3 — bmad-weeklyusage registry + preview integration', () => {
       for (const line of loaded.lines) {
         assert.ok(line.widgetOrder.includes('bmad-weeklyusage'), 'weeklyusage appended on load');
         assert.equal(line.widgetOrder[line.widgetOrder.length - 1], 'bmad-weeklyusage', 'appended at the end');
-        assert.equal(line.widgetOrder.length, 13);
-        for (const id of legacyOrder) {
+        assert.equal(line.widgetOrder.length, 12);
+        // Story + Document collapse into Current Item, in the slot Story held
+        assert.equal(line.widgetOrder.indexOf('bmad-currentitem'), 4, 'Current Item takes the Story slot');
+        for (const id of legacyOrder.filter(id => id !== 'bmad-story' && id !== 'bmad-docname')) {
           assert.ok(line.widgetOrder.includes(id), `original id ${id} preserved`);
         }
       }

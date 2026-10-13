@@ -7,7 +7,7 @@ import { Box, Text, useInput, useStdout } from 'ink';
 import { ShortcutBar } from '../components/ShortcutBar.js';
 import LlmBadge from './components/LlmBadge.js';
 import SessionTabs from './components/SessionTabs.js';
-import { pollSessions, groupSessionsByProject, computeDisplayState, filterReadOnly, findFirstSelectable, findNextSelectable, mergeChronology, generateCsv, writeCsvExport, resolveAutoAllow, STORY_WORKFLOWS, formatStoryTitle, resolveProjectColor } from './monitor-utils.js';
+import { pollSessions, groupSessionsByProject, computeDisplayState, filterReadOnly, findFirstSelectable, findNextSelectable, mergeChronology, generateCsv, writeCsvExport, resolveAutoAllow, currentItemLabel, resolveProjectColor, sessionSkillName } from './monitor-utils.js';
 import { MonitorDetailScreen } from './MonitorDetailScreen.js';
 import { ExportPrompt } from './components/ExportPrompt.js';
 import { AutoAllowMenu } from './components/AutoAllowMenu.js';
@@ -429,13 +429,9 @@ export function MonitorScreen({ config, setAutoAllow, navigate, goBack, isActive
   // Badge props — computed outside render to keep JSX clean
   const badgeProps = currentSession ? {
     state: computeDisplayState(currentSession),
-    workflow: currentSession.workflow || currentSession.skill,
+    workflow: sessionSkillName(currentSession),
     startedAt: currentSession.started_at,
-    contextLabel: STORY_WORKFLOWS.includes(currentSession.workflow) && currentSession.story
-      ? formatStoryTitle(currentSession.story)
-      : !STORY_WORKFLOWS.includes(currentSession.workflow) && currentSession.document_name
-        ? currentSession.document_name
-        : '',
+    contextLabel: currentItemLabel(currentSession),
   } : { state: 'waiting', workflow: '', startedAt: '', contextLabel: '' };
 
   return e(Box, { flexDirection: 'column', height: rows },

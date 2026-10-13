@@ -17,7 +17,7 @@ Custom widget pack for [ccstatusline](https://github.com/sirmalloc/ccstatusline)
 
 - **Passive detection via hooks** — 12 signals intercepted from the Claude Code lifecycle (prompts, reads, writes, bash, permissions, errors, session start/end…). Zero manual action required.
 - **Interactive TUI configurator** — full visual editor to customize the display, colors, separators, and widget order
-- **13 configurable widgets across 3 lines** — LLM State, Project, Initial Skill, Active Skill, Story, Step, Next Step, Document (output-folder file, or the current AutoBlend job), File Read, File Write/Edit, Context %, Timer, Weekly Usage
+- **12 configurable widgets across 3 lines** — LLM State, Project, Initial Skill, Active Skill, Current Item (the story in a story workflow, otherwise the output-folder document or the current AutoBlend job), Step, Next Step, File Read, File Write/Edit, Context %, Timer, Weekly Usage
 - **Semantic colors** — each workflow and project has its own color (cyan = dev, green = planning, yellow = product, magenta = architecture…), individually customizable
 - **Real-time Monitor** — built-in multi-session dashboard to follow all active BMAD sessions live, with file read/write/edit history, command tracking, and auto-allow permission control for a fixed list of non-interactive tools (see [Monitor](#monitor) section)
 - **Presets** — 3 slots to save and load complete layouts
@@ -58,9 +58,9 @@ The TUI lets you fully customize the status line display without editing any fil
 
 Each line (1, 2, 3) is configured individually:
 - **Visibility** — show/hide each widget with `h`
-- **Color** — cycle through 15 ANSI colors with `←/→`, or switch to dynamic mode (color resolved at runtime based on the workflow/project)
+- **Color** — cycle through 15 ANSI colors with `←/→`, or switch to dynamic mode (color resolved at runtime based on the workflow/project). Current Item has two colors: `←/→` sets the story color, `d` sets the document / AutoBlend job color
 - **Order** — rearrange widgets within a line using grab mode (`g`)
-- **Display mode** — toggle with `m` on widgets that support it: Story (compact/full), Context % (full bar/compact), Weekly Usage (compact/extended — extended is the default on line 2 since v1.6)
+- **Display mode** — toggle with `m` on widgets that support it: Current Item (story compact/full), Context % (full bar/compact), Weekly Usage (compact/extended — extended is the default on line 2 since v1.6)
 
 ### Separator Style
 
@@ -102,7 +102,7 @@ The Monitor displays for each session:
 
 - Up to **20 simultaneous sessions** tracked in parallel
 - **Two-level navigation**: project tabs (when multiple projects are active) + session tabs
-- Each tab displays the workflow name, story number, and a colored state indicator (●)
+- Each tab displays the skill name, story number, and a colored state indicator (●). A session whose skill was launched by the model (nothing typed) is named after its active skill, in that skill's color
 - Smooth navigation with `←/→` between sessions/projects and `Tab` to cycle
 - Automatic liveness detection via Claude process PID verification
 
@@ -116,7 +116,7 @@ Sticky banner displayed at all times with:
   - 🔴 **Error** — error detected
   - 🟡 **Interrupted** — session interrupted
 - **Timer** — elapsed time updated every second
-- **Context** — workflow name + story number or document name
+- **Context** — skill name + story or document name (the current item, like the Current Item widget)
 
 ### File Tree
 
@@ -197,6 +197,7 @@ Everything is synchronous, with zero runtime dependencies (Node.js stdlib only f
 
 Configuration files are located in `~/.config/bmad-statusline/`:
 - `config.json` — widget configuration, colors, separators, and presets
+- `config.json.bak` — copy of your previous `config.json`, made once when the TUI converts a v1.8.0-or-earlier configuration (the Story and Document widgets became Current Item; colors, order, presets are carried over). Current Item is shown wherever Story or Document was shown, so a line that showed only one of them now also shows the other kind, and a layout with Story and Document on two different lines shows Current Item on both (hide one with `h`).
 
 Two environment variables allow customizing paths:
 - `BMAD_CACHE_DIR` — cache directory (default: `~/.cache/bmad-status/`)

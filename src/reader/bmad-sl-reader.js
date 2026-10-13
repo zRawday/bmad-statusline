@@ -14,7 +14,7 @@ const STALE_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes
 
 // --- Shared constants ---
 
-const { ALIVE_MAX_AGE_MS, SEPARATOR_VALUES: READER_SEPARATORS, isValidSessionId, hashProjectColor, computeDisplayState: computeLlmDisplayState, formatTimer, formatStoryName, getGradientColor, computeWeeklyUsage } = require('./shared-constants.cjs');
+const { ALIVE_MAX_AGE_MS, SEPARATOR_VALUES: READER_SEPARATORS, isValidSessionId, hashProjectColor, computeDisplayState: computeLlmDisplayState, formatTimer, formatStoryName, getGradientColor, computeWeeklyUsage, CURRENT_ITEM_WIDGET, DEFAULT_DOCUMENT_COLOR, resolveCurrentItem, migrateLegacyWidgets } = require('./shared-constants.cjs');
 
 // --- Color maps ---
 
@@ -259,11 +259,16 @@ function stripAnsi(text) {
 }
 
 function readConfig() {
+  let config;
   try {
-    return JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'));
+    config = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'));
   } catch {
     return null;
   }
+  // A config saved before Current Item existed still lists Story / Document. Convert it
+  // in memory only: this process never writes config.json (the TUI loader is the writer).
+  try { migrateLegacyWidgets(config); } catch { /* render the config as read */ }
+  return config;
 }
 
 function readLineConfig(lineIndex) {
@@ -297,6 +302,16 @@ function loadSession() {
   return stdin;
 }
 
+// The fixed color of a widget's colorMode. Current Item keeps one color per kind: the
+// story color is fixedColor, the document / AutoBlend job color is documentColor.
+function fixedColorFor(widgetId, colorMode, status) {
+  if (widgetId === CURRENT_ITEM_WIDGET) {
+    const item = resolveCurrentItem(status);
+    if (item && item.kind === 'document') return colorMode.documentColor || DEFAULT_DOCUMENT_COLOR;
+  }
+  return colorMode.fixedColor;
+}
+
 function handleLineCommand(lineIndex) {
   const stdin = loadSession();
   if (!stdin) { process.stdout.write(''); return; }
@@ -323,8 +338,9 @@ function handleLineCommand(lineIndex) {
       let value = extractor(status, lineConfig, stdin);
       if (!value) continue;
       const colorMode = lineConfig.colorModes[widgetId];
-      if (widgetId !== 'bmad-llmstate' && widgetId !== 'bmad-contextpct' && widgetId !== 'bmad-weeklyusage' && colorMode && colorMode.mode === 'fixed' && colorMode.fixedColor) {
-        const code = COLOR_CODES[colorMode.fixedColor];
+      const fixedColor = colorMode && colorMode.mode === 'fixed' ? fixedColorFor(widgetId, colorMode, status) : null;
+      if (widgetId !== 'bmad-llmstate' && widgetId !== 'bmad-contextpct' && widgetId !== 'bmad-weeklyusage' && fixedColor) {
+        const code = COLOR_CODES[fixedColor];
         if (widgetId === 'bmad-fileread' || widgetId === 'bmad-filewrite') {
           const plain = stripAnsi(value);
           const sp = plain.indexOf(' ');
@@ -379,8 +395,13 @@ const COMMANDS = {
   },
   nextstep:     (s) => (s.step && s.step.next_name) || '',
   progressstep: (s) => formatProgressStep(s.step),
-  story:        (s, lc) => formatStoryName(s.story || '', lc && lc.colorModes && lc.colorModes['bmad-story'] && lc.colorModes['bmad-story'].displayMode),
-  docname:      (s) => s.document_name || '',
+  currentitem:  (s, lc) => {
+    const item = resolveCurrentItem(s);
+    if (!item) return '';
+    if (item.kind === 'document') return item.value;
+    const colorMode = lc && lc.colorModes && lc.colorModes[CURRENT_ITEM_WIDGET];
+    return formatStoryName(item.value, colorMode && colorMode.displayMode);
+  },
   timer:        (s) => formatTimer(s.started_at),
   fileread:     (s) => s.last_read ? `read ${s.last_read}` : '',
   filewrite:    (s) => s.last_write ? `${s.last_write_op || 'write'} ${s.last_write}` : '',
