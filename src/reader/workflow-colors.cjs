@@ -90,6 +90,17 @@ const WORKFLOW_COLORS = {
   'builder-setup': '\x1b[96m',
   'module-builder': '\x1b[96m',
   'workflow-builder': '\x1b[96m',
+  // AutoBlend (one color per skill — mirrored in src/tui/skill-catalog.js)
+  'autoblend-builder': '\x1b[96m',       // brightCyan
+  'autoblend-modifier': '\x1b[36m',      // cyan
+  'autoblend-decrire': '\x1b[33m',       // yellow
+  'autoblend-forme-couleurs': '\x1b[35m', // magenta
+  'autoblend-ligne': '\x1b[95m',         // brightMagenta
+  'autoblend-supports': '\x1b[34m',      // blue
+  'autoblend-reglages': '\x1b[94m',      // brightBlue
+  'autoblend-livraison': '\x1b[32m',     // green
+  'autoblend-montrer': '\x1b[92m',       // brightGreen
+  'autoblend-version': '\x1b[93m',       // brightYellow
 };
 
 const WORKFLOW_PREFIX_COLORS = [
@@ -97,6 +108,7 @@ const WORKFLOW_PREFIX_COLORS = [
   { prefix: 'qa-generate-', color: '\x1b[31m' },     // Quality (red)
   { prefix: 'cis-', color: '\x1b[95m' },             // CIS (brightMagenta)
   { prefix: 'wds-', color: '\x1b[94m' },             // WDS (brightBlue)
+  { prefix: 'autoblend-', color: '\x1b[92m' },       // AutoBlend, any skill not listed above (brightGreen)
 ];
 
 module.exports = { WORKFLOW_COLORS, WORKFLOW_PREFIX_COLORS };

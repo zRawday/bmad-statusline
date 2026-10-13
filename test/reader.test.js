@@ -16,6 +16,20 @@ const ESC = '\x1b[';
 const RESET = '\x1b[0m';
 const FIXTURE_CONFIG_PATH = path.resolve(__dirname, 'fixtures', 'internal-config-default.json');
 
+// AutoBlend skills → expected SGR code (the Colors row of the AutoBlend spec)
+const AUTOBLEND_SKILL_COLORS = {
+  'autoblend-builder': '96',        // brightCyan
+  'autoblend-modifier': '36',       // cyan
+  'autoblend-decrire': '33',        // yellow
+  'autoblend-forme-couleurs': '35', // magenta
+  'autoblend-ligne': '95',          // brightMagenta
+  'autoblend-supports': '34',       // blue
+  'autoblend-reglages': '94',       // brightBlue
+  'autoblend-livraison': '32',      // green
+  'autoblend-montrer': '92',        // brightGreen
+  'autoblend-version': '93',        // brightYellow
+};
+
 // Direct imports for internal-logic tests (no process spawn needed)
 const _require = createRequire(import.meta.url);
 const reader = _require(READER_PATH);
@@ -93,6 +107,49 @@ describe('reader color output', () => {
     writeStatus('wf3', { workflow: 'wds-4-ux-design' });
     const result = execReader('workflow', 'wf3');
     assert.equal(result, `${ESC}94mwds-4-ux-design${RESET}`);
+  });
+
+  // --- AutoBlend: one explicit color per skill, brightGreen prefix fallback ---
+
+  for (const [workflow, code] of Object.entries(AUTOBLEND_SKILL_COLORS)) {
+    it(`colors ${workflow} with its own color`, () => {
+      const sid = 'wf-ab-' + workflow;
+      writeStatus(sid, { workflow });
+      assert.equal(execReader('workflow', sid), `${ESC}${code}m${workflow}${RESET}`);
+      // Same color when the skill shows up as the active skill
+      assert.equal(
+        reader.COMMANDS.activeskill({ workflow: 'dev-story', active_skill: workflow }, null),
+        `${ESC}${code}m${workflow}${RESET}`
+      );
+    });
+  }
+
+  it('colors a future autoblend-* skill with the brightGreen prefix fallback', () => {
+    writeStatus('wf-ab-future', { workflow: 'autoblend-futur' });
+    assert.equal(execReader('workflow', 'wf-ab-future'), `${ESC}92mautoblend-futur${RESET}`);
+  });
+
+  it('skillColors override wins over the AutoBlend defaults', () => {
+    assert.equal(
+      reader.COMMANDS.workflow({ workflow: 'autoblend-builder' }, { skillColors: { 'autoblend-builder': 'red' } }),
+      `${ESC}31mautoblend-builder${RESET}`
+    );
+    assert.equal(
+      reader.COMMANDS.workflow({ workflow: 'autoblend-futur' }, { skillColors: { 'autoblend-futur': 'red' } }),
+      `${ESC}31mautoblend-futur${RESET}`
+    );
+  });
+
+  it('active skill alone (no initial skill) still shows with its color', () => {
+    assert.equal(
+      reader.COMMANDS.activeskill({ workflow: null, active_skill: 'autoblend-supports' }, null),
+      `${ESC}34mautoblend-supports${RESET}`
+    );
+  });
+
+  it('docname prints the AutoBlend job id verbatim', () => {
+    writeStatus('docname-job', { document_name: 'zouzou' });
+    assert.equal(execReader('docname', 'docname-job'), 'zouzou');
   });
 
   it('outputs unknown workflow as plain text', () => {
@@ -773,6 +830,14 @@ describe('color maps sync', () => {
     assert.ok(prefixes.length >= 4, `should have >=4 prefix entries, got ${prefixes.length}`);
     assert.ok(prefixes.includes('testarch-'), 'should include testarch-');
     assert.ok(prefixes.includes('wds-'), 'should include wds-');
+    assert.ok(prefixes.includes('autoblend-'), 'should include autoblend-');
+  });
+
+  it('shared WORKFLOW_COLORS has an explicit entry for each of the ten AutoBlend skills', () => {
+    const keys = Object.keys(shared.WORKFLOW_COLORS).filter(k => k.startsWith('autoblend-'));
+    assert.deepEqual(keys.sort(), Object.keys(AUTOBLEND_SKILL_COLORS).sort());
+    const codes = keys.map(k => shared.WORKFLOW_COLORS[k]);
+    assert.equal(new Set(codes).size, keys.length, 'each AutoBlend skill has a distinct color');
   });
 
   it('shared WORKFLOW_COLORS contains no white entries (AC #7)', () => {

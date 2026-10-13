@@ -29,6 +29,17 @@ const LEGACY_COMMAND_REGEX = /^\s*\/?(bmad(?::[\w-]+)+)/;
 // 1–3 digits so 4-digit years ("2024-01") don't match (2-digit pairs stay ambiguous).
 const PROMPT_STORY_REGEX = /^[\s:]*(story\s+)?(\d{1,3}[a-z]?-\d{1,3}[a-z]?(?:-[a-zA-Z][\w-]*)?)\b/i;
 const STEP_REGEX = /\/steps(-[a-z])?\/step-(?:[a-z]-)?(\d+)[a-z]?-(.+)\.md$/;
+// AutoBlend job display. In "job mode" (an autoblend-* skill other than autoblend-version
+// is running) the job being conducted goes into document_name. A job id is
+// any "jobs/<id>" or "out/<id>" path token, accepted only when <project>/jobs/<id>/job.json
+// exists. Launch arguments are free text, so they also try their first bare words.
+// The lookbehind accepts any boundary ("2>out/x", ";jobs/x") but not a longer name
+// ("rollout/x", "layout/x").
+const JOB_PATH_REGEX = /(?<![\w.-])(?:jobs|out)[/\\]([A-Za-z0-9][\w.-]*)/g;
+const JOB_WORD_REGEX = /[A-Za-z0-9][\w.-]*/g;
+const JOB_SCAN_MAX_CHARS = 4000;
+const JOB_MAX_PATH_CANDIDATES = 10;
+const JOB_MAX_WORDS = 30;
 
 function normalize(p) {
   let n = p.replace(/\\/g, '/').replace(/\/+$/, '');
@@ -210,7 +221,15 @@ const hookEvent = payload.hook_event_name;
 if (hookEvent === 'UserPromptSubmit') {
   handleUserPrompt();
 } else if (hookEvent === 'PreToolUse') {
-  setLlmState('active');
+  if (payload.tool_name === 'Skill') {
+    handleSkillTool();
+  } else {
+    // A command names its job as soon as it starts (long builds, failed commands and
+    // shells without a PostToolUse matcher, e.g. PowerShell, never reach handleBash)
+    const command = payload.tool_input && payload.tool_input.command;
+    if (typeof command === 'string') detectJob(earlyStatus, command);
+    setLlmState('active');
+  }
 } else if (hookEvent === 'PostToolUse') {
   const toolName = payload.tool_name;
   if (toolName === 'Read') {
@@ -295,6 +314,11 @@ function handleUserPrompt() {
       }
       status.skill = skillName;
       status.workflow = workflowName;
+      // A typed command makes the typed skill the running one, even when it is the same
+      // skill again (a leftover active_skill would keep job mode off)
+      setActiveSkill(status, null);
+      // What follows the command is the launch argument ("/bmad-autoblend-builder zouzou")
+      detectJob(status, prompt.slice((match || legacyMatch)[0].length), true);
     }
 
     // Prompt-based story detection (create-story / dev-story / code-review):
@@ -327,6 +351,29 @@ function handleUserPrompt() {
   writeStatus(sessionId, status);
 }
 
+// ─── 7a. handleSkillTool (PreToolUse on the Skill tool) ─────────────────────
+// A skill the model launches itself (natural-language request, conductor routing to a
+// specialist) never reaches UserPromptSubmit. It records the ACTIVE skill only: the
+// initial skill (skill/workflow/started_at/histories) stays the typed command. A
+// subagent's call changes no skill field. Foreign or malformed skills fall through to
+// the plain active stamp.
+function handleSkillTool() {
+  const status = earlyStatus;
+  const input = payload.tool_input;
+  const raw = input && input.skill;
+  if (!payload.agent_id && typeof raw === 'string') {
+    // "plugin:bmad-help" → "bmad-help"
+    const m = raw.slice(raw.lastIndexOf(':') + 1).match(SKILL_REGEX);
+    if (m) {
+      const skillName = m[1];
+      const workflowName = skillName.slice(skillName.indexOf('-') + 1);
+      setActiveSkill(status, workflowName !== status.workflow ? workflowName : null);
+      detectJob(status, input.args, true);
+    }
+  }
+  setLlmState('active');
+}
+
 // ─── 7b. Shared preamble for the three file events (Read/Write/Edit) ────────
 // Path normalization, in-project classification, display path, active-state stamp.
 function beginFileEvent(filePath) {
@@ -346,6 +393,9 @@ function beginFileEvent(filePath) {
   status.llm_state_since = now;
   status.subagent_type = null;
   status.error_type = null;
+
+  // Project-relative path (no project-name strip): a job named in a file path
+  if (inProject) detectJob(status, normPath.slice(normCwd.length + 1));
 
   return { status, normPath, inProject, displayPath, now };
 }
@@ -384,11 +434,7 @@ function handleRead() {
     const detectedWorkflow = detectedSkill.slice(detectedSkill.indexOf('-') + 1);
     // Mutation only — every exit path below ends in writeStatus, so a mid-handler
     // write here would just double the rename contention on the status file.
-    if (detectedWorkflow !== activeWorkflow) {
-      status.active_skill = detectedWorkflow;
-    } else {
-      status.active_skill = null;
-    }
+    setActiveSkill(status, detectedWorkflow !== activeWorkflow ? detectedWorkflow : null);
   }
 
   if (!activeWorkflow) {
@@ -630,6 +676,9 @@ function handleBash() {
     trimHistory(status.commands);
   }
 
+  // Real job sessions name the job almost only in Bash commands (out/<id>, jobs/<id>)
+  detectJob(status, command);
+
   status.llm_state = 'active';
   status.llm_state_since = now;
   status.subagent_type = null;
@@ -664,12 +713,75 @@ function handlePermissionRequest() {
   setLlmState('permission');
 }
 
+// ─── AutoBlend job detection helpers ────────────────────────────────────────
+function isJobSkill(name) {
+  return typeof name === 'string' && name.startsWith('autoblend-') && name !== 'autoblend-version';
+}
+
+// Job mode: the running skill (active_skill, else the initial one) is a job skill AND the
+// initial skill is absent or itself a job skill. The second clause keeps dev sessions
+// (typed "build") out: they read AutoBlend skill files, which sets active_skill, and run
+// tools on jobs/<id> as fixtures.
+function isJobMode(status) {
+  return isJobSkill(status.active_skill || status.workflow)
+    && (!status.workflow || isJobSkill(status.workflow));
+}
+
+// The single place that assigns active_skill. Entering or leaving job mode empties
+// document_name: a job must not outlive job mode, and an output-folder file name set
+// earlier must not read as the job once job mode starts.
+function setActiveSkill(status, value) {
+  const wasJobMode = isJobMode(status);
+  status.active_skill = value;
+  if (isJobMode(status) !== wasJobMode) status.document_name = null;
+}
+
+// Records the job named in `text` into document_name. Path tokens: last accepted wins.
+// withWords (launch arguments are free text): when no path token hits, the first
+// bare word that is a job wins. Ids start alphanumeric and hold no separator, so an
+// id can never climb out of <project>/jobs/.
+function detectJob(status, text, withWords) {
+  if (!isJobMode(status) || typeof text !== 'string') return;
+  let src = text;
+  if (text.length > JOB_SCAN_MAX_CHARS) {
+    src = text.slice(0, JOB_SCAN_MAX_CHARS);
+    // A cut inside a token must not leave a shorter valid id ("jobs/zouzou2" → "zouzou")
+    if (/[\w.-]/.test(text[JOB_SCAN_MAX_CHARS])) src = src.replace(/[\w.-]*$/, '');
+  }
+  const checked = new Map(); // id → exists, so a repeated token costs one stat
+  const isJob = (id) => {
+    if (!checked.has(id)) checked.set(id, fs.existsSync(path.join(cwd, 'jobs', id, 'job.json')));
+    return checked.get(id);
+  };
+  // A trailing "." ends a sentence, not an id (and Windows ignores it in a path, so
+  // "zouzou." would pass the existence check there but not on POSIX).
+  const clean = (id) => id.replace(/\.+$/, '');
+  let job = null;
+  let candidates = 0;
+  for (const m of src.matchAll(JOB_PATH_REGEX)) {
+    const id = clean(m[1]);
+    if (!id) continue;
+    if (!checked.has(id) && ++candidates > JOB_MAX_PATH_CANDIDATES) break;
+    if (isJob(id)) job = id;
+  }
+  if (!job && withWords) {
+    let words = 0;
+    for (const m of src.matchAll(JOB_WORD_REGEX)) {
+      if (++words > JOB_MAX_WORDS) break;
+      const id = clean(m[0]);
+      if (id && isJob(id)) { job = id; break; }
+    }
+  }
+  if (job) status.document_name = job;
+}
+
 // ─── Document name + step enrichment helper ─────────────────────────────────
 function detectDocumentAndStep(status, normPath, content) {
   let changed = false;
   // Document name: Write/Edit in a known output folder, non-story workflow
+  // (job mode shows its job there instead — see detectJob)
   const outputFolders = status._outputFolders;
-  if (outputFolders && !STORY_WORKFLOWS.includes(status.workflow)) {
+  if (outputFolders && !STORY_WORKFLOWS.includes(status.workflow) && !isJobMode(status)) {
     for (const folder of outputFolders) {
       if (normPath.toLowerCase().startsWith(folder.toLowerCase() + '/')) {
         const docName = path.basename(normPath);

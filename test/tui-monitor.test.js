@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { createRequire } from 'node:module';
 import React, { act } from 'react';
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 import { Text } from 'ink';
@@ -16,6 +17,7 @@ import {
   resolveSessionColor, resolveProjectColor, formatElapsed,
   MONITOR_IDLE_WINDOW_MS,
 } from '../src/tui/monitor/monitor-utils.js';
+import { SKILL_MODULES, getDefaultSkillColor } from '../src/tui/skill-catalog.js';
 import { MonitorScreen } from '../src/tui/monitor/MonitorScreen.js';
 import { renderBashSection } from '../src/tui/monitor/components/BashSection.js';
 import ScrollableViewport from '../src/tui/monitor/components/ScrollableViewport.js';
@@ -505,6 +507,56 @@ describe('resolveSessionColor', () => {
   test('unknown workflow → returns white', () => {
     const config = {};
     assert.equal(resolveSessionColor('nonexistent-workflow-xyz', config), 'white');
+  });
+
+  test('AutoBlend skill → catalog default (one color per skill)', () => {
+    assert.equal(resolveSessionColor('autoblend-builder', {}), 'cyanBright');
+    assert.equal(resolveSessionColor('autoblend-modifier', {}), 'cyan');
+    assert.equal(resolveSessionColor('autoblend-version', {}), 'yellowBright');
+  });
+
+  test('AutoBlend skill → config override wins over the catalog default', () => {
+    const config = { skillColors: { 'autoblend-builder': 'red' } };
+    assert.equal(resolveSessionColor('autoblend-builder', config), 'red');
+  });
+});
+
+// --- AutoBlend skill catalog ---
+
+describe('skill catalog — AutoBlend module', () => {
+  const AUTOBLEND_SKILLS = [
+    'autoblend-builder', 'autoblend-decrire', 'autoblend-forme-couleurs', 'autoblend-ligne',
+    'autoblend-livraison', 'autoblend-modifier', 'autoblend-montrer', 'autoblend-reglages',
+    'autoblend-supports', 'autoblend-version',
+  ];
+  // Mirror of the reader's COLOR_CODES (ANSI color name → SGR code)
+  const COLOR_NAME_TO_CODE = {
+    red: '\x1b[31m', green: '\x1b[32m', yellow: '\x1b[33m', blue: '\x1b[34m',
+    magenta: '\x1b[35m', cyan: '\x1b[36m', white: '\x1b[37m',
+    brightRed: '\x1b[91m', brightGreen: '\x1b[92m', brightYellow: '\x1b[93m',
+    brightBlue: '\x1b[94m', brightMagenta: '\x1b[95m', brightCyan: '\x1b[96m',
+    brightWhite: '\x1b[97m', brightBlack: '\x1b[90m',
+  };
+  const { WORKFLOW_COLORS } = createRequire(import.meta.url)('../src/reader/workflow-colors.cjs');
+
+  test('catalog has an AutoBlend module listing the ten skills', () => {
+    const mod = SKILL_MODULES.find(m => m.id === 'autoblend');
+    assert.ok(mod, 'autoblend module present');
+    assert.equal(mod.name, 'AutoBlend');
+    assert.deepEqual(mod.skills.map(s => s.workflow).sort(), [...AUTOBLEND_SKILLS].sort());
+  });
+
+  test('each catalog default names the same color as the reader color map', () => {
+    for (const workflow of AUTOBLEND_SKILLS) {
+      const name = getDefaultSkillColor(workflow);
+      assert.ok(name, `${workflow} has a catalog default`);
+      assert.equal(COLOR_NAME_TO_CODE[name], WORKFLOW_COLORS[workflow], `${workflow}: catalog ${name} vs reader map`);
+    }
+  });
+
+  test('the ten AutoBlend skills have ten distinct default colors', () => {
+    const names = AUTOBLEND_SKILLS.map(getDefaultSkillColor);
+    assert.equal(new Set(names).size, AUTOBLEND_SKILLS.length);
   });
 });
 

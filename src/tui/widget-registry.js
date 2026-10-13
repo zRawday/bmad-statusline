@@ -8,7 +8,7 @@ const INDIVIDUAL_WIDGETS = [
   { id: 'bmad-workflow',     command: 'workflow',     name: 'Initial Skill', hint: 'Skill invoked by user prompt',         defaultEnabled: true,  defaultColor: null,         defaultMode: 'dynamic' },
   { id: 'bmad-activeskill', command: 'activeskill', name: 'Active Skill',  hint: 'Skill actually running',               defaultEnabled: true,  defaultColor: null,         defaultMode: 'dynamic' },
   { id: 'bmad-story',        command: 'story',        name: 'Story',         hint: 'create-story, dev-story, code-review', defaultEnabled: true,  defaultColor: 'magenta',    defaultMode: 'fixed' },
-  { id: 'bmad-docname',      command: 'docname',      name: 'Document',      hint: 'File being worked on in output folders', defaultEnabled: false, defaultColor: 'brightYellow', defaultMode: 'fixed' },
+  { id: 'bmad-docname',      command: 'docname',      name: 'Document',      hint: 'Output-folder file, or AutoBlend job', defaultEnabled: false, defaultColor: 'brightYellow', defaultMode: 'fixed' },
   { id: 'bmad-progressstep', command: 'progressstep', name: 'Step',          hint: 'Skills with BMAD /step format only',   defaultEnabled: true,  defaultColor: 'brightCyan', defaultMode: 'fixed' },
   { id: 'bmad-nextstep',     command: 'nextstep',     name: 'Next Step',     hint: 'Skills with BMAD /step format only',   defaultEnabled: false, defaultColor: 'yellow',     defaultMode: 'fixed' },
   { id: 'bmad-fileread',     command: 'fileread',     name: 'File Read',     hint: 'Last file read by LLM',                  defaultEnabled: false, defaultColor: 'cyan',        defaultMode: 'fixed' },

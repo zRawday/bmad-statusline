@@ -82,6 +82,13 @@ describe('hook — 8-signal passive detection', () => {
     // story files directly in implementation-artifacts (new regex matches by filename)
     const implDir = path.join(tmpDir, '_bmad-output', 'implementation-artifacts');
     fs.writeFileSync(path.join(implDir, '4-2-hook-dispatch.md'), '# Story 4-2');
+
+    // AutoBlend: an existing skill dir and two existing jobs (jobs/<id>/job.json)
+    fs.mkdirSync(path.join(tmpDir, '.claude', 'skills', 'bmad-autoblend-builder'), { recursive: true });
+    for (const job of ['zouzou', 'dragon']) {
+      fs.mkdirSync(path.join(tmpDir, 'jobs', job), { recursive: true });
+      fs.writeFileSync(path.join(tmpDir, 'jobs', job, 'job.json'), '{}');
+    }
   });
 
   after(() => {
@@ -2024,6 +2031,524 @@ describe('hook — 8-signal passive detection', () => {
     });
     const status = readStatusFile('pre2');
     assert.equal(status.llm_state, 'active');
+  });
+
+  // ─── AutoBlend: Skill tool calls (active skill) and the current job ───────
+
+  function makeSkillPayload(sessionId, toolInput, agentId) {
+    const p = {
+      session_id: sessionId,
+      cwd: tmpDir,
+      hook_event_name: 'PreToolUse',
+      tool_name: 'Skill',
+      tool_input: toolInput,
+      tool_use_id: 'toolu_test'
+    };
+    if (agentId) p.agent_id = agentId;
+    return p;
+  }
+
+  function seedSkillSession(sid, fields) {
+    seedStatus(sid, {
+      session_id: sid,
+      project: 'TestProject',
+      skill: null,
+      workflow: null,
+      active_skill: null,
+      started_at: null,
+      document_name: null,
+      commands: [],
+      ...fields
+    });
+  }
+
+  it('AutoBlend Skill tool, no workflow: sets active_skill only, never the initial skill, and the job', () => {
+    const sid = 'job-skill-nowf';
+    execHook(makeSkillPayload(sid, { skill: 'bmad-autoblend-builder', args: 'conduis le job zouzou' }));
+    const status = readStatusFile(sid);
+    assert.equal(status.active_skill, 'autoblend-builder');
+    assert.equal(status.skill, null);
+    assert.equal(status.workflow, null);
+    assert.equal(status.started_at, null);
+    assert.equal(status.document_name, 'zouzou');
+    assert.equal(status.llm_state, 'active');
+  });
+
+  it('AutoBlend Skill tool, other workflow set: workflow/skill/histories unchanged, active_skill set', () => {
+    const sid = 'job-skill-otherwf';
+    seedSkillSession(sid, {
+      skill: 'bmad-autoblend-builder',
+      workflow: 'autoblend-builder',
+      started_at: '2026-01-01T00:00:00.000Z',
+      commands: [{ cmd: 'ls', at: '2026-01-01T00:00:00.000Z', agent_id: null }]
+    });
+    execHook(makeSkillPayload(sid, { skill: 'bmad-autoblend-supports' }));
+    const status = readStatusFile(sid);
+    assert.equal(status.workflow, 'autoblend-builder');
+    assert.equal(status.skill, 'bmad-autoblend-builder');
+    assert.equal(status.started_at, '2026-01-01T00:00:00.000Z');
+    assert.equal(status.commands.length, 1);
+    assert.equal(status.active_skill, 'autoblend-supports');
+  });
+
+  it('AutoBlend Skill tool, same as workflow: active_skill cleared', () => {
+    const sid = 'job-skill-samewf';
+    seedSkillSession(sid, {
+      skill: 'bmad-autoblend-builder',
+      workflow: 'autoblend-builder',
+      active_skill: 'autoblend-supports'
+    });
+    execHook(makeSkillPayload(sid, { skill: 'bmad-autoblend-builder' }));
+    const status = readStatusFile(sid);
+    assert.equal(status.active_skill, null);
+    assert.equal(status.workflow, 'autoblend-builder');
+  });
+
+  it('AutoBlend typed command after a Skill call replaces the active skill with the initial one', () => {
+    const sid = 'job-skill-then-typed';
+    execHook(makeSkillPayload(sid, { skill: 'bmad-autoblend-builder' }));
+    assert.equal(readStatusFile(sid).active_skill, 'autoblend-builder');
+    execHook(makeUserPromptPayload(sid, '/bmad-autoblend-modifier'));
+    const status = readStatusFile(sid);
+    assert.equal(status.workflow, 'autoblend-modifier');
+    assert.equal(status.skill, 'bmad-autoblend-modifier');
+    assert.equal(status.active_skill, null);
+    assert.ok(status.started_at, 'typed command sets started_at');
+  });
+
+  it('AutoBlend Skill tool from a subagent only stamps llm_state', () => {
+    const sid = 'job-skill-subagent';
+    seedSkillSession(sid, { workflow: 'autoblend-builder', skill: 'bmad-autoblend-builder', active_skill: 'autoblend-ligne', document_name: 'dragon' });
+    execHook(makeSkillPayload(sid, { skill: 'bmad-autoblend-supports', args: 'zouzou' }, 'sub-1'));
+    const status = readStatusFile(sid);
+    assert.equal(status.active_skill, 'autoblend-ligne');
+    assert.equal(status.workflow, 'autoblend-builder');
+    assert.equal(status.document_name, 'dragon');
+    assert.equal(status.llm_state, 'active');
+
+    const sid2 = 'job-skill-subagent-nowf';
+    execHook(makeSkillPayload(sid2, { skill: 'bmad-autoblend-builder', args: 'zouzou' }, 'sub-1'));
+    const status2 = readStatusFile(sid2);
+    assert.equal(status2.active_skill, null);
+    assert.equal(status2.document_name, null);
+    assert.equal(status2.llm_state, 'active');
+  });
+
+  it('AutoBlend Skill tool with a foreign or malformed skill only stamps llm_state and never throws', () => {
+    const inputs = [
+      { skill: 'update-config' },
+      { args: 'zouzou' },
+      { skill: 42 },
+      { skill: null },
+      { skill: '' },
+      null,
+      'bmad-autoblend-builder'
+    ];
+    inputs.forEach((toolInput, i) => {
+      const sid = 'job-skill-bad-' + i;
+      seedSkillSession(sid, { workflow: 'autoblend-builder', skill: 'bmad-autoblend-builder', active_skill: 'autoblend-ligne', document_name: 'dragon' });
+      execHook(makeSkillPayload(sid, toolInput));
+      const status = readStatusFile(sid);
+      assert.ok(status, 'status file should exist for input ' + JSON.stringify(toolInput));
+      assert.equal(status.active_skill, 'autoblend-ligne', 'active_skill unchanged for ' + JSON.stringify(toolInput));
+      assert.equal(status.workflow, 'autoblend-builder');
+      assert.equal(status.document_name, 'dragon');
+      assert.equal(status.llm_state, 'active');
+    });
+    // No tool_input at all
+    const sid = 'job-skill-bad-notoolinput';
+    execHook({ session_id: sid, cwd: tmpDir, hook_event_name: 'PreToolUse', tool_name: 'Skill' });
+    assert.equal(readStatusFile(sid).llm_state, 'active');
+  });
+
+  it('AutoBlend Skill tool with a namespaced skill strips the namespace', () => {
+    const sid = 'job-skill-ns';
+    execHook(makeSkillPayload(sid, { skill: 'plugin:bmad-help' }));
+    const status = readStatusFile(sid);
+    assert.equal(status.active_skill, 'help');
+    assert.equal(status.workflow, null);
+  });
+
+  it('AutoBlend Skill tool args can name the job by path token while another job skill runs', () => {
+    const sid = 'job-skill-args-path';
+    seedSkillSession(sid, { skill: 'bmad-autoblend-builder', workflow: 'autoblend-builder', document_name: 'zouzou' });
+    execHook(makeSkillPayload(sid, { skill: 'bmad-autoblend-supports', args: '--job jobs/dragon/job.json' }));
+    assert.equal(readStatusFile(sid).document_name, 'dragon');
+  });
+
+  it('AutoBlend Skill tool outside job mode (typed build workflow) shows no job', () => {
+    const sid = 'job-skill-build';
+    seedSkillSession(sid, { skill: 'bmad-build', workflow: 'build' });
+    execHook(makeSkillPayload(sid, { skill: 'bmad-autoblend-builder', args: 'zouzou' }));
+    const status = readStatusFile(sid);
+    assert.equal(status.active_skill, 'autoblend-builder');
+    assert.equal(status.document_name, null);
+  });
+
+  it('AutoBlend typed command with a job sets document_name', () => {
+    const sid = 'job-typed';
+    execHook(makeUserPromptPayload(sid, '/bmad-autoblend-builder zouzou'));
+    const status = readStatusFile(sid);
+    assert.equal(status.workflow, 'autoblend-builder');
+    assert.equal(status.document_name, 'zouzou');
+  });
+
+  it('AutoBlend typed command: unknown job, path token and free text', () => {
+    const unknown = 'job-typed-unknown';
+    execHook(makeUserPromptPayload(unknown, '/bmad-autoblend-builder mesures'));
+    assert.equal(readStatusFile(unknown).document_name, null);
+
+    const pathTok = 'job-typed-path';
+    execHook(makeUserPromptPayload(pathTok, '/bmad-autoblend-builder jobs/dragon/job.json'));
+    assert.equal(readStatusFile(pathTok).document_name, 'dragon');
+
+    const free = 'job-typed-free';
+    execHook(makeUserPromptPayload(free, '/bmad-autoblend-builder conduis le job dragon.'));
+    assert.equal(readStatusFile(free).document_name, 'dragon', 'sentence-ending period is not part of the id');
+
+    const first = 'job-typed-first-word';
+    execHook(makeUserPromptPayload(first, '/bmad-autoblend-builder zouzou puis dragon'));
+    assert.equal(readStatusFile(first).document_name, 'zouzou', 'first bare-word hit wins');
+  });
+
+  it('AutoBlend typed command on a new skill resets the previous job', () => {
+    const sid = 'job-typed-reset';
+    execHook(makeUserPromptPayload(sid, '/bmad-autoblend-builder zouzou'));
+    assert.equal(readStatusFile(sid).document_name, 'zouzou');
+    execHook(makeUserPromptPayload(sid, '/bmad-autoblend-modifier'));
+    assert.equal(readStatusFile(sid).document_name, null);
+  });
+
+  it('AutoBlend free-text launch arguments scan only the first 30 bare words', () => {
+    const hit = 'job-words-25';
+    const filler24 = Array(24).fill('mot').join(' ');
+    execHook(makeSkillPayload(hit, { skill: 'bmad-autoblend-builder', args: filler24 + ' zouzou' }));
+    assert.equal(readStatusFile(hit).document_name, 'zouzou');
+
+    const miss = 'job-words-31';
+    const filler30 = Array(30).fill('mot').join(' ');
+    execHook(makeSkillPayload(miss, { skill: 'bmad-autoblend-builder', args: filler30 + ' zouzou' }));
+    assert.equal(readStatusFile(miss).document_name, null);
+  });
+
+  it('AutoBlend Bash in job mode sets document_name from out/ and jobs/ tokens', () => {
+    const sid = 'job-bash';
+    seedSkillSession(sid, { active_skill: 'autoblend-builder' });
+    execHook(makeBashPayload(sid, 'python outils/ouvrir_une_porte.py --repertoire out/zouzou --job jobs/zouzou/job.json'));
+    const status = readStatusFile(sid);
+    assert.equal(status.document_name, 'zouzou');
+    assert.equal(status.commands.length, 1, 'command history still recorded');
+  });
+
+  it('AutoBlend Bash without a real job leaves document_name unchanged', () => {
+    const commands = [
+      'python outils/rejouer.py out/rejeu-corpus.json',
+      'ls out/mesures/x.json',
+      'cat jobs/../x',
+      'echo "no job here"'
+    ];
+    commands.forEach((command, i) => {
+      const sid = 'job-bash-nojob-' + i;
+      seedSkillSession(sid, { workflow: 'autoblend-builder', skill: 'bmad-autoblend-builder', document_name: 'dragon' });
+      execHook(makeBashPayload(sid, command));
+      assert.equal(readStatusFile(sid).document_name, 'dragon', 'unchanged for: ' + command);
+    });
+  });
+
+  it('AutoBlend Bash naming two jobs: the last valid one wins', () => {
+    const sid = 'job-bash-two';
+    seedSkillSession(sid, { workflow: 'autoblend-builder', skill: 'bmad-autoblend-builder' });
+    execHook(makeBashPayload(sid, 'cp jobs/zouzou/job.json /tmp/a && diff out/mesures/x jobs/dragon/job.json'));
+    assert.equal(readStatusFile(sid).document_name, 'dragon');
+    const sid2 = 'job-bash-two-rev';
+    seedSkillSession(sid2, { workflow: 'autoblend-builder', skill: 'bmad-autoblend-builder' });
+    execHook(makeBashPayload(sid2, 'cp jobs/dragon/job.json /tmp/a && diff jobs/zouzou/job.json out/mesures/x'));
+    assert.equal(readStatusFile(sid2).document_name, 'zouzou');
+  });
+
+  it('AutoBlend Bash outside job mode leaves document_name unchanged', () => {
+    const cmd = 'python outils/ouvrir_une_porte.py --repertoire out/zouzou --job jobs/zouzou/job.json';
+    // Typed build session that merely read AutoBlend skill files
+    const dev = 'job-bash-build';
+    seedSkillSession(dev, { skill: 'bmad-build', workflow: 'build', active_skill: 'autoblend-reglages' });
+    execHook(makeBashPayload(dev, cmd));
+    assert.equal(readStatusFile(dev).document_name, null);
+    // autoblend-version is not a job skill (as the initial skill or as the active one)
+    const ver = 'job-bash-version';
+    seedSkillSession(ver, { skill: 'bmad-autoblend-version', workflow: 'autoblend-version' });
+    execHook(makeBashPayload(ver, cmd));
+    assert.equal(readStatusFile(ver).document_name, null);
+    const verActive = 'job-bash-version-active';
+    seedSkillSession(verActive, { active_skill: 'autoblend-version' });
+    execHook(makeBashPayload(verActive, cmd));
+    assert.equal(readStatusFile(verActive).document_name, null);
+    // No skill at all
+    const none = 'job-bash-noskill';
+    seedSkillSession(none, {});
+    execHook(makeBashPayload(none, cmd));
+    assert.equal(readStatusFile(none).document_name, null);
+  });
+
+  it('AutoBlend Bash scans at most 10 path candidates and 4000 chars', () => {
+    const fillers = (n) => Array.from({ length: n }, (_, i) => 'out/nojob' + i).join(' ');
+    const ok = 'job-bash-cand-ok';
+    seedSkillSession(ok, { workflow: 'autoblend-builder', skill: 'bmad-autoblend-builder' });
+    execHook(makeBashPayload(ok, fillers(9) + ' out/zouzou'));
+    assert.equal(readStatusFile(ok).document_name, 'zouzou', 'the 10th candidate is still checked');
+
+    const over = 'job-bash-cand-over';
+    seedSkillSession(over, { workflow: 'autoblend-builder', skill: 'bmad-autoblend-builder' });
+    execHook(makeBashPayload(over, fillers(10) + ' out/zouzou'));
+    assert.equal(readStatusFile(over).document_name, null, 'the 11th candidate is ignored');
+
+    const far = 'job-bash-far';
+    seedSkillSession(far, { workflow: 'autoblend-builder', skill: 'bmad-autoblend-builder' });
+    execHook(makeBashPayload(far, 'echo ' + ' '.repeat(4000) + ' out/zouzou'));
+    assert.equal(readStatusFile(far).document_name, null, 'text beyond 4000 chars is not scanned');
+  });
+
+  it('AutoBlend file events (Read/Write/Edit) in job mode set document_name from the path', () => {
+    const file = path.join(tmpDir, 'out', 'zouzou', 'manifeste.json');
+    const read = 'job-file-read';
+    seedSkillSession(read, { active_skill: 'autoblend-montrer' });
+    execHook(makeReadPayload(read, file));
+    assert.equal(readStatusFile(read).document_name, 'zouzou');
+
+    const write = 'job-file-write';
+    seedSkillSession(write, { workflow: 'autoblend-builder', skill: 'bmad-autoblend-builder' });
+    execHook(makeWritePayload(write, file, '{}'));
+    assert.equal(readStatusFile(write).document_name, 'zouzou');
+
+    const edit = 'job-file-edit';
+    seedSkillSession(edit, { workflow: 'autoblend-builder', skill: 'bmad-autoblend-builder' });
+    execHook(makeEditPayload(edit, file, 'a', 'b'));
+    assert.equal(readStatusFile(edit).document_name, 'zouzou');
+  });
+
+  it('AutoBlend file event outside job mode or outside the project shows no job', () => {
+    const file = path.join(tmpDir, 'out', 'zouzou', 'manifeste.json');
+    const dev = 'job-file-build';
+    seedSkillSession(dev, { skill: 'bmad-build', workflow: 'build', active_skill: 'autoblend-builder' });
+    execHook(makeReadPayload(dev, file));
+    assert.equal(readStatusFile(dev).document_name, null);
+
+    const outside = 'job-file-outside';
+    seedSkillSession(outside, { workflow: 'autoblend-builder', skill: 'bmad-autoblend-builder' });
+    const elsewhere = path.join(os.tmpdir(), 'not-this-project', 'out', 'zouzou', 'manifeste.json');
+    execHook(makeReadPayload(outside, elsewhere));
+    assert.equal(readStatusFile(outside).document_name, null);
+  });
+
+  it('AutoBlend output-folder write in job mode keeps the job as document_name', () => {
+    const file = path.join(tmpDir, '_bmad-output', 'x', 'registre.md');
+    const viaWorkflow = 'job-outfolder-wf';
+    seedSkillSession(viaWorkflow, { workflow: 'autoblend-builder', skill: 'bmad-autoblend-builder', document_name: 'zouzou' });
+    execHook(makeWritePayload(viaWorkflow, file, '# Registre'));
+    assert.equal(readStatusFile(viaWorkflow).document_name, 'zouzou');
+
+    const viaActive = 'job-outfolder-active';
+    seedSkillSession(viaActive, { active_skill: 'autoblend-builder', document_name: 'zouzou' });
+    execHook(makeEditPayload(viaActive, file, 'a', 'b'));
+    assert.equal(readStatusFile(viaActive).document_name, 'zouzou');
+
+    // Control: outside job mode the same write still names the document
+    const control = 'job-outfolder-control';
+    seedSkillSession(control, { workflow: 'create-prd', skill: 'bmad-create-prd' });
+    execHook(makeWritePayload(control, file, '# Registre'));
+    assert.equal(readStatusFile(control).document_name, 'registre.md');
+  });
+
+  // ─── AutoBlend: job mode transitions, typed re-launch, PreToolUse scan ────
+
+  function makePreToolPayload(sessionId, toolName, toolInput) {
+    return {
+      session_id: sessionId,
+      cwd: tmpDir,
+      hook_event_name: 'PreToolUse',
+      tool_name: toolName,
+      tool_input: toolInput,
+      tool_use_id: 'toolu_test'
+    };
+  }
+
+  it('AutoBlend Skill tool call without args keeps the job while job mode continues', () => {
+    const sid = 'job-skill-noargs';
+    seedSkillSession(sid, { skill: 'bmad-autoblend-builder', workflow: 'autoblend-builder', document_name: 'zouzou' });
+    execHook(makeSkillPayload(sid, { skill: 'bmad-autoblend-supports' }));
+    const status = readStatusFile(sid);
+    assert.equal(status.active_skill, 'autoblend-supports');
+    assert.equal(status.document_name, 'zouzou');
+  });
+
+  it('AutoBlend active autoblend-version under a job workflow is not job mode', () => {
+    const seed = { skill: 'bmad-autoblend-builder', workflow: 'autoblend-builder', active_skill: 'autoblend-version' };
+    const bash = 'job-version-active-bash';
+    seedSkillSession(bash, seed);
+    execHook(makeBashPayload(bash, 'ls jobs/zouzou'));
+    assert.equal(readStatusFile(bash).document_name, null);
+
+    const write = 'job-version-active-write';
+    seedSkillSession(write, seed);
+    execHook(makeWritePayload(write, path.join(tmpDir, '_bmad-output', 'x', 'registre.md'), '# Registre'));
+    assert.equal(readStatusFile(write).document_name, 'registre.md');
+  });
+
+  it('AutoBlend re-typing a job command in the same session switches to the new job', () => {
+    const sid = 'job-typed-twice';
+    execHook(makeUserPromptPayload(sid, '/bmad-autoblend-builder zouzou'));
+    assert.equal(readStatusFile(sid).document_name, 'zouzou');
+    execHook(makeUserPromptPayload(sid, '/bmad-autoblend-builder dragon'));
+    assert.equal(readStatusFile(sid).document_name, 'dragon');
+  });
+
+  it('AutoBlend re-typing the same skill resets active_skill and reads the typed job', () => {
+    const sid = 'job-typed-same-skill';
+    seedSkillSession(sid, {
+      skill: 'bmad-autoblend-builder',
+      workflow: 'autoblend-builder',
+      active_skill: 'help',
+      document_name: 'registre.md'
+    });
+    execHook(makeUserPromptPayload(sid, '/bmad-autoblend-builder dragon'));
+    const status = readStatusFile(sid);
+    assert.equal(status.active_skill, null);
+    assert.equal(status.workflow, 'autoblend-builder');
+    assert.equal(status.document_name, 'dragon');
+  });
+
+  it('AutoBlend slash-less typed launch of an existing skill is recognised with its job', () => {
+    const sid = 'job-typed-slashless';
+    execHook(makeUserPromptPayload(sid, 'bmad-autoblend-builder zouzou'));
+    const status = readStatusFile(sid);
+    assert.equal(status.workflow, 'autoblend-builder');
+    assert.equal(status.document_name, 'zouzou');
+  });
+
+  it('AutoBlend Skill tool leaving job mode clears the job, before the args are scanned', () => {
+    const sid = 'job-leave-skill';
+    seedSkillSession(sid, { active_skill: 'autoblend-builder', document_name: 'zouzou' });
+    execHook(makeSkillPayload(sid, { skill: 'bmad-help', args: 'dragon' }));
+    const status = readStatusFile(sid);
+    assert.equal(status.active_skill, 'help');
+    assert.equal(status.document_name, null);
+  });
+
+  it('AutoBlend Skill tool entering job mode drops a stale file name, then reads the args', () => {
+    const noArgs = 'job-enter-skill';
+    seedSkillSession(noArgs, { document_name: 'registre.md' });
+    execHook(makeSkillPayload(noArgs, { skill: 'bmad-autoblend-builder' }));
+    const status = readStatusFile(noArgs);
+    assert.equal(status.active_skill, 'autoblend-builder');
+    assert.equal(status.document_name, null);
+
+    const withArgs = 'job-enter-skill-args';
+    seedSkillSession(withArgs, { document_name: 'registre.md' });
+    execHook(makeSkillPayload(withArgs, { skill: 'bmad-autoblend-builder', args: 'conduis le job zouzou' }));
+    assert.equal(readStatusFile(withArgs).document_name, 'zouzou');
+  });
+
+  it('AutoBlend Read-based active skill change clears the job on leaving and the file name on entering job mode', () => {
+    const leave = 'job-leave-read';
+    seedSkillSession(leave, { skill: 'bmad-autoblend-modifier', workflow: 'autoblend-modifier', document_name: 'zouzou' });
+    execHook(makeReadPayload(leave, path.join(tmpDir, '.claude', 'skills', 'bmad-help', 'SKILL.md')));
+    const left = readStatusFile(leave);
+    assert.equal(left.active_skill, 'help');
+    assert.equal(left.document_name, null);
+
+    const enter = 'job-enter-read';
+    seedSkillSession(enter, { skill: 'bmad-autoblend-modifier', workflow: 'autoblend-modifier', active_skill: 'help', document_name: 'registre.md' });
+    execHook(makeReadPayload(enter, path.join(tmpDir, '.claude', 'skills', 'bmad-autoblend-supports', 'SKILL.md')));
+    const entered = readStatusFile(enter);
+    assert.equal(entered.active_skill, 'autoblend-supports');
+    assert.equal(entered.document_name, null);
+  });
+
+  it('AutoBlend PreToolUse on Bash and PowerShell names the job before the command returns', () => {
+    const bash = 'job-pre-bash';
+    seedSkillSession(bash, { skill: 'bmad-autoblend-builder', workflow: 'autoblend-builder' });
+    execHook(makePreToolPayload(bash, 'Bash', { command: 'python outils/ouvrir.py --repertoire out/zouzou' }));
+    const bashStatus = readStatusFile(bash);
+    assert.equal(bashStatus.document_name, 'zouzou');
+    assert.equal(bashStatus.llm_state, 'active');
+
+    const ps = 'job-pre-powershell';
+    seedSkillSession(ps, { active_skill: 'autoblend-builder' });
+    execHook(makePreToolPayload(ps, 'PowerShell', { command: 'Get-ChildItem .\\jobs\\dragon' }));
+    assert.equal(readStatusFile(ps).document_name, 'dragon');
+  });
+
+  it('AutoBlend PreToolUse command scan is limited to job mode and tolerates odd inputs', () => {
+    const dev = 'job-pre-build';
+    seedSkillSession(dev, { skill: 'bmad-build', workflow: 'build', active_skill: 'autoblend-reglages' });
+    execHook(makePreToolPayload(dev, 'Bash', { command: 'ls jobs/zouzou' }));
+    assert.equal(readStatusFile(dev).document_name, null);
+
+    [{ command: 42 }, { path: 'out/zouzou' }, null, 'jobs/zouzou'].forEach((toolInput, i) => {
+      const sid = 'job-pre-odd-' + i;
+      seedSkillSession(sid, { skill: 'bmad-autoblend-builder', workflow: 'autoblend-builder', document_name: 'dragon' });
+      execHook(makePreToolPayload(sid, 'Bash', toolInput));
+      const status = readStatusFile(sid);
+      assert.equal(status.document_name, 'dragon', 'unchanged for ' + JSON.stringify(toolInput));
+      assert.equal(status.llm_state, 'active');
+    });
+  });
+
+  it('AutoBlend job tokens are found behind shell punctuation', () => {
+    const commands = [
+      'python x.py 2>out/zouzou/err.log',
+      'echo a;jobs/zouzou/job.json',
+      'cat x|out/zouzou/a',
+      'echo `out/zouzou`',
+      'echo {jobs/zouzou,b}',
+      'echo a,jobs/zouzou',
+      'echo x:out/zouzou',
+      'type jobs\\zouzou\\job.json'
+    ];
+    commands.forEach((command, i) => {
+      const sid = 'job-punct-' + i;
+      seedSkillSession(sid, { skill: 'bmad-autoblend-builder', workflow: 'autoblend-builder' });
+      execHook(makeBashPayload(sid, command));
+      assert.equal(readStatusFile(sid).document_name, 'zouzou', 'job expected in: ' + command);
+    });
+  });
+
+  it('AutoBlend names that merely end in jobs/out are not job tokens', () => {
+    ['ls layout/zouzou', 'ls rollout/zouzou', 'ls my-jobs/zouzou', 'ls .out/zouzou'].forEach((command, i) => {
+      const sid = 'job-notoken-' + i;
+      seedSkillSession(sid, { skill: 'bmad-autoblend-builder', workflow: 'autoblend-builder' });
+      execHook(makeBashPayload(sid, command));
+      assert.equal(readStatusFile(sid).document_name, null, 'no job expected in: ' + command);
+    });
+  });
+
+  it('AutoBlend launch arguments: an explicit path token beats an earlier bare word', () => {
+    const sid = 'job-args-path-over-word';
+    seedSkillSession(sid, { skill: 'bmad-autoblend-builder', workflow: 'autoblend-builder' });
+    execHook(makeSkillPayload(sid, { skill: 'bmad-autoblend-supports', args: 'zouzou jobs/dragon/job.json' }));
+    assert.equal(readStatusFile(sid).document_name, 'dragon');
+  });
+
+  it('AutoBlend Bash scan covers the whole command up to 4000 chars, not just the stored 1000', () => {
+    const sid = 'job-bash-deep';
+    seedSkillSession(sid, { skill: 'bmad-autoblend-builder', workflow: 'autoblend-builder' });
+    const command = 'echo ' + 'x'.repeat(2000) + ' out/zouzou';
+    execHook(makeBashPayload(sid, command));
+    const status = readStatusFile(sid);
+    assert.equal(status.document_name, 'zouzou');
+    assert.equal(status.commands[0].cmd.length, 1000, 'history stays truncated at 1000');
+  });
+
+  it('AutoBlend 4000-char cut never turns a longer id into a shorter valid one', () => {
+    const edge = 'jobs/zouzou';
+    const split = 'job-cut-split';
+    seedSkillSession(split, { skill: 'bmad-autoblend-builder', workflow: 'autoblend-builder' });
+    execHook(makeBashPayload(split, ' '.repeat(4000 - edge.length) + edge + '2'));
+    assert.equal(readStatusFile(split).document_name, null, 'jobs/zouzou2 cut after zouzou is not zouzou');
+
+    const whole = 'job-cut-whole';
+    seedSkillSession(whole, { skill: 'bmad-autoblend-builder', workflow: 'autoblend-builder' });
+    execHook(makeBashPayload(whole, ' '.repeat(4000 - edge.length) + edge + ' tail'));
+    assert.equal(readStatusFile(whole).document_name, 'zouzou', 'a token ending exactly at the cut is kept');
   });
 
   // ─── 7.1: handleRead — reads[] append ──────────────────────────────────────

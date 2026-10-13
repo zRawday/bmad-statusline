@@ -145,6 +145,21 @@ export const SKILL_MODULES = [
       { workflow: 'agent-saga-analyst', defaultColor: 'blue' },
     ],
   },
+  {
+    // Same colors as the explicit autoblend-* entries of src/reader/workflow-colors.cjs
+    id: 'autoblend', name: 'AutoBlend', skills: [
+      { workflow: 'autoblend-builder', defaultColor: 'brightCyan' },
+      { workflow: 'autoblend-decrire', defaultColor: 'yellow' },
+      { workflow: 'autoblend-forme-couleurs', defaultColor: 'magenta' },
+      { workflow: 'autoblend-ligne', defaultColor: 'brightMagenta' },
+      { workflow: 'autoblend-livraison', defaultColor: 'green' },
+      { workflow: 'autoblend-modifier', defaultColor: 'cyan' },
+      { workflow: 'autoblend-montrer', defaultColor: 'brightGreen' },
+      { workflow: 'autoblend-reglages', defaultColor: 'brightBlue' },
+      { workflow: 'autoblend-supports', defaultColor: 'blue' },
+      { workflow: 'autoblend-version', defaultColor: 'brightYellow' },
+    ],
+  },
 ];
 
 /**
